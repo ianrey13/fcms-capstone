@@ -1,0 +1,160 @@
+<!-- <?php
+
+use App\Http\Controllers\API\AuthController;
+use App\Http\Controllers\API\TripTicketController;
+use App\Http\Controllers\API\ReconciliationController;
+use App\Http\Controllers\API\FuelLogController;
+use App\Http\Controllers\API\DepartmentRequestController;
+use App\Http\Controllers\API\NotificationController;
+use App\Http\Controllers\API\BudgetController;
+use App\Http\Controllers\API\UserController;
+use App\Http\Controllers\API\DepartmentController;
+use App\Http\Controllers\API\VehicleController;
+use App\Http\Controllers\API\SettingsController;
+use App\Http\Controllers\API\BudgetPolicyController;
+use App\Http\Controllers\API\DriverController;
+use App\Http\Controllers\API\HeadOfOfficeController;
+use App\Http\Controllers\API\GsoController;
+
+use Illuminate\Support\Facades\Route;
+
+/*
+|--------------------------------------------------------------------------
+| API Routes - FCMS Authentication System
+|--------------------------------------------------------------------------
+*/
+
+// ============ PUBLIC ROUTES (No Authentication) ============
+Route::prefix('auth')->group(function () {
+    Route::post('login', [AuthController::class, 'login']);
+    Route::post('forgot-password', [AuthController::class, 'forgotPassword']);
+    Route::post('reset-password', [AuthController::class, 'resetPassword']);
+});
+
+// ============ PROTECTED ROUTES (Authentication Required) ============
+Route::middleware('auth:sanctum')->group(function () {
+
+    // User Management
+    Route::prefix('auth')->group(function () {
+        Route::get('me', [AuthController::class, 'me']);
+        Route::post('logout', [AuthController::class, 'logout']);
+        Route::post('logout-all', [AuthController::class, 'logoutAllDevices']);
+        Route::post('change-password', [AuthController::class, 'changePassword']);
+        Route::post('refresh-token', [AuthController::class, 'refreshToken']);
+    });
+
+
+    // ============ ADMIN ROUTES (Superadmin ) ============
+    Route::middleware(['auth:sanctum', 'role:' . App\Models\User::ROLE_SUPERADMIN])->prefix('admin')->group(function () {
+
+        // User Management
+        Route::apiResource('users', UserController::class);
+        Route::patch('users/{id}/status', [UserController::class, 'updateStatus']);
+        Route::post('users/{id}/reset-password', [UserController::class, 'resetPassword']);
+        Route::patch('users/{id}/department', [UserController::class, 'updateDepartment']);
+
+        // Department Management
+        Route::apiResource('departments', DepartmentController::class);
+
+        // Vehicle Management
+        Route::apiResource('vehicles', VehicleController::class);
+        Route::patch('vehicles/{id}/status', [VehicleController::class, 'updateStatus']);
+        Route::patch('vehicles/{id}/maintenance', [VehicleController::class, 'updateMaintenance']);
+
+        // System Settings
+        Route::get('settings', [SettingsController::class, 'index']);
+        Route::get('settings/{key}', [SettingsController::class, 'show']);
+        Route::put('settings/{key}', [SettingsController::class, 'update']);
+        Route::post('settings/bulk', [SettingsController::class, 'bulkUpdate']);
+
+        // Budget Policies
+        Route::get('budget-policies', [BudgetPolicyController::class, 'index']);
+        Route::get('budget-policies/{departmentId}', [BudgetPolicyController::class, 'show']);
+        Route::post('budget-policies', [BudgetPolicyController::class, 'store']);
+        Route::put('budget-policies/{departmentId}', [BudgetPolicyController::class, 'update']);
+        Route::delete('budget-policies/{departmentId}', [BudgetPolicyController::class, 'destroy']);
+        Route::get('budget-status', [BudgetPolicyController::class, 'getBudgetStatus']);
+        Route::get('budget-event-logs', [BudgetPolicyController::class, 'getEventLogs']);
+        Route::post('budget-policies/force-activate', [BudgetPolicyController::class, 'forceActivate']);
+        Route::post('budget-policies/run-weekly-reset', [BudgetPolicyController::class, 'runWeeklyReset']);
+
+        // ============ HEAD OF OFFICE & OIC ASSIGNMENT (SUPER ADMIN) ============
+        // Head of Office Assignment
+        Route::post('departments/{id}/assign-head', [DepartmentController::class, 'assignHeadOfOffice']);
+        Route::delete('departments/{id}/remove-head', [DepartmentController::class, 'removeHeadOfOffice']);
+
+        // OIC (Officer-in-Charge) Assignment
+        Route::post('departments/{id}/assign-oic', [DepartmentController::class, 'assignOIC']);
+        Route::delete('departments/{id}/remove-oic', [DepartmentController::class, 'removeOIC']);
+
+        // Get department head and OIC info
+        Route::get('departments/{id}/leadership', [DepartmentController::class, 'getLeadershipInfo']);
+    });
+
+    // ============ DEPARTMENT OFFICE ROUTES ============
+    Route::middleware(['auth:sanctum', 'role:' . App\Models\User::ROLE_DEPT_OFFICE])->group(function () {
+
+        // Available Resources
+        Route::get('vehicles/available', [VehicleController::class, 'getAvailableVehicles']);
+        Route::get('drivers/active', [UserController::class, 'getActiveDrivers']);
+
+        // Department Budget
+        Route::get('departments/budget/current', [BudgetController::class, 'getCurrentDepartmentBudget']);
+
+        // Trip Ticket Management
+        Route::prefix('trip-tickets')->group(function () {
+            Route::get('my-requests', [TripTicketController::class, 'myRequests']);
+            Route::post('draft', [TripTicketController::class, 'saveDraft']);
+            Route::put('{id}/draft', [TripTicketController::class, 'updateDraft']);
+            Route::post('submit', [TripTicketController::class, 'submit']);
+            Route::post('{id}/resubmit', [TripTicketController::class, 'resubmit']);
+            Route::get('{id}', [TripTicketController::class, 'show']);
+        });
+    });
+
+    // ============ HEAD OF OFFICE ROUTES ============
+    Route::middleware(['auth:sanctum', 'role:' . App\Models\User::ROLE_DEPT_HEAD])->prefix('head')->group(function () {
+
+        // Dashboard
+        Route::get('dashboard', [HeadOfOfficeController::class, 'getDashboard']);
+
+        // Pending tickets for approval
+        Route::get('tickets/pending', [HeadOfOfficeController::class, 'getPendingTickets']);
+
+        // Approve/Reject tickets
+        Route::post('tickets/{id}/approve', [HeadOfOfficeController::class, 'approveTicket']);
+        Route::post('tickets/{id}/reject', [HeadOfOfficeController::class, 'rejectTicket']);
+
+        // Head Status Toggle (Active/Inactive for OIC activation)
+        Route::post('status/toggle', [HeadOfOfficeController::class, 'toggleHeadStatus']);
+
+        // OIC Information
+        Route::get('oic/status', [HeadOfOfficeController::class, 'getOicStatus']);
+
+        // Trip monitoring (real-time)
+        Route::get('monitoring/active-trips', [HeadOfOfficeController::class, 'getActiveTrips']);
+        Route::get('monitoring/fuel-consumption', [HeadOfOfficeController::class, 'getFuelConsumption']);
+        Route::get('monitoring/live-tracking/{tripId}', [HeadOfOfficeController::class, 'getLiveTracking']);
+    });
+// ============ GSO ROUTES ============
+Route::middleware(['auth:sanctum', 'role:' . App\Models\User::ROLE_GSO_STAFF])->prefix('gso')->group(function () {
+    // Dashboard / Pending Review (main page)
+    Route::get('pending', [GsoController::class, 'getPendingTickets']);
+    Route::get('verified', [GsoController::class, 'getVerifiedTickets']);
+    Route::get('returned', [GsoController::class, 'getReturnedTickets']);
+    Route::get('forward', [GsoController::class, 'getForwardQueue']);
+    
+    // Ticket actions
+    Route::get('tickets/{id}', [GsoController::class, 'show']);
+    Route::post('tickets/{id}/approve', [GsoController::class, 'approveTicket']);
+    Route::post('tickets/{id}/reject', [GsoController::class, 'rejectTicket']);
+    Route::post('tickets/forward-to-mo', [GsoController::class, 'forwardToMO']);
+    
+    // Reports
+    Route::get('reports', [GsoController::class, 'getReports']);
+});
+
+
+
+
+}); 
