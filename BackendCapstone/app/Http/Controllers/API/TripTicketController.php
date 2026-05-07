@@ -301,6 +301,15 @@ class TripTicketController extends Controller
             // Calculate estimates
             $estimatedDistance = $this->calculateDistanceFromConfig($request->destination);
             $estimatedFuel = $this->calculateEstimatedFuelFromConfig($vehicle, $estimatedDistance);
+            $fuelPrice = $this->getFuelPriceFromConfig($vehicle->fuel_type);
+            $estimatedCost = round($estimatedFuel * $fuelPrice, 2);
+
+            //check budget 
+            $budgetInfo = $this->getDepartmentBudgetFromConfig($departmentId);
+            $hasInsufficientBudget = $budgetInfo['remaining'] < $estimatedCost;
+            $budgetShortage = $hasInsufficientBudget ? round($estimatedCost - $budgetInfo['remaining'], 2) : 0;
+
+
 
             // Generate ticket number
             $yearMonth = date('Y-m');
@@ -342,6 +351,9 @@ class TripTicketController extends Controller
                 'estimated_distance_km' => $estimatedDistance,
                 'estimated_fuel_liters' => $estimatedFuel,
                 'submitted_by_head' => $submittedByHead,
+                'has_insufficient_budget' => $hasInsufficientBudget,
+                'budget_shortage' => $budgetShortage,
+                'original_department_id' => $departmentId
             ]);
 
             TripTicketVehicleSnapshot::create([
@@ -366,12 +378,18 @@ class TripTicketController extends Controller
             return response()->json([
                 'success' => true,
                 'message' => $submittedByHead
-                    ? 'Trip ticket submitted successfully to GSO'
-                    : 'Trip ticket submitted for Head approval',
+                    ? ($hasInsufficientBudget
+                        ? "Trip ticket submitted with INSUFFICIENT BUDGET warning. Budget short by ₱" . number_format($budgetShortage, 2) . ". GSO will review."
+                        : "Trip ticket submitted successfully to GSO")
+                    : ($hasInsufficientBudget
+                        ? "Trip ticket submitted with INSUFFICIENT BUDGET warning. Budget short by ₱" . number_format($budgetShortage, 2) . ". Head will review."
+                        : "Trip ticket submitted for Head approval"),
                 'data' => [
                     'trip_ticket_id' => $tripTicket->trip_ticket_id,
                     'trip_ticket_number' => $tripTicket->trip_ticket_number,
                     'status' => $tripTicket->status,
+                    'has_insufficient_budget' => $hasInsufficientBudget,
+                    'budget_shortage' => $budgetShortage,
                 ]
             ], 201);
         } catch (\Exception $e) {

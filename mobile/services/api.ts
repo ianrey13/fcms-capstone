@@ -3,7 +3,7 @@ import axios from 'axios';
 import { storage } from '../utils/storage';
 
 // Change this to your computer's IP address
-const API_URL = 'http://192.168.1.8:8000/api';
+const API_URL = 'http://172.22.157.4:8000/api';
 
 const api = axios.create({
   baseURL: API_URL,

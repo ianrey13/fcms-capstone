@@ -93,7 +93,6 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
         { name: "Dashboard", href: "/mo/dashboard", icon: LayoutDashboard },
         { name: "Pending Fund Release", href: "/mo/pending", icon: Clock },
         { name: "Funds Released", href: "/mo/approved", icon: CheckCircle },
-        { name: "Budget Assistance", href: "/mo/budget-assistance", icon: DollarSign },
         { name: "Reconciliation", href: "/mo/reconciliation", icon: ClipboardList },
         { name: "Reports", href: "/mo/reports", icon: FileBarChart },
       ],

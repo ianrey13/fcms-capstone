@@ -45,7 +45,6 @@ import MayorReconciliation from "./pages/mayor/MayorReconciliation";
 import MayorBudget from "./pages/mayor/MayorBudget";
 import MayorReports from "./pages/mayor/MayorReports";
 import MayorTripTicketDetail from "./pages/mayor/MayorTripTicketDetail";
-import BudgetAssistance from "./pages/mayor/BudgetAssistance";
 
 // Driver Pages (Work in Progress - replace with actual components later)
 import DriverTrips from "./pages/admin/WorkInProgress";
@@ -462,16 +461,7 @@ function App() {
               </ProtectedRoute>
             }
           />
-          <Route
-            path="/mo/budget-assistance"
-            element={
-              <ProtectedRoute allowedRoles={["mayors_office"]}>
-                <Layout>
-                  <BudgetAssistance />
-                </Layout>
-              </ProtectedRoute>
-            }
-          />
+        
           <Route
             path="/head/create-trip"
             element={

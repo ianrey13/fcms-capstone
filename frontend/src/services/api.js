@@ -189,11 +189,8 @@ export const mayorsOfficeAPI = {
   getTicketById: (id) => api.get(`/mayors-office/tickets/${id}`),
 
   // Review Actions
-  approveTicket: (id, amountReleased, note) =>
-    api.post(`/mayors-office/tickets/${id}/approve`, {
-      amount_released: amountReleased,
-      review_note: note,
-    }),
+  approveTicket: (id, data) => api.post(`/mayors-office/tickets/${id}/approve`, data),
+
   rejectTicket: (id, note) =>
     api.post(`/mayors-office/tickets/${id}/reject`, { review_note: note }),
 
@@ -212,8 +209,12 @@ export const mayorsOfficeAPI = {
   // Create MO-funded trip ticket from request
   createMoFundedTicket: (data) =>
     api.post("/mayors-office/budget-assistance/create-ticket", data),
+      getAllDepartments: () => api.get('/mayors-office/departments/all'),
+
   getDepartmentBudget: (departmentId) =>
     api.get(`/mayors-office/departments/${departmentId}/budget`),
+   getAllDepartmentsForSelector: () => api.get("/mayors-office/departments/selector"),
+
 };
 
 // ============ DRIVER API ============

@@ -568,4 +568,34 @@ public function removeHeadOfOffice($id)
         $user = User::where('user_id', $head['id'])->first();
         return $user && $user->head_active_status === 'active' ? 'active' : 'inactive';
     }
+
+
+/**
+ * Get all departments for Mayor's Office 
+ */
+public function getAllDepartmentsForMO(Request $request)
+{
+    try {
+        $user = $request->user();
+        
+        if (!$user->isMayorsOffice() && !$user->isSuperAdmin()) {
+            return response()->json(['message' => 'Unauthorized'], 403);
+        }
+        
+        $departments = Department::select('department_id', 'department_name', 'department_code')
+            ->orderBy('department_name')
+            ->get();
+        
+        return response()->json([
+            'success' => true,
+            'data' => $departments
+        ]);
+    } catch (\Exception $e) {
+        return response()->json([
+            'success' => false,
+            'message' => $e->getMessage()
+        ], 500);
+    }
+}
+
 }

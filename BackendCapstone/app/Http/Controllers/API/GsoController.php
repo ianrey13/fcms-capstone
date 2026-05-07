@@ -16,34 +16,35 @@ use Illuminate\Support\Facades\Log;
 class GsoController extends Controller
 {
     /**
- * Get GSO dashboard statistics
- */
-public function getDashboard(Request $request)
-{
-    $user = $request->user();
+     * Get GSO dashboard statistics
+     */
+    public function getDashboard(Request $request)
+    {
+        $user = $request->user();
 
-    if (!$user->isGsoStaff() && !$user->isSuperAdmin()) {
-        return response()->json(['message' => 'Unauthorized'], 403);
+        if (!$user->isGsoStaff() && !$user->isSuperAdmin()) {
+            return response()->json(['message' => 'Unauthorized'], 403);
+        }
+
+        $stats = [
+            'pending_review' => TripTicket::where('status', TripTicket::STATUS_PENDING_GSO_REVIEW)->count(),
+            'verified_pending' => TripTicket::where('status', TripTicket::STATUS_PENDING_MAYORS_OFFICE)->count(),
+            'with_mayors_office' => TripTicket::where('status', TripTicket::STATUS_WITH_MAYORS_OFFICE)->count(),
+            'returned' => TripTicket::where('status', TripTicket::STATUS_RETURNED_FOR_REVISION)->count(),
+            'pending_reconciliation' => TripTicket::where('status', TripTicket::STATUS_PENDING_RECONCILIATION)->count(),
+            'total_verified_this_month' => GsoVerification::whereMonth('verified_at', now()->month)->count(),
+            'total_verified_this_year' => GsoVerification::whereYear('verified_at', now()->year)->count(),
+        ];
+
+        return response()->json([
+            'success' => true,
+            'data' => $stats,
+        ]);
     }
-
-    $stats = [
-        'pending_review' => TripTicket::where('status', TripTicket::STATUS_PENDING_GSO_REVIEW)->count(),
-        'verified_pending' => TripTicket::where('status', TripTicket::STATUS_PENDING_MAYORS_OFFICE)->count(),
-        'with_mayors_office' => TripTicket::where('status', TripTicket::STATUS_WITH_MAYORS_OFFICE)->count(),
-        'returned' => TripTicket::where('status', TripTicket::STATUS_RETURNED_FOR_REVISION)->count(),
-        'pending_reconciliation' => TripTicket::where('status', TripTicket::STATUS_PENDING_RECONCILIATION)->count(),
-        'total_verified_this_month' => GsoVerification::whereMonth('verified_at', now()->month)->count(),
-        'total_verified_this_year' => GsoVerification::whereYear('verified_at', now()->year)->count(),
-    ];
-
-    return response()->json([
-        'success' => true,
-        'data' => $stats,
-    ]);
-}
 
     /**
      * Get pending tickets for GSO review (pending_gso_review status)
+     * ✅ UPDATED: Added budget warning fields
      */
     public function getPendingTickets(Request $request)
     {
@@ -69,6 +70,11 @@ public function getDashboard(Request $request)
                         'passenger_name' => $ticket->passenger_name,
                         'submitted_at' => $ticket->submitted_at,
                         'status' => $ticket->status,
+                        // ✅ NEW: Budget warning fields
+                        'has_insufficient_budget' => $ticket->has_insufficient_budget ?? false,
+                        'budget_shortage' => $ticket->budget_shortage ?? 0,
+                        'estimated_cost' => $ticket->estimated_fuel_liters ? 
+                            ($ticket->estimated_fuel_liters * 58) : null,
                         'vehicle' => $ticket->vehicle ? [
                             'plate_number' => $ticket->vehicle->plate_number,
                             'vehicle_model' => $ticket->vehicle->vehicle_model,
@@ -100,71 +106,72 @@ public function getDashboard(Request $request)
         }
     }
 
-/**
- * Get verified tickets (all tickets that have GSO approval)
- */
-public function getVerifiedTickets(Request $request)
-{
-    try {
-        $user = $request->user();
+    /**
+     * Get verified tickets (all tickets that have GSO approval)
+     */
+    public function getVerifiedTickets(Request $request)
+    {
+        try {
+            $user = $request->user();
 
-        if (!$user->isGsoStaff() && !$user->isSuperAdmin()) {
-            return response()->json(['message' => 'Unauthorized'], 403);
+            if (!$user->isGsoStaff() && !$user->isSuperAdmin()) {
+                return response()->json(['message' => 'Unauthorized'], 403);
+            }
+
+            $verifiedTickets = TripTicket::with(['vehicle', 'department', 'latestGsoVerification', 'gasSlip'])
+                ->whereHas('gsoVerifications', function($q) {
+                    $q->where('decision', 'approved');
+                })
+                ->orderBy('submitted_at', 'desc')
+                ->get()
+                ->map(function ($ticket) {
+                    return [
+                        'id' => $ticket->trip_ticket_id,
+                        'trip_ticket_id' => $ticket->trip_ticket_id,
+                        'ticket_number' => $ticket->trip_ticket_number,
+                        'trip_ticket_number' => $ticket->trip_ticket_number,
+                        'trip_date' => $ticket->trip_date,
+                        'destination' => $ticket->destination,
+                        'purpose' => $ticket->purpose,
+                        'status' => $ticket->status,
+                        'submitted_at' => $ticket->submitted_at,
+                        // ✅ NEW: Budget warning fields
+                        'has_insufficient_budget' => $ticket->has_insufficient_budget ?? false,
+                        'budget_shortage' => $ticket->budget_shortage ?? 0,
+                        'vehicle' => $ticket->vehicle ? [
+                            'plate_number' => $ticket->vehicle->plate_number,
+                            'vehicle_model' => $ticket->vehicle->vehicle_model,
+                        ] : null,
+                        'department' => $ticket->department ? [
+                            'department_name' => $ticket->department->department_name,
+                        ] : null,
+                        'department_name' => $ticket->department ? $ticket->department->department_name : null,
+                        'driver' => $ticket->driver && $ticket->driver->user ? [
+                            'full_name' => $ticket->driver->user->full_name,
+                        ] : null,
+                        'verified_at' => $ticket->latestGsoVerification ? $ticket->latestGsoVerification->verified_at : null,
+                        'verified_by' => $ticket->latestGsoVerification && $ticket->latestGsoVerification->verifiedBy ?
+                            $ticket->latestGsoVerification->verifiedBy->full_name : null,
+                        'amount_released' => $ticket->gasSlip ? $ticket->gasSlip->amount_released : 0,
+                    ];
+                });
+
+            return response()->json([
+                'success' => true,
+                'data' => $verifiedTickets,
+                'meta' => [
+                    'verified_count' => $verifiedTickets->count()
+                ]
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error('Get verified tickets error: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to fetch verified tickets: ' . $e->getMessage()
+            ], 500);
         }
-
-        // Get ALL tickets that have GSO verification (approved)
-        // This includes pending_mayors_office, with_mayors_office, funds_issued, in_transit, pending_reconciliation
-        $verifiedTickets = TripTicket::with(['vehicle', 'department', 'latestGsoVerification', 'gasSlip'])
-            ->whereHas('gsoVerifications', function($q) {
-                $q->where('decision', 'approved');
-            })
-            ->orderBy('submitted_at', 'desc')
-            ->get()
-            ->map(function ($ticket) {
-                return [
-                    'id' => $ticket->trip_ticket_id,
-                    'trip_ticket_id' => $ticket->trip_ticket_id,
-                    'ticket_number' => $ticket->trip_ticket_number,
-                    'trip_ticket_number' => $ticket->trip_ticket_number,
-                    'trip_date' => $ticket->trip_date,
-                    'destination' => $ticket->destination,
-                    'purpose' => $ticket->purpose,
-                    'status' => $ticket->status,
-                    'submitted_at' => $ticket->submitted_at,
-                    'vehicle' => $ticket->vehicle ? [
-                        'plate_number' => $ticket->vehicle->plate_number,
-                        'vehicle_model' => $ticket->vehicle->vehicle_model,
-                    ] : null,
-                    'department' => $ticket->department ? [
-                        'department_name' => $ticket->department->department_name,
-                    ] : null,
-                    'department_name' => $ticket->department ? $ticket->department->department_name : null,
-                    'driver' => $ticket->driver && $ticket->driver->user ? [
-                        'full_name' => $ticket->driver->user->full_name,
-                    ] : null,
-                    'verified_at' => $ticket->latestGsoVerification ? $ticket->latestGsoVerification->verified_at : null,
-                    'verified_by' => $ticket->latestGsoVerification && $ticket->latestGsoVerification->verifiedBy ?
-                        $ticket->latestGsoVerification->verifiedBy->full_name : null,
-                    'amount_released' => $ticket->gasSlip ? $ticket->gasSlip->amount_released : 0,
-                ];
-            });
-
-        return response()->json([
-            'success' => true,
-            'data' => $verifiedTickets,
-            'meta' => [
-                'verified_count' => $verifiedTickets->count()
-            ]
-        ]);
-
-    } catch (\Exception $e) {
-        Log::error('Get verified tickets error: ' . $e->getMessage());
-        return response()->json([
-            'success' => false,
-            'message' => 'Failed to fetch verified tickets: ' . $e->getMessage()
-        ], 500);
     }
-}
 
     /**
      * Get returned tickets (returned_for_revision status)
@@ -191,6 +198,9 @@ public function getVerifiedTickets(Request $request)
                         'destination' => $ticket->destination,
                         'status' => $ticket->status,
                         'submitted_at' => $ticket->submitted_at,
+                        // ✅ NEW: Budget warning fields
+                        'has_insufficient_budget' => $ticket->has_insufficient_budget ?? false,
+                        'budget_shortage' => $ticket->budget_shortage ?? 0,
                         'vehicle' => $ticket->vehicle ? [
                             'plate_number' => $ticket->vehicle->plate_number,
                         ] : null,
@@ -242,6 +252,9 @@ public function getVerifiedTickets(Request $request)
                         'trip_date' => $ticket->trip_date,
                         'destination' => $ticket->destination,
                         'status' => $ticket->status,
+                        // ✅ NEW: Budget warning fields
+                        'has_insufficient_budget' => $ticket->has_insufficient_budget ?? false,
+                        'budget_shortage' => $ticket->budget_shortage ?? 0,
                         'vehicle' => $ticket->vehicle ? [
                             'plate_number' => $ticket->vehicle->plate_number,
                         ] : null,
@@ -270,6 +283,7 @@ public function getVerifiedTickets(Request $request)
      */
     public function approveTicket(Request $request, $id)
     {
+        // ... keep existing method ...
         try {
             $user = $request->user();
 
@@ -285,18 +299,15 @@ public function getVerifiedTickets(Request $request)
                 return response()->json(['message' => 'Ticket not found or not eligible for approval'], 404);
             }
 
-            // Check if user is verifying their own ticket
             if ($tripTicket->submitted_by === $user->user_id) {
                 return response()->json(['message' => 'Cannot verify your own trip ticket'], 400);
             }
 
             DB::beginTransaction();
 
-            // Get current review cycle
             $lastCycle = GsoVerification::where('trip_ticket_id', $id)->max('review_cycle') ?? 0;
             $reviewCycle = $lastCycle + 1;
 
-            // Create GSO verification record
             GsoVerification::create([
                 'trip_ticket_id' => $id,
                 'review_cycle' => $reviewCycle,
@@ -306,13 +317,11 @@ public function getVerifiedTickets(Request $request)
                 'verified_at' => now(),
             ]);
 
-            // Update trip ticket status
             $tripTicket->status = TripTicket::STATUS_PENDING_MAYORS_OFFICE;
             $tripTicket->save();
 
             DB::commit();
 
-            // Send notification to Mayor's Office
             $this->sendMoNotification($tripTicket);
 
             return response()->json([
@@ -339,6 +348,7 @@ public function getVerifiedTickets(Request $request)
      */
     public function rejectTicket(Request $request, $id)
     {
+        // ... keep existing method ...
         $validator = Validator::make($request->all(), [
             'gso_note' => 'required|string|min:5'
         ]);
@@ -364,11 +374,9 @@ public function getVerifiedTickets(Request $request)
 
             DB::beginTransaction();
 
-            // Get current review cycle
             $lastCycle = GsoVerification::where('trip_ticket_id', $id)->max('review_cycle') ?? 0;
             $reviewCycle = $lastCycle + 1;
 
-            // Create GSO verification record
             GsoVerification::create([
                 'trip_ticket_id' => $id,
                 'review_cycle' => $reviewCycle,
@@ -378,11 +386,9 @@ public function getVerifiedTickets(Request $request)
                 'verified_at' => now(),
             ]);
 
-            // Update trip ticket status
             $tripTicket->status = TripTicket::STATUS_RETURNED_FOR_REVISION;
             $tripTicket->save();
 
-            // Record rejection in returns
             DB::table('trip_ticket_return')->insert([
                 'trip_ticket_id' => $id,
                 'return_type' => 'rejected_by_gso',
@@ -393,7 +399,6 @@ public function getVerifiedTickets(Request $request)
 
             DB::commit();
 
-            // Send notification to department office
             $this->sendRejectionNotification($tripTicket, $request->gso_note);
 
             return response()->json([
@@ -420,6 +425,7 @@ public function getVerifiedTickets(Request $request)
      */
     public function forwardToMO(Request $request)
     {
+        // ... keep existing method ...
         $validator = Validator::make($request->all(), [
             'trip_ticket_ids' => 'required|array',
             'trip_ticket_ids.*' => 'exists:trip_ticket,trip_ticket_id'
@@ -447,7 +453,6 @@ public function getVerifiedTickets(Request $request)
                     ->first();
 
                 if ($ticket) {
-                    // Change status to indicate it's with Mayor's Office
                     $ticket->status = TripTicket::STATUS_WITH_MAYORS_OFFICE;
                     $ticket->save();
 
@@ -458,7 +463,6 @@ public function getVerifiedTickets(Request $request)
 
             DB::commit();
 
-            // Send notification to Mayor's Office
             if ($forwardedCount > 0) {
                 $this->sendBatchForwardNotification($forwardedCount, $forwardedIds);
             }
@@ -481,9 +485,10 @@ public function getVerifiedTickets(Request $request)
         }
     }
 
-   /**
- * Get single ticket details for GSO
- */
+    /**
+     * Get single ticket details for GSO
+     * ✅ UPDATED: Added budget warning fields
+     */
     public function show(Request $request, $id)
     {
         try {
@@ -493,36 +498,30 @@ public function getVerifiedTickets(Request $request)
                 return response()->json(['message' => 'Unauthorized'], 403);
             }
 
-            // ⭐ FIX: Load all relationships properly using the model's methods
             $ticket = TripTicket::with([
                 'vehicle',
                 'driver.user',
                 'department',
                 'submittedBy',
-                'latestHeadApproval.approvedBy',  // ⭐ Use latestHeadApproval relation
+                'latestHeadApproval.approvedBy',
                 'latestGsoVerification.verifiedBy',
                 'latestMoReview.reviewedBy',
                 'gasSlip',
                 'vehicleSnapshot'
             ])->findOrFail($id);
 
-            // Debug logging - check your Laravel log
             Log::info('Ticket found:', ['id' => $id, 'status' => $ticket->status]);
             
             if ($ticket->latestHeadApproval) {
                 Log::info('Head approval found:', [
                     'decision' => $ticket->latestHeadApproval->decision,
                     'approved_by_id' => $ticket->latestHeadApproval->approved_by,
-                    'has_approved_by_relation' => $ticket->latestHeadApproval->relationLoaded('approvedBy')
                 ]);
-            } else {
-                Log::warning('No head approval found for ticket: ' . $id);
             }
 
             return response()->json([
                 'success' => true,
                 'data' => [
-                    // Basic Info
                     'trip_ticket_id' => $ticket->trip_ticket_id,
                     'trip_ticket_number' => $ticket->trip_ticket_number,
                     'ticket_number' => $ticket->trip_ticket_number,
@@ -534,8 +533,12 @@ public function getVerifiedTickets(Request $request)
                     'status' => $ticket->status,
                     'submitted_at' => $ticket->submitted_at,
                     'submitted_by_head' => $ticket->submitted_by_head,
+                    // ✅ NEW: Budget warning fields
+                    'has_insufficient_budget' => $ticket->has_insufficient_budget ?? false,
+                    'budget_shortage' => $ticket->budget_shortage ?? 0,
+                    'estimated_distance_km' => $ticket->estimated_distance_km,
+                    'estimated_fuel_liters' => $ticket->estimated_fuel_liters,
                     
-                    // Vehicle
                     'vehicle' => $ticket->vehicle ? [
                         'vehicle_id' => $ticket->vehicle->vehicle_id,
                         'plate_number' => $ticket->vehicle->plate_number,
@@ -543,7 +546,6 @@ public function getVerifiedTickets(Request $request)
                         'fuel_type' => $ticket->vehicle->fuel_type,
                     ] : null,
                     
-                    // Driver - Multiple formats for frontend compatibility
                     'driver' => $ticket->driver && $ticket->driver->user ? [
                         'driver_id' => $ticket->driver->driver_id,
                         'full_name' => $ticket->driver->user->full_name,
@@ -554,7 +556,6 @@ public function getVerifiedTickets(Request $request)
                     'driver_name' => $ticket->driver && $ticket->driver->user ? 
                         $ticket->driver->user->full_name : null,
                     
-                    // Department
                     'department' => $ticket->department ? [
                         'department_id' => $ticket->department->department_id,
                         'department_name' => $ticket->department->department_name,
@@ -563,7 +564,6 @@ public function getVerifiedTickets(Request $request)
                     'department_name' => $ticket->department ? 
                         $ticket->department->department_name : null,
                     
-                    // ⭐⭐⭐ HEAD APPROVAL - CRITICAL FIX ⭐⭐⭐
                     'head_approval' => $ticket->latestHeadApproval ? [
                         'approval_id' => $ticket->latestHeadApproval->approval_id,
                         'decision' => $ticket->latestHeadApproval->decision,
@@ -579,7 +579,6 @@ public function getVerifiedTickets(Request $request)
                         ] : null,
                     ] : null,
                     
-                    // GSO Verification
                     'gso_verification' => $ticket->latestGsoVerification ? [
                         'verification_id' => $ticket->latestGsoVerification->verification_id,
                         'decision' => $ticket->latestGsoVerification->decision,
@@ -590,7 +589,6 @@ public function getVerifiedTickets(Request $request)
                         ] : null,
                     ] : null,
                     
-                    // MO Review
                     'mo_review' => $ticket->latestMoReview ? [
                         'review_id' => $ticket->latestMoReview->review_id,
                         'decision' => $ticket->latestMoReview->decision,
@@ -598,7 +596,6 @@ public function getVerifiedTickets(Request $request)
                         'reviewed_at' => $ticket->latestMoReview->reviewed_at,
                     ] : null,
                     
-                    // Gas Slip
                     'gas_slip' => $ticket->gasSlip ? [
                         'gas_slip_id' => $ticket->gasSlip->gas_slip_id,
                         'amount_released' => $ticket->gasSlip->amount_released,
@@ -606,14 +603,12 @@ public function getVerifiedTickets(Request $request)
                     ] : null,
                     'amount_released' => $ticket->gasSlip ? $ticket->gasSlip->amount_released : 0,
                     
-                    // Vehicle Snapshot
                     'vehicle_snapshot' => $ticket->vehicleSnapshot ? [
                         'vehicle_status' => $ticket->vehicleSnapshot->vehicle_status,
                         'odometer_status' => $ticket->vehicleSnapshot->odometer_status,
                         'fuel_type' => $ticket->vehicleSnapshot->fuel_type,
                     ] : null,
                     
-                    // Requester
                     'requester' => $ticket->submittedBy ? [
                         'user_id' => $ticket->submittedBy->user_id,
                         'full_name' => $ticket->submittedBy->full_name,
@@ -630,13 +625,12 @@ public function getVerifiedTickets(Request $request)
         }
     }
     
- 
-
     /**
      * Get GSO reports
      */
     public function getReports(Request $request)
     {
+        // ... keep existing method ...
         try {
             $user = $request->user();
 
@@ -676,8 +670,73 @@ public function getVerifiedTickets(Request $request)
     }
 
     /**
-     * Send notification to Mayor's Office
+     * Get forwarded tickets (with_mayors_office status)
      */
+    public function getForwardedTickets(Request $request)
+    {
+        try {
+            $user = $request->user();
+
+            if (!$user->isGsoStaff() && !$user->isSuperAdmin()) {
+                return response()->json(['message' => 'Unauthorized'], 403);
+            }
+
+            $forwardedTickets = TripTicket::with(['vehicle', 'department', 'latestGsoVerification', 'gasSlip'])
+                ->where('status', TripTicket::STATUS_WITH_MAYORS_OFFICE)
+                ->orderBy('submitted_at', 'desc')
+                ->get()
+                ->map(function ($ticket) {
+                    return [
+                        'id' => $ticket->trip_ticket_id,
+                        'trip_ticket_id' => $ticket->trip_ticket_id,
+                        'ticket_number' => $ticket->trip_ticket_number,
+                        'trip_ticket_number' => $ticket->trip_ticket_number,
+                        'trip_date' => $ticket->trip_date,
+                        'destination' => $ticket->destination,
+                        'purpose' => $ticket->purpose,
+                        'status' => $ticket->status,
+                        'submitted_at' => $ticket->submitted_at,
+                        'has_insufficient_budget' => $ticket->has_insufficient_budget ?? false,
+                        'budget_shortage' => $ticket->budget_shortage ?? 0,
+                        'vehicle' => $ticket->vehicle ? [
+                            'plate_number' => $ticket->vehicle->plate_number,
+                            'vehicle_model' => $ticket->vehicle->vehicle_model,
+                            'fuel_type' => $ticket->vehicle->fuel_type,
+                        ] : null,
+                        'department' => $ticket->department ? [
+                            'department_name' => $ticket->department->department_name,
+                            'department_code' => $ticket->department->department_code,
+                        ] : null,
+                        'department_name' => $ticket->department ? $ticket->department->department_name : null,
+                        'driver' => $ticket->driver && $ticket->driver->user ? [
+                            'full_name' => $ticket->driver->user->full_name,
+                        ] : null,
+                        'amount_released' => $ticket->gasSlip ? $ticket->gasSlip->amount_released : 0,
+                        'verified_at' => $ticket->latestGsoVerification ? $ticket->latestGsoVerification->verified_at : null,
+                        'verified_by' => $ticket->latestGsoVerification && $ticket->latestGsoVerification->verifiedBy ?
+                            $ticket->latestGsoVerification->verifiedBy->full_name : null,
+                    ];
+                });
+
+            return response()->json([
+                'success' => true,
+                'data' => $forwardedTickets,
+                'meta' => [
+                    'forwarded_count' => $forwardedTickets->count()
+                ]
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error('Get forwarded tickets error: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to fetch forwarded tickets: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    // ============ PRIVATE METHODS ============
+
     private function sendMoNotification($tripTicket)
     {
         $moStaff = User::where('role', 'mayors_office')
@@ -697,9 +756,6 @@ public function getVerifiedTickets(Request $request)
         }
     }
 
-    /**
-     * Send batch forward notification to Mayor's Office
-     */
     private function sendBatchForwardNotification($count, $ticketIds)
     {
         $moStaff = User::where('role', 'mayors_office')
@@ -721,9 +777,6 @@ public function getVerifiedTickets(Request $request)
         }
     }
 
-    /**
-     * Send rejection notification to department office
-     */
     private function sendRejectionNotification($tripTicket, $reason)
     {
         $deptOffice = User::find($tripTicket->submitted_by);
@@ -740,71 +793,4 @@ public function getVerifiedTickets(Request $request)
             ]);
         }
     }
-
-/**
- * Get forwarded tickets (with_mayors_office status)
- * These are tickets that have been forwarded to Mayor's Office
- */
-public function getForwardedTickets(Request $request)
-{
-    try {
-        $user = $request->user();
-
-        if (!$user->isGsoStaff() && !$user->isSuperAdmin()) {
-            return response()->json(['message' => 'Unauthorized'], 403);
-        }
-
-        $forwardedTickets = TripTicket::with(['vehicle', 'department', 'latestGsoVerification', 'gasSlip'])
-            ->where('status', TripTicket::STATUS_WITH_MAYORS_OFFICE)
-            ->orderBy('submitted_at', 'desc')
-            ->get()
-            ->map(function ($ticket) {
-                return [
-                    'id' => $ticket->trip_ticket_id,
-                    'trip_ticket_id' => $ticket->trip_ticket_id,
-                    'ticket_number' => $ticket->trip_ticket_number,
-                    'trip_ticket_number' => $ticket->trip_ticket_number,
-                    'trip_date' => $ticket->trip_date,
-                    'destination' => $ticket->destination,
-                    'purpose' => $ticket->purpose,
-                    'status' => $ticket->status,
-                    'submitted_at' => $ticket->submitted_at,
-                    'vehicle' => $ticket->vehicle ? [
-                        'plate_number' => $ticket->vehicle->plate_number,
-                        'vehicle_model' => $ticket->vehicle->vehicle_model,
-                        'fuel_type' => $ticket->vehicle->fuel_type,
-                    ] : null,
-                    'department' => $ticket->department ? [
-                        'department_name' => $ticket->department->department_name,
-                        'department_code' => $ticket->department->department_code,
-                    ] : null,
-                    'department_name' => $ticket->department ? $ticket->department->department_name : null,
-                    'driver' => $ticket->driver && $ticket->driver->user ? [
-                        'full_name' => $ticket->driver->user->full_name,
-                    ] : null,
-                    'amount_released' => $ticket->gasSlip ? $ticket->gasSlip->amount_released : 0,
-                    'verified_at' => $ticket->latestGsoVerification ? $ticket->latestGsoVerification->verified_at : null,
-                    'verified_by' => $ticket->latestGsoVerification && $ticket->latestGsoVerification->verifiedBy ?
-                        $ticket->latestGsoVerification->verifiedBy->full_name : null,
-                ];
-            });
-
-        return response()->json([
-            'success' => true,
-            'data' => $forwardedTickets,
-            'meta' => [
-                'forwarded_count' => $forwardedTickets->count()
-            ]
-        ]);
-
-    } catch (\Exception $e) {
-        Log::error('Get forwarded tickets error: ' . $e->getMessage());
-        return response()->json([
-            'success' => false,
-            'message' => 'Failed to fetch forwarded tickets: ' . $e->getMessage()
-        ], 500);
-    }
-}
-
-
 }

@@ -535,77 +535,99 @@ const CreateTripTicket = () => {
     };
   };
 
-  const handleSubmit = async () => {
-    if (!validateForm()) {
-      const firstError = document.querySelector(".error-message");
-      if (firstError)
-        firstError.scrollIntoView({ behavior: "smooth", block: "center" });
-      return;
+const handleSubmit = async () => {
+  if (!validateForm()) {
+    const firstError = document.querySelector(".error-message");
+    if (firstError)
+      firstError.scrollIntoView({ behavior: "smooth", block: "center" });
+    return;
+  }
+
+  setIsSubmitting(true);
+  setIsCheckingBudget(true);
+
+  try {
+    const payload = createPayload();
+    console.log("🚀 Submitting payload:", payload);
+
+    let submitResponse;
+    let budgetWarningData = null;
+
+    // Check budget for warning purposes only (does NOT block submission)
+    try {
+      const checkResponse = await departmentStaffAPI.checkBudgetAndRequestMO(payload);
+      
+      if (!checkResponse.data.can_proceed) {
+        // Store warning data but DON'T block submission
+        budgetWarningData = {
+          budget: checkResponse.data.budget,
+          estimated_cost: checkResponse.data.estimated_cost,
+          shortage: checkResponse.data.shortage,
+          request_id: checkResponse.data.request_id,
+          message: checkResponse.data.message,
+        };
+        console.log("⚠️ Budget insufficient, but continuing with submission");
+      } else {
+        console.log("✅ Budget sufficient");
+      }
+    } catch (budgetError) {
+      console.warn("Budget check failed, but continuing with submission:", budgetError);
+      // Continue with submission even if budget check fails
     }
 
-    setIsSubmitting(true);
-    setIsCheckingBudget(true);
+    // If in resubmit mode, use the resubmit endpoint
+    if (isResubmitMode && editTicketId) {
+      console.log("📤 Resubmitting ticket:", editTicketId);
+      submitResponse = await tripTicketAPI.resubmit(editTicketId, payload);
+    } else {
+      // ✅ ALWAYS submit the ticket (backend will handle insufficient budget flag)
+      submitResponse = await tripTicketAPI.submit(payload);
+    }
 
-    try {
-      const payload = createPayload();
-      console.log("🚀 Submitting payload:", payload);
+    console.log("📥 Submit response:", submitResponse.data);
 
-      let submitResponse;
-
-      // If in resubmit mode, use the resubmit endpoint
-      if (isResubmitMode && editTicketId) {
-        console.log("📤 Resubmitting ticket:", editTicketId);
-        submitResponse = await tripTicketAPI.resubmit(editTicketId, payload);
+    if (submitResponse.data.success) {
+      // Show appropriate success message with budget warning if applicable
+      if (budgetWarningData) {
+        // Store warning data for modal
+        setMoAssistanceData(budgetWarningData);
+        setShowMOAssistanceModal(true);
+        
+        toast.success(
+          "⚠️ Trip ticket submitted with INSUFFICIENT BUDGET warning.\n" +
+          "The ticket will still proceed through the approval workflow.\n" +
+          "Mayor's Office will be notified.",
+          { duration: 6000 }
+        );
       } else {
-        // Normal submission - check budget first
-        const checkResponse = await departmentStaffAPI.checkBudgetAndRequestMO(payload);
-        
-        if (!checkResponse.data.can_proceed) {
-          setMoAssistanceData({
-            budget: checkResponse.data.budget,
-            estimated_cost: checkResponse.data.estimated_cost,
-            shortage: checkResponse.data.shortage,
-            request_id: checkResponse.data.request_id,
-            message: checkResponse.data.message,
-          });
-          setShowMOAssistanceModal(true);
-          setIsSubmitting(false);
-          setIsCheckingBudget(false);
-          return;
-        }
-        
-        submitResponse = await tripTicketAPI.submit(payload);
-      }
-
-      console.log("📥 Submit response:", submitResponse.data);
-
-      if (submitResponse.data.success) {
         toast.success(
           isResubmitMode
             ? "✓ Trip ticket resubmitted successfully! It has been sent to your Department Head for approval."
-            : "✓ Trip ticket submitted successfully! It has been sent to your Department Head for approval.",
+            : "✓ Trip ticket submitted successfully! It has been sent to your Department Head for approval."
         );
-        navigate("/department/requests");
-      } else {
-        toast.error(
-          submitResponse.data.message || "Error submitting trip ticket",
-        );
+        
+        // Navigate to requests page after a short delay
+        setTimeout(() => {
+          navigate("/department/requests");
+        }, 1500);
       }
-    } catch (error) {
-      console.error("❌ Error submitting:", error);
-      console.error("Error response:", error.response?.data);
-      console.error("Error status:", error.response?.status);
-      
-      const errorMessage = error.response?.data?.message || 
-                           error.response?.data?.error ||
-                           "Error submitting trip ticket. Please try again.";
-      toast.error(errorMessage);
-    } finally {
-      setIsSubmitting(false);
-      setIsCheckingBudget(false);
+    } else {
+      toast.error(submitResponse.data.message || "Error submitting trip ticket");
     }
-  };
-
+  } catch (error) {
+    console.error("❌ Error submitting:", error);
+    console.error("Error response:", error.response?.data);
+    console.error("Error status:", error.response?.status);
+    
+    const errorMessage = error.response?.data?.message || 
+                         error.response?.data?.error ||
+                         "Error submitting trip ticket. Please try again.";
+    toast.error(errorMessage);
+  } finally {
+    setIsSubmitting(false);
+    setIsCheckingBudget(false);
+  }
+};
   const handleSaveDraft = async () => {
     if (!formData.driver_id) {
       toast.error("Please select a driver before saving draft");
@@ -687,144 +709,166 @@ const CreateTripTicket = () => {
   }, [formData.estimated_fuel_liters, fuelPrice]);
 
   //moassistance
-  const MOAssistanceModal = () => {
-    const handleClose = () => {
-      setShowMOAssistanceModal(false);
-    };
+const MOAssistanceModal = () => {
+  const handleClose = () => {
+    setShowMOAssistanceModal(false);
+    // Navigate to requests page after closing modal
+    setTimeout(() => {
+      navigate("/department/requests");
+    }, 500);
+  };
 
-    const handleViewBudget = () => {
-      setShowMOAssistanceModal(false);
-      navigate("/department/budget-status");
-    };
+  const handleViewBudget = () => {
+    setShowMOAssistanceModal(false);
+    navigate("/department/budget-status");
+  };
 
-    return (
-      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full animate-in fade-in zoom-in duration-200">
-          <div className="p-6">
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-3">
-                <div className="w-12 h-12 bg-yellow-100 dark:bg-yellow-900/30 rounded-full flex items-center justify-center">
-                  <AlertCircle className="h-6 w-6 text-yellow-600 dark:text-yellow-400" />
-                </div>
-                <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
-                  Insufficient Budget
-                </h2>
+  const handleContinue = () => {
+    setShowMOAssistanceModal(false);
+    // Stay on page or navigate to requests
+    navigate("/department/requests");
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full animate-in fade-in zoom-in duration-200">
+        <div className="p-6">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 bg-yellow-100 dark:bg-yellow-900/30 rounded-full flex items-center justify-center">
+                <AlertCircle className="h-6 w-6 text-yellow-600 dark:text-yellow-400" />
               </div>
-              <button
-                onClick={handleClose}
-                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
-              >
-                <X className="h-5 w-5" />
-              </button>
+              <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
+                Insufficient Budget Notice
+              </h2>
+            </div>
+            <button
+              onClick={handleClose}
+              className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+            >
+              <X className="h-5 w-5" />
+            </button>
+          </div>
+
+          <div className="space-y-4">
+            <p className="text-gray-600 dark:text-gray-300">
+              Your department does not have enough budget for this trip. However, your trip ticket has been submitted and will proceed through the normal approval workflow.
+            </p>
+
+            {/* Budget Details */}
+            <div className="bg-gray-50 dark:bg-gray-700/50 p-4 rounded-lg">
+              <div className="space-y-2">
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-500">Remaining Budget:</span>
+                  <span className="font-semibold text-red-600 dark:text-red-400">
+                    ₱{moAssistanceData?.budget?.remaining?.toLocaleString() || 0}
+                  </span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-500">Estimated Cost:</span>
+                  <span className="font-semibold">
+                    ₱{moAssistanceData?.estimated_cost?.toLocaleString() || 0}
+                  </span>
+                </div>
+                <div className="flex justify-between text-sm pt-2 border-t border-gray-200 dark:border-gray-600">
+                  <span className="text-gray-500">Shortage:</span>
+                  <span className="font-semibold text-red-600 dark:text-red-400">
+                    ₱{moAssistanceData?.shortage?.toLocaleString() || 0}
+                  </span>
+                </div>
+              </div>
             </div>
 
-            <div className="space-y-4">
-              <p className="text-gray-600 dark:text-gray-300">
-                Your department does not have enough budget for this trip.
-              </p>
-
-              <div className="bg-gray-50 dark:bg-gray-700/50 p-4 rounded-lg">
-                <div className="space-y-2">
-                  <div className="flex justify-between text-sm">
-                    <span className="text-gray-500">Remaining Budget:</span>
-                    <span className="font-semibold text-red-600 dark:text-red-400">
-                      ₱
-                      {moAssistanceData?.budget?.remaining?.toLocaleString() ||
-                        0}
-                    </span>
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-gray-500">Estimated Cost:</span>
-                    <span className="font-semibold">
-                      ₱{moAssistanceData?.estimated_cost?.toLocaleString() || 0}
-                    </span>
-                  </div>
-                  <div className="flex justify-between text-sm pt-2 border-t border-gray-200 dark:border-gray-600">
-                    <span className="text-gray-500">Shortage:</span>
-                    <span className="font-semibold text-red-600 dark:text-red-400">
-                      ₱{moAssistanceData?.shortage?.toLocaleString() || 0}
-                    </span>
-                  </div>
+            {/* Progress Bar */}
+            {moAssistanceData?.budget?.allocated > 0 && (
+              <div className="space-y-1">
+                <div className="flex justify-between text-xs text-gray-500">
+                  <span>Budget Utilization</span>
+                  <span>
+                    {Math.round(
+                      ((moAssistanceData.budget.allocated -
+                        moAssistanceData.budget.remaining) /
+                        moAssistanceData.budget.allocated) *
+                        100
+                    )}
+                    %
+                  </span>
                 </div>
-              </div>
-
-              {moAssistanceData?.budget?.allocated > 0 && (
-                <div className="space-y-1">
-                  <div className="flex justify-between text-xs text-gray-500">
-                    <span>Budget Utilization</span>
-                    <span>
-                      {Math.round(
+                <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                  <div
+                    className="bg-red-500 h-2 rounded-full transition-all"
+                    style={{
+                      width: `${Math.min(
                         ((moAssistanceData.budget.allocated -
                           moAssistanceData.budget.remaining) /
                           moAssistanceData.budget.allocated) *
                           100,
-                      )}
-                      %
-                    </span>
-                  </div>
-                  <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
-                    <div
-                      className="bg-red-500 h-2 rounded-full transition-all"
-                      style={{
-                        width: `${Math.min(((moAssistanceData.budget.allocated - moAssistanceData.budget.remaining) / moAssistanceData.budget.allocated) * 100, 100)}%`,
-                      }}
-                    />
-                  </div>
-                </div>
-              )}
-
-              <div className="bg-blue-50 dark:bg-blue-900/30 p-4 rounded-lg border border-blue-200 dark:border-blue-800">
-                <div className="flex items-start gap-3">
-                  <div className="w-8 h-8 bg-blue-100 dark:bg-blue-800 rounded-full flex items-center justify-center flex-shrink-0">
-                    <Building2 className="h-4 w-4 text-blue-600 dark:text-blue-400" />
-                  </div>
-                  <div className="text-sm text-blue-800 dark:text-blue-300">
-                    <p className="font-medium mb-1">
-                      Request Sent to Mayor's Office
-                    </p>
-                    <p>
-                      A budget assistance request has been automatically sent to
-                      the Mayor's Office. They will create the trip ticket for
-                      you at no cost to your department budget.
-                    </p>
-                    <p className="text-xs mt-2 text-blue-600 dark:text-blue-400">
-                      Request ID: {moAssistanceData?.request_id}
-                    </p>
-                  </div>
+                        100
+                      )}%`,
+                    }}
+                  />
                 </div>
               </div>
+            )}
 
-              <div className="bg-gray-50 dark:bg-gray-700/50 p-3 rounded-lg">
-                <p className="text-xs text-gray-500 dark:text-gray-400 text-center">
-                  Need assistance? Contact Mayor's Office at
-                  <span className="inline-flex items-center gap-1 ml-1">
-                    <Phone className="h-3 w-3" />
-                    <span>(088) 123-4567</span>
-                  </span>
-                </p>
+            {/* Updated Info Box - Key Change */}
+            <div className="bg-blue-50 dark:bg-blue-900/30 p-4 rounded-lg border border-blue-200 dark:border-blue-800">
+              <div className="flex items-start gap-3">
+                <div className="w-8 h-8 bg-blue-100 dark:bg-blue-800 rounded-full flex items-center justify-center flex-shrink-0">
+                  <Building2 className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                </div>
+                <div className="text-sm text-blue-800 dark:text-blue-300">
+                  <p className="font-medium mb-1">
+                    ⚠️ Insufficient Budget Notice
+                  </p>
+                  <p>
+                    Your trip ticket has been submitted with INSUFFICIENT BUDGET notification.
+                    The Mayor's Office will be notified and will decide which department's budget 
+                    to charge upon fund release.
+                  </p>
+                  <p className="text-xs mt-2 text-blue-600 dark:text-blue-400">
+                    ✓ Your ticket will still proceed through the normal approval workflow
+                  </p>
+                  <p className="text-xs mt-1 text-blue-500 dark:text-blue-400">
+                    Request ID: {moAssistanceData?.request_id}
+                  </p>
+                </div>
               </div>
             </div>
 
-            <div className="flex gap-3 mt-6">
-              <Button
-                onClick={handleClose}
-                className="flex-1 bg-blue-600 hover:bg-blue-700"
-              >
-                OK, I Understand
-              </Button>
-              <Button
-                variant="outline"
-                onClick={handleViewBudget}
-                className="flex-1"
-              >
-                View Budget Details
-              </Button>
+            {/* Contact Info */}
+            <div className="bg-gray-50 dark:bg-gray-700/50 p-3 rounded-lg">
+              <p className="text-xs text-gray-500 dark:text-gray-400 text-center">
+                Need assistance? Contact Mayor's Office at
+                <span className="inline-flex items-center gap-1 ml-1">
+                  <Phone className="h-3 w-3" />
+                  <span>(088) 123-4567</span>
+                </span>
+              </p>
             </div>
+          </div>
+
+          <div className="flex gap-3 mt-6">
+            <Button
+              onClick={handleContinue}
+              className="flex-1 bg-blue-600 hover:bg-blue-700"
+            >
+              <CheckCircle className="h-4 w-4 mr-2" />
+              OK, Continue
+            </Button>
+            <Button
+              variant="outline"
+              onClick={handleViewBudget}
+              className="flex-1"
+            >
+              View Budget Details
+            </Button>
           </div>
         </div>
       </div>
-    );
-  };
+    </div>
+  );
+};
 
   if (isLoading) {
     return (

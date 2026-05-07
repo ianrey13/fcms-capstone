@@ -22,154 +22,168 @@ class HeadOfOfficeController extends Controller
     /**
      * Get dashboard statistics for Head of Office
      */
-public function getDashboard(Request $request)
-{
-    $user = $request->user();
-    
-    if (!$user->isDeptHead() && !$user->isOIC()) {
-        return response()->json(['message' => 'Unauthorized'], 403);
-    }
-    
-    $department = $user->getManagedDepartment();
-    if (!$department) {
-        return response()->json(['message' => 'No department managed'], 404);
-    }
-    
-    $stats = [
-        'pending_approval' => TripTicket::where('department_id', $department->department_id)
+    public function getDashboard(Request $request)
+    {
+        $user = $request->user();
+        
+        if (!$user->isDeptHead() && !$user->isOIC()) {
+            return response()->json(['message' => 'Unauthorized'], 403);
+        }
+        
+        $department = $user->getManagedDepartment();
+        if (!$department) {
+            return response()->json(['message' => 'No department managed'], 404);
+        }
+        
+        $stats = [
+            'pending_approval' => TripTicket::where('department_id', $department->department_id)
+                ->where('status', TripTicket::STATUS_PENDING_HEAD_APPROVAL)
+                ->count(),
+            'approved' => TripTicket::where('department_id', $department->department_id)
+                ->where('status', TripTicket::STATUS_PENDING_GSO_REVIEW)
+                ->count(),
+            'in_transit' => TripTicket::where('department_id', $department->department_id)
+                ->where('status', TripTicket::STATUS_IN_TRANSIT)
+                ->count(),
+            'completed' => TripTicket::where('department_id', $department->department_id)
+                ->where('status', TripTicket::STATUS_CLOSED)
+                ->count(),
+            'rejected' => TripTicket::where('department_id', $department->department_id)
+                ->where('status', TripTicket::STATUS_RETURNED_FOR_REVISION)
+                ->count(),
+            // ✅ NEW: Count tickets with insufficient budget warning
+            'has_insufficient_budget' => TripTicket::where('department_id', $department->department_id)
+                ->where('status', TripTicket::STATUS_PENDING_HEAD_APPROVAL)
+                ->where('has_insufficient_budget', true)
+                ->count(),
+        ];
+        
+        // Get recent pending tickets with driver info and budget warning
+        $recentTickets = TripTicket::with(['vehicle', 'driver.user', 'submittedBy'])
+            ->where('department_id', $department->department_id)
             ->where('status', TripTicket::STATUS_PENDING_HEAD_APPROVAL)
-            ->count(),
-        'approved' => TripTicket::where('department_id', $department->department_id)
-            ->where('status', TripTicket::STATUS_PENDING_GSO_REVIEW)
-            ->count(),
-        'in_transit' => TripTicket::where('department_id', $department->department_id)
-            ->where('status', TripTicket::STATUS_IN_TRANSIT)
-            ->count(),
-        'completed' => TripTicket::where('department_id', $department->department_id)
-            ->where('status', TripTicket::STATUS_CLOSED)
-            ->count(),
-        'rejected' => TripTicket::where('department_id', $department->department_id)
-            ->where('status', TripTicket::STATUS_RETURNED_FOR_REVISION)
-            ->count(),
-    ];
-    
-    // ✅ Get recent pending tickets with driver info for dashboard
-    $recentTickets = TripTicket::with(['vehicle', 'driver.user', 'submittedBy'])
-        ->where('department_id', $department->department_id)
-        ->where('status', TripTicket::STATUS_PENDING_HEAD_APPROVAL)
-        ->orderBy('submitted_at', 'desc')
-        ->limit(5)
-        ->get()
-        ->map(function($ticket) {
-            $driverName = null;
-            if ($ticket->driver && $ticket->driver->user) {
-                $user = $ticket->driver->user;
-                $driverName = trim(($user->first_name ?? '') . ' ' . ($user->last_name ?? ''));
-            }
-            
-            return [
-                'id' => $ticket->trip_ticket_id,
-                'ticket_number' => $ticket->trip_ticket_number,
-                'destination' => $ticket->destination,
-                'driver_name' => $driverName,
-            ];
-        });
-    
-    return response()->json([
-        'success' => true,
-        'department' => [
-            'id' => $department->department_id,
-            'name' => $department->department_name,
-            'code' => $department->department_code,
-        ],
-        'stats' => $stats,
-        'recent_tickets' => $recentTickets,
-        'is_oic' => $user->isOIC(),
-        'head_status' => $this->getHeadStatus($department->department_id),
-    ]);
-}    
+            ->orderBy('submitted_at', 'desc')
+            ->limit(5)
+            ->get()
+            ->map(function($ticket) {
+                $driverName = null;
+                if ($ticket->driver && $ticket->driver->user) {
+                    $user = $ticket->driver->user;
+                    $driverName = trim(($user->first_name ?? '') . ' ' . ($user->last_name ?? ''));
+                }
+                
+                return [
+                    'id' => $ticket->trip_ticket_id,
+                    'ticket_number' => $ticket->trip_ticket_number,
+                    'destination' => $ticket->destination,
+                    'driver_name' => $driverName,
+                    // ✅ NEW: Budget warning fields
+                    'has_insufficient_budget' => $ticket->has_insufficient_budget,
+                    'budget_shortage' => $ticket->budget_shortage,
+                ];
+            });
+        
+        return response()->json([
+            'success' => true,
+            'department' => [
+                'id' => $department->department_id,
+                'name' => $department->department_name,
+                'code' => $department->department_code,
+            ],
+            'stats' => $stats,
+            'recent_tickets' => $recentTickets,
+            'is_oic' => $user->isOIC(),
+            'head_status' => $this->getHeadStatus($department->department_id),
+        ]);
+    }    
     /**
-     * Get pending trip tickets for Head approval
+     * Get pending trip tickets for Head approval - WITH BUDGET WARNING
      */
-  public function getPendingTickets(Request $request)
-{
-    $user = $request->user();
-    
-    // Check if user is Department Head or OIC
-    if (!$user->isDeptHead() && !$user->isOIC()) {
-        return response()->json(['message' => 'Unauthorized'], 403);
+    public function getPendingTickets(Request $request)
+    {
+        $user = $request->user();
+        
+        // Check if user is Department Head or OIC
+        if (!$user->isDeptHead() && !$user->isOIC()) {
+            return response()->json(['message' => 'Unauthorized'], 403);
+        }
+        
+        // Get department where user is Head or OIC
+        $department = $user->getManagedDepartment();
+        if (!$department) {
+            return response()->json(['message' => 'No department managed'], 404);
+        }
+        
+        $pendingTickets = TripTicket::with(['vehicle', 'submittedBy', 'driver.user'])
+            ->where('department_id', $department->department_id)
+            ->where('status', TripTicket::STATUS_PENDING_HEAD_APPROVAL)
+            ->orderBy('submitted_at', 'asc')
+            ->get()
+            ->map(function($ticket) {
+                // Build driver full name
+                $driverName = null;
+                if ($ticket->driver && $ticket->driver->user) {
+                    $user = $ticket->driver->user;
+                    $driverName = trim(
+                        ($user->first_name ?? '') . ' ' . 
+                        ($user->middle_name ? $user->middle_name . ' ' : '') . 
+                        ($user->last_name ?? '')
+                    );
+                    if (empty($driverName)) {
+                        $driverName = $user->email ?? 'Unknown';
+                    }
+                }
+                
+                // Build requester full name
+                $requesterName = null;
+                if ($ticket->submittedBy) {
+                    $requester = $ticket->submittedBy;
+                    $requesterName = trim(
+                        ($requester->first_name ?? '') . ' ' . 
+                        ($requester->middle_name ? $requester->middle_name . ' ' : '') . 
+                        ($requester->last_name ?? '')
+                    );
+                    if (empty($requesterName)) {
+                        $requesterName = $requester->email ?? 'Unknown';
+                    }
+                }
+                
+                return [
+                    'id' => $ticket->trip_ticket_id,
+                    'ticket_number' => $ticket->trip_ticket_number,
+                    'trip_date' => $ticket->trip_date,
+                    'destination' => $ticket->destination,
+                    'purpose' => $ticket->purpose,
+                    'charge_to' => $ticket->charge_to,
+                    'passenger_name' => $ticket->passenger_name,
+                    'submitted_at' => $ticket->submitted_at,
+                    // ✅ NEW: Budget warning fields
+                    'has_insufficient_budget' => $ticket->has_insufficient_budget ?? false,
+                    'budget_shortage' => $ticket->budget_shortage ?? 0,
+                    'original_department_id' => $ticket->original_department_id ?? $ticket->department_id,
+                    'vehicle' => $ticket->vehicle ? [
+                        'plate_number' => $ticket->vehicle->plate_number,
+                        'vehicle_model' => $ticket->vehicle->vehicle_model,
+                    ] : null,
+                    'driver' => $driverName ? ['full_name' => $driverName] : null,
+                    'requester' => $requesterName ? ['full_name' => $requesterName] : null,
+                ];
+            });
+        
+        return response()->json([
+            'success' => true,
+            'department' => [
+                'id' => $department->department_id,
+                'name' => $department->department_name,
+                'code' => $department->department_code,
+            ],
+            'pending_count' => $pendingTickets->count(),
+            'tickets' => $pendingTickets
+        ]);
     }
     
-    // Get department where user is Head or OIC
-    $department = $user->getManagedDepartment();
-    if (!$department) {
-        return response()->json(['message' => 'No department managed'], 404);
-    }
-    
-    // ✅ ADD 'driver.user' to the with() clause
-    $pendingTickets = TripTicket::with(['vehicle', 'submittedBy', 'driver.user'])
-        ->where('department_id', $department->department_id)
-        ->where('status', TripTicket::STATUS_PENDING_HEAD_APPROVAL)
-        ->orderBy('submitted_at', 'asc')
-        ->get()
-        ->map(function($ticket) {
-            // ✅ Build driver full name from first_name, middle_name, last_name
-            $driverName = null;
-            if ($ticket->driver && $ticket->driver->user) {
-                $user = $ticket->driver->user;
-                $driverName = trim(
-                    ($user->first_name ?? '') . ' ' . 
-                    ($user->middle_name ? $user->middle_name . ' ' : '') . 
-                    ($user->last_name ?? '')
-                );
-                if (empty($driverName)) {
-                    $driverName = $user->email ?? 'Unknown';
-                }
-            }
-            
-            // ✅ Build requester full name
-            $requesterName = null;
-            if ($ticket->submittedBy) {
-                $requester = $ticket->submittedBy;
-                $requesterName = trim(
-                    ($requester->first_name ?? '') . ' ' . 
-                    ($requester->middle_name ? $requester->middle_name . ' ' : '') . 
-                    ($requester->last_name ?? '')
-                );
-                if (empty($requesterName)) {
-                    $requesterName = $requester->email ?? 'Unknown';
-                }
-            }
-            
-            return [
-                'id' => $ticket->trip_ticket_id,
-                'ticket_number' => $ticket->trip_ticket_number,
-                'trip_date' => $ticket->trip_date,
-                'destination' => $ticket->destination,
-                'purpose' => $ticket->purpose,
-                'charge_to' => $ticket->charge_to,
-                'passenger_name' => $ticket->passenger_name,
-                'submitted_at' => $ticket->submitted_at,
-                'vehicle' => $ticket->vehicle ? [
-                    'plate_number' => $ticket->vehicle->plate_number,
-                    'vehicle_model' => $ticket->vehicle->vehicle_model,
-                ] : null,
-                'driver' => $driverName ? ['full_name' => $driverName] : null,  // ✅ ADD DRIVER
-                'requester' => $requesterName ? ['full_name' => $requesterName] : null,
-            ];
-        });
-    
-    return response()->json([
-        'success' => true,
-        'department' => [
-            'id' => $department->department_id,
-            'name' => $department->department_name,
-            'code' => $department->department_code,
-        ],
-        'pending_count' => $pendingTickets->count(),
-        'tickets' => $pendingTickets
-    ]);
-}
+    // ... (keep all your other methods - approveTicket, rejectTicket, toggleHeadStatus, etc.)
+    // They remain unchanged as they are correct
     
     /**
      * Approve a trip ticket
@@ -186,7 +200,6 @@ public function getDashboard(Request $request)
         
         $user = $request->user();
         
-        // Check permission
         if (!$user->canApproveDepartmentTickets()) {
             return response()->json(['message' => 'Unauthorized'], 403);
         }
@@ -199,7 +212,6 @@ public function getDashboard(Request $request)
             return response()->json(['message' => 'Trip ticket not found or already processed'], 404);
         }
         
-        // Verify ticket belongs to user's department
         $department = $user->getManagedDepartment();
         if (!$department || $tripTicket->department_id !== $department->department_id) {
             return response()->json(['message' => 'Unauthorized - not your department'], 403);
@@ -208,11 +220,9 @@ public function getDashboard(Request $request)
         DB::beginTransaction();
         
         try {
-            // Get current review cycle
             $lastCycle = HeadApproval::where('trip_ticket_id', $id)->max('review_cycle') ?? 0;
             $reviewCycle = $lastCycle + 1;
             
-            // Create head approval record
             $headApproval = HeadApproval::create([
                 'trip_ticket_id' => $id,
                 'review_cycle' => $reviewCycle,
@@ -223,13 +233,11 @@ public function getDashboard(Request $request)
                 'reviewed_at' => now(),
             ]);
             
-            // Update trip ticket status
             $tripTicket->status = TripTicket::STATUS_PENDING_GSO_REVIEW;
             $tripTicket->save();
             
             DB::commit();
             
-            // Send notification to GSO
             $this->sendGsoNotification($tripTicket);
             
             return response()->json([
@@ -268,7 +276,6 @@ public function getDashboard(Request $request)
         
         $user = $request->user();
         
-        // Check permission
         if (!$user->canApproveDepartmentTickets()) {
             return response()->json(['message' => 'Unauthorized'], 403);
         }
@@ -281,7 +288,6 @@ public function getDashboard(Request $request)
             return response()->json(['message' => 'Trip ticket not found or already processed'], 404);
         }
         
-        // Verify ticket belongs to user's department
         $department = $user->getManagedDepartment();
         if (!$department || $tripTicket->department_id !== $department->department_id) {
             return response()->json(['message' => 'Unauthorized - not your department'], 403);
@@ -290,11 +296,9 @@ public function getDashboard(Request $request)
         DB::beginTransaction();
         
         try {
-            // Get current review cycle
             $lastCycle = HeadApproval::where('trip_ticket_id', $id)->max('review_cycle') ?? 0;
             $reviewCycle = $lastCycle + 1;
             
-            // Create head approval record
             $headApproval = HeadApproval::create([
                 'trip_ticket_id' => $id,
                 'review_cycle' => $reviewCycle,
@@ -305,11 +309,9 @@ public function getDashboard(Request $request)
                 'reviewed_at' => now(),
             ]);
             
-            // Update trip ticket status
             $tripTicket->status = TripTicket::STATUS_RETURNED_FOR_REVISION;
             $tripTicket->save();
             
-            // Create return record
             DB::table('trip_ticket_return')->insert([
                 'trip_ticket_id' => $id,
                 'return_type' => 'rejected_by_head',
@@ -320,7 +322,6 @@ public function getDashboard(Request $request)
             
             DB::commit();
             
-            // Send notification to department office
             $this->sendRejectionNotification($tripTicket, $request->note);
             
             return response()->json([
@@ -344,11 +345,14 @@ public function getDashboard(Request $request)
         }
     }
     
+    // ... (keep all your other existing methods: toggleHeadStatus, getOicStatus, getActiveTrips, getFuelConsumption, getAvailableVehicles, getActiveDrivers)
+    
     /**
      * Toggle Head status (Active/Inactive) - for OIC activation
      */
     public function toggleHeadStatus(Request $request)
     {
+        // Keep your existing implementation
         $validator = Validator::make($request->all(), [
             'status' => 'required|in:active,inactive',
             'reason' => 'required_if:status,inactive|string|nullable'
@@ -374,11 +378,9 @@ public function getDashboard(Request $request)
         
         DB::beginTransaction();
         
-        // Update user's head_active_status
         $user->head_active_status = $request->status;
         $user->save();
         
-        // Log the status change
         DB::table('oic_delegation_log')->insert([
             'department_id' => $designation->department_id,
             'head_of_office_id' => $user->user_id,
@@ -389,7 +391,6 @@ public function getDashboard(Request $request)
             'created_at' => now(),
         ]);
         
-        // If head becomes inactive and OIC is different, notify OIC
         if ($request->status === 'inactive' && $designation->head_of_office_id != $designation->oic_user_id) {
             $oicUser = User::find($designation->oic_user_id);
             if ($oicUser) {
@@ -423,6 +424,7 @@ public function getDashboard(Request $request)
      */
     public function getOicStatus(Request $request)
     {
+        // Keep your existing implementation
         $user = $request->user();
         
         if (!$user->isDeptHead() && !$user->isOIC()) {
@@ -473,6 +475,7 @@ public function getDashboard(Request $request)
      */
     public function getActiveTrips(Request $request)
     {
+        // Keep your existing implementation
         try {
             $user = $request->user();
             
@@ -517,6 +520,7 @@ public function getDashboard(Request $request)
      */
     public function getFuelConsumption(Request $request)
     {
+        // Keep your existing implementation
         try {
             $user = $request->user();
             
@@ -535,7 +539,6 @@ public function getDashboard(Request $request)
                 ]);
             }
             
-            // Get fuel logs from completed trips
             $fuelData = DB::table('fuel_log as fl')
                 ->join('gas_slip as gs', 'fl.gas_slip_id', '=', 'gs.gas_slip_id')
                 ->join('trip_ticket as tt', 'gs.trip_ticket_id', '=', 'tt.trip_ticket_id')
@@ -548,7 +551,6 @@ public function getDashboard(Request $request)
                 )
                 ->first();
             
-            // Get current budget period
             $currentPeriod = DB::table('dept_budget_period')
                 ->where('department_id', $department->department_id)
                 ->where('status', 'active')
@@ -640,31 +642,10 @@ public function getDashboard(Request $request)
     }
 
     /**
- * Get available vehicles for Head's department
- */
-public function getAvailableVehicles(Request $request)
-{
-    $user = $request->user();
-    $department = $user->getManagedDepartment();
-    
-    if (!$department) {
-        return response()->json(['data' => []]);
-    }
-    
-    $vehicles = Vehicle::where('department_id', $department->department_id)
-        ->where('status', 'active')
-        ->where('maintenance_flag', false)
-        ->get();
-    
-    return response()->json(['data' => $vehicles]);
-}
-
-/**
- * Get active drivers for Head's department
- */
-public function getActiveDrivers(Request $request)
-{
-    try {
+     * Get available vehicles for Head's department
+     */
+    public function getAvailableVehicles(Request $request)
+    {
         $user = $request->user();
         $department = $user->getManagedDepartment();
         
@@ -672,44 +653,63 @@ public function getActiveDrivers(Request $request)
             return response()->json(['data' => []]);
         }
         
-        $departmentId = $request->input('department_id', $department->department_id);
-        
-        // ✅ FIX: Filter by user's department_id, not drivers.department_id
-        $drivers = Driver::with('user')
-            ->whereHas('user', function($query) use ($departmentId) {
-                $query->where('department_id', $departmentId);
-            })
+        $vehicles = Vehicle::where('department_id', $department->department_id)
             ->where('status', 'active')
-            ->get()
-            ->map(function($driver) {
-                // Safely build full name
-                $fullName = 'Unknown Driver';
-                if ($driver->user) {
-                    $parts = [];
-                    if ($driver->user->first_name) $parts[] = $driver->user->first_name;
-                    if ($driver->user->middle_name) $parts[] = $driver->user->middle_name;
-                    if ($driver->user->last_name) $parts[] = $driver->user->last_name;
-                    $fullName = !empty($parts) ? implode(' ', $parts) : $driver->user->email;
-                }
-                
-                return [
-                    'driver_id' => $driver->driver_id,
-                    'full_name' => $fullName,
-                    'status' => $driver->status,
-                    'user' => $driver->user ? [
-                        'user_id' => $driver->user->user_id,
-                        'email' => $driver->user->email,
-                        'first_name' => $driver->user->first_name,
-                        'last_name' => $driver->user->last_name,
-                    ] : null,
-                ];
-            });
+            ->where('maintenance_flag', false)
+            ->get();
         
-        return response()->json(['data' => $drivers]);
-        
-    } catch (\Exception $e) {
-        Log::error('GetActiveDrivers error: ' . $e->getMessage());
-        return response()->json(['data' => []]);
+        return response()->json(['data' => $vehicles]);
     }
-}
+
+    /**
+     * Get active drivers for Head's department
+     */
+    public function getActiveDrivers(Request $request)
+    {
+        try {
+            $user = $request->user();
+            $department = $user->getManagedDepartment();
+            
+            if (!$department) {
+                return response()->json(['data' => []]);
+            }
+            
+            $departmentId = $request->input('department_id', $department->department_id);
+            
+            $drivers = Driver::with('user')
+                ->whereHas('user', function($query) use ($departmentId) {
+                    $query->where('department_id', $departmentId);
+                })
+                ->where('status', 'active')
+                ->get()
+                ->map(function($driver) {
+                    $fullName = 'Unknown Driver';
+                    if ($driver->user) {
+                        $parts = [];
+                        if ($driver->user->first_name) $parts[] = $driver->user->first_name;
+                        if ($driver->user->middle_name) $parts[] = $driver->user->middle_name;
+                        if ($driver->user->last_name) $parts[] = $driver->user->last_name;
+                        $fullName = !empty($parts) ? implode(' ', $parts) : $driver->user->email;
+                    }
+                    
+                    return [
+                        'driver_id' => $driver->driver_id,
+                        'full_name' => $fullName,
+                        'status' => $driver->status,
+                        'user' => $driver->user ? [
+                            'user_id' => $driver->user->user_id,
+                            'email' => $driver->user->email,
+                            'first_name' => $driver->user->first_name,
+                            'last_name' => $driver->user->last_name,
+                        ] : null,
+                    ];
+                });
+            
+            return response()->json(['data' => $drivers]);
+            
+        } catch (\Exception $e) {
+            Log::error('GetActiveDrivers error: ' . $e->getMessage());
+            return response()->json(['data' => []]);
+        }
+    }
 }

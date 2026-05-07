@@ -58,7 +58,7 @@ class MayorsOfficeController extends Controller
     }
 
     /**
-     * Get pending tickets for fund release (with_mayors_office status)
+     * Get pending tickets for fund release (with_mayors_office status) - WITH BUDGET WARNING
      */
     public function getPendingTickets(Request $request)
     {
@@ -84,6 +84,11 @@ class MayorsOfficeController extends Controller
                         'passenger_name' => $ticket->passenger_name,
                         'status' => $ticket->status,
                         'submitted_at' => $ticket->submitted_at,
+                        'has_insufficient_budget' => $ticket->has_insufficient_budget ?? false,
+                        'budget_shortage' => $ticket->budget_shortage ?? 0,
+                        'original_department_id' => $ticket->original_department_id,
+                    'department_id' => $ticket->department_id, 
+
                         'vehicle' => $ticket->vehicle ? [
                             'plate_number' => $ticket->vehicle->plate_number,
                             'vehicle_model' => $ticket->vehicle->vehicle_model,
@@ -141,6 +146,8 @@ class MayorsOfficeController extends Controller
                         'amount_released' => $ticket->gasSlip ? $ticket->gasSlip->amount_released : 0,
                         'gas_slip_number' => $ticket->gasSlip ? $ticket->gasSlip->gas_slip_number : null,
                         'is_mo_funded' => $ticket->created_by_mo_user_id !== null,
+                        'charged_to_department' => $ticket->charge_to_department_id ?
+                            Department::find($ticket->charge_to_department_id)?->department_name : null,
                     ];
                 });
 
@@ -158,13 +165,16 @@ class MayorsOfficeController extends Controller
     }
 
     /**
-     * Approve ticket and release funds - WITH BUDGET VALIDATION
+     * Approve ticket and release funds - WITH DEPARTMENT SELECTION FOR BUDGET CHARGE
      */
     public function approveTicket(Request $request, $id)
     {
+
         try {
+
             $validator = Validator::make($request->all(), [
                 'amount_released' => 'required|numeric|min:0.01',
+                'charge_to_department_id' => 'nullable|exists:departments,department_id',
             ]);
 
             if ($validator->fails()) {
@@ -186,48 +196,63 @@ class MayorsOfficeController extends Controller
             }
 
             $amountToRelease = $request->amount_released;
-            $departmentId = $ticket->department_id;
+            $chargeDepartmentId = $request->charge_to_department_id ?? $ticket->department_id;
+            $chargeDepartment = Department::find($chargeDepartmentId);
 
-            // ✅ CHECK BUDGET IF NOT MO-FUNDED
+            $hasInsufficientBudget = $ticket->has_insufficient_budget ?? false;
+            $budgetShortage = $ticket->budget_shortage ?? 0;
             $isMoFundedTicket = $ticket->created_by_mo_user_id !== null;
 
             if (!$isMoFundedTicket) {
-                // Get current active budget period
-                $currentPeriod = DeptBudgetPeriod::where('department_id', $departmentId)
+                $currentPeriod = DeptBudgetPeriod::where('department_id', $chargeDepartmentId)
                     ->where('status', 'active')
                     ->first();
 
                 if (!$currentPeriod) {
+                    $departments = Department::all();
+
                     return response()->json([
                         'success' => false,
-                        'message' => 'No active budget period found for this department'
-                    ], 400);
+                        'message' => "No active budget period found for {$chargeDepartment->department_name}",
+                        'budget_info' => [
+                            'has_period' => false,
+                            'department_id' => $chargeDepartmentId,
+                            'department_name' => $chargeDepartment->department_name,
+                        ],
+                        'available_departments' => $departments,
+                        'has_insufficient_budget' => $hasInsufficientBudget,
+                        'budget_shortage' => $budgetShortage,
+                    ], 422);
                 }
 
-                // Calculate remaining budget
                 $totalSpent = FundIssuance::where('period_id', $currentPeriod->period_id)
                     ->sum('amount_released');
-
                 $remainingBudget = $currentPeriod->allocated_amount - $totalSpent;
 
-                // ✅ CHECK IF SUFFICIENT BUDGET
                 if ($remainingBudget < $amountToRelease) {
                     $shortage = $amountToRelease - $remainingBudget;
+                    $departments = Department::all();
 
                     return response()->json([
                         'success' => false,
-                        'message' => 'Insufficient department budget',
+                        'message' => "Insufficient budget in {$chargeDepartment->department_name}",
                         'budget_info' => [
                             'allocated' => $currentPeriod->allocated_amount,
                             'spent' => $totalSpent,
                             'remaining' => $remainingBudget,
                             'requested' => $amountToRelease,
                             'shortage' => $shortage,
+                            'department_id' => $chargeDepartmentId,
+                            'department_name' => $chargeDepartment->department_name,
                             'is_negative' => $remainingBudget < 0,
                         ],
+                        'available_departments' => $departments,
+                        'has_insufficient_budget' => $hasInsufficientBudget,
+                        'budget_shortage' => $budgetShortage,
                         'suggestions' => [
-                            'reduce_amount' => "Please reduce the amount to ₱" . number_format($remainingBudget, 2),
-                            'use_mo_funded' => 'Or create an MO-funded trip ticket instead',
+                            'select_other_department' => 'Select a different department to charge',
+                            'reduce_amount' => "Reduce the amount to ₱" . number_format($remainingBudget, 2),
+                            'use_mo_funded' => 'Or mark as MO-funded trip',
                         ]
                     ], 422);
                 }
@@ -235,11 +260,9 @@ class MayorsOfficeController extends Controller
 
             DB::beginTransaction();
 
-            // Get current review cycle
             $lastCycle = MoReview::where('trip_ticket_id', $id)->max('review_cycle') ?? 0;
             $reviewCycle = $lastCycle + 1;
 
-            // Create MO review record
             MoReview::create([
                 'trip_ticket_id' => $id,
                 'review_cycle' => $reviewCycle,
@@ -249,7 +272,6 @@ class MayorsOfficeController extends Controller
                 'reviewed_at' => now(),
             ]);
 
-            // Create gas slip
             $gasSlip = GasSlip::create([
                 'trip_ticket_id' => $id,
                 'created_by' => $user->user_id,
@@ -258,20 +280,17 @@ class MayorsOfficeController extends Controller
                 'created_at' => now(),
             ]);
 
-            // Only deduct from department budget if NOT MO-funded
             if (!$isMoFundedTicket) {
-                $budgetPeriod = DeptBudgetPeriod::where('department_id', $departmentId)
+                $budgetPeriod = DeptBudgetPeriod::where('department_id', $chargeDepartmentId)
                     ->where('status', 'active')
                     ->first();
 
                 if ($budgetPeriod) {
-                    // Get budget before release
                     $totalSpent = FundIssuance::where('period_id', $budgetPeriod->period_id)
                         ->sum('amount_released');
                     $budgetBefore = $budgetPeriod->allocated_amount - $totalSpent;
                     $budgetAfter = $budgetBefore - $amountToRelease;
 
-                    // Create fund issuance
                     FundIssuance::create([
                         'gas_slip_id' => $gasSlip->gas_slip_id,
                         'period_id' => $budgetPeriod->period_id,
@@ -282,21 +301,24 @@ class MayorsOfficeController extends Controller
                         'issued_at' => now(),
                     ]);
                 }
+
+                if ($chargeDepartmentId != $ticket->department_id) {
+                    $ticket->charge_to_department_id = $chargeDepartmentId;
+                }
             }
 
-            // Update ticket status
+            $ticket->has_insufficient_budget = false;
             $ticket->status = TripTicket::STATUS_FUNDS_ISSUED;
             $ticket->save();
 
             DB::commit();
 
-            // Send notification to driver
-            $fundingSource = $isMoFundedTicket ? 'MO Funded' : 'Department Budget';
+            $fundingSource = $isMoFundedTicket ? 'MO Funded' : "Charged to: {$chargeDepartment->department_name}";
             $this->sendFundIssuedNotification($ticket, $amountToRelease, $fundingSource);
 
             $responseMessage = $isMoFundedTicket
                 ? "Funds released successfully (MO Funded - No department budget deduction)"
-                : "Funds released successfully";
+                : "Funds released successfully from {$chargeDepartment->department_name} budget";
 
             return response()->json([
                 'success' => true,
@@ -308,7 +330,10 @@ class MayorsOfficeController extends Controller
                     'gas_slip_id' => $gasSlip->gas_slip_id,
                     'status' => $ticket->status,
                     'funding_source' => $fundingSource,
+                    'charged_to_department' => $chargeDepartment->department_name,
+                    'charged_to_department_id' => $chargeDepartmentId,
                     'is_mo_funded' => $isMoFundedTicket,
+                    'original_department' => $ticket->department?->department_name,
                 ]
             ]);
         } catch (\Exception $e) {
@@ -351,11 +376,9 @@ class MayorsOfficeController extends Controller
 
             DB::beginTransaction();
 
-            // Get current review cycle
             $lastCycle = MoReview::where('trip_ticket_id', $id)->max('review_cycle') ?? 0;
             $reviewCycle = $lastCycle + 1;
 
-            // Create MO review record
             MoReview::create([
                 'trip_ticket_id' => $id,
                 'review_cycle' => $reviewCycle,
@@ -365,13 +388,11 @@ class MayorsOfficeController extends Controller
                 'reviewed_at' => now(),
             ]);
 
-            // Update ticket status
             $ticket->status = TripTicket::STATUS_RETURNED_FOR_REVISION;
             $ticket->save();
 
             DB::commit();
 
-            // Send notification to department
             $this->sendRejectionNotification($ticket, $request->review_note);
 
             return response()->json([
@@ -416,13 +437,14 @@ class MayorsOfficeController extends Controller
                 'vehicleSnapshot'
             ])->findOrFail($id);
 
-            // Add budget info
             $budgetInfo = $this->getDepartmentBudgetInfo($ticket->department_id);
 
-            // Add MO funded flag
             $ticketData = $ticket->toArray();
             $ticketData['is_mo_funded'] = $ticket->created_by_mo_user_id !== null;
             $ticketData['budget_info'] = $budgetInfo;
+            $ticketData['has_insufficient_budget'] = $ticket->has_insufficient_budget ?? false;
+            $ticketData['budget_shortage'] = $ticket->budget_shortage ?? 0;
+            $ticketData['all_departments'] = Department::select('department_id', 'department_name', 'department_code')->get();
 
             return response()->json([
                 'success' => true,
@@ -494,7 +516,6 @@ class MayorsOfficeController extends Controller
                 ], 403);
             }
 
-            // ✅ Get from Cache instead of Session
             $requestIds = Cache::get('mo_requests_list', []);
             $requests = [];
 
@@ -519,7 +540,6 @@ class MayorsOfficeController extends Controller
                 }
             }
 
-            // Sort by created_at descending
             usort($requests, function ($a, $b) {
                 return strtotime($b['created_at']) - strtotime($a['created_at']);
             });
@@ -537,6 +557,7 @@ class MayorsOfficeController extends Controller
             ], 500);
         }
     }
+
     /**
      * Get single budget assistance request details
      */
@@ -552,7 +573,7 @@ class MayorsOfficeController extends Controller
                 ], 403);
             }
 
-            $requestData = session()->get($requestId);
+            $requestData = Cache::get($requestId);
 
             if (!$requestData) {
                 return response()->json([
@@ -564,7 +585,6 @@ class MayorsOfficeController extends Controller
             $department = Department::find($requestData['department_id']);
             $requester = User::find($requestData['requested_by']);
 
-            // Get available vehicles and drivers for the department
             $vehicles = Vehicle::where('department_id', $requestData['department_id'])
                 ->where('status', 'active')
                 ->get();
@@ -627,7 +647,6 @@ class MayorsOfficeController extends Controller
                 return response()->json(['errors' => $validator->errors()], 422);
             }
 
-            // ✅ Get from Cache
             $requestData = Cache::get($request->request_id);
 
             if (!$requestData) {
@@ -641,7 +660,6 @@ class MayorsOfficeController extends Controller
 
             DB::beginTransaction();
 
-            // Generate ticket number
             $yearMonth = date('Y-m');
             $lastTicket = TripTicket::where('trip_ticket_number', 'like', $yearMonth . '-%')
                 ->orderBy('trip_ticket_id', 'desc')
@@ -656,7 +674,6 @@ class MayorsOfficeController extends Controller
 
             $ticketNumber = $yearMonth . '-' . str_pad($seq, 3, '0', STR_PAD_LEFT);
 
-            // Create trip ticket - MO funded
             $tripTicket = TripTicket::create([
                 'trip_ticket_number' => $ticketNumber,
                 'department_id' => $requestData['department_id'],
@@ -672,9 +689,9 @@ class MayorsOfficeController extends Controller
                 'passenger_name' => $ticketData['passenger_name'] ?? null,
                 'status' => TripTicket::STATUS_FUNDS_ISSUED,
                 'submitted_at' => now(),
+                'has_insufficient_budget' => false,
             ]);
 
-            // Create vehicle snapshot
             $vehicle = Vehicle::find($ticketData['vehicle_id']);
             if ($vehicle) {
                 TripTicketVehicleSnapshot::create([
@@ -686,7 +703,6 @@ class MayorsOfficeController extends Controller
                 ]);
             }
 
-            // Create gas slip
             $estimatedCost = $requestData['estimated_cost'];
             $gasSlip = GasSlip::create([
                 'trip_ticket_id' => $tripTicket->trip_ticket_id,
@@ -696,7 +712,6 @@ class MayorsOfficeController extends Controller
                 'created_at' => now(),
             ]);
 
-            // ✅ Remove from Cache
             Cache::forget($request->request_id);
 
             $keys = Cache::get('mo_requests_list', []);
@@ -705,7 +720,6 @@ class MayorsOfficeController extends Controller
 
             DB::commit();
 
-            // Send notifications
             $this->notifyDriverOfMOTrip($tripTicket, $estimatedCost, $request->charge_to);
             $this->notifyDepartmentOfMOTrip($tripTicket, $request->charge_to, $request->mo_note);
 
@@ -717,7 +731,6 @@ class MayorsOfficeController extends Controller
                     'trip_ticket_number' => $ticketNumber,
                     'gas_slip_id' => $gasSlip->gas_slip_id,
                     'amount_released' => $estimatedCost,
-
                     'charge_to' => $request->charge_to,
                     'status' => $tripTicket->status,
                     'is_mo_funded' => true,
@@ -754,10 +767,6 @@ class MayorsOfficeController extends Controller
             ]);
         }
     }
-
-
-
-
 
     /**
      * Get department budget info helper
@@ -822,30 +831,6 @@ class MayorsOfficeController extends Controller
     }
 
     /**
-     * Notify GSO of new ticket
-     */
-    private function notifyGSOOfNewTicket($tripTicket)
-    {
-        $gsoStaff = User::where('role', 'gso_staff')
-            ->where('status', 'active')
-            ->get();
-
-        $fundingNote = $tripTicket->created_by_mo_user_id ? ' (MO Funded)' : '';
-
-        foreach ($gsoStaff as $staff) {
-            Notification::create([
-                'recipient_user_id' => $staff->user_id,
-                'notification_type' => 'trip_submitted',
-                'entity_type' => 'trip_ticket',
-                'entity_id' => $tripTicket->trip_ticket_id,
-                'message' => "Trip ticket {$tripTicket->trip_ticket_number}{$fundingNote} is ready for GSO review",
-                'channel' => 'in_app',
-                'created_at' => now(),
-            ]);
-        }
-    }
-
-    /**
      * Send fund issued notification to driver
      */
     private function sendFundIssuedNotification($ticket, $amount, $fundingSource = 'Department Budget')
@@ -886,9 +871,8 @@ class MayorsOfficeController extends Controller
     }
 
     /**
-     * Remove MO request from session after processing
+     * Remove MO request from cache after processing
      */
-    
     public function removeMORequest($requestId)
     {
         try {
@@ -901,7 +885,6 @@ class MayorsOfficeController extends Controller
                 ], 403);
             }
 
-            // ✅ Remove from Cache
             Cache::forget($requestId);
 
             $keys = Cache::get('mo_requests_list', []);
@@ -921,5 +904,152 @@ class MayorsOfficeController extends Controller
         }
     }
 
-    
+    /**
+     * Get budget for a specific department
+     */
+    public function getDepartmentBudget(Request $request, $departmentId)
+    {
+        try {
+            $user = $request->user();
+
+            if (!$user->isMayorsOffice() && !$user->isSuperAdmin()) {
+                return response()->json(['message' => 'Unauthorized'], 403);
+            }
+
+            $currentPeriod = DeptBudgetPeriod::where('department_id', $departmentId)
+                ->where('status', 'active')
+                ->first();
+
+            if (!$currentPeriod) {
+                return response()->json([
+                    'success' => true,
+                    'data' => [
+                        'department_id' => $departmentId,
+                        'allocated_amount' => 0,
+                        'spent_amount' => 0,
+                        'remaining_amount' => 0,
+                        'has_period' => false
+                    ]
+                ]);
+            }
+
+            $totalSpent = FundIssuance::where('period_id', $currentPeriod->period_id)
+                ->sum('amount_released');
+
+            $department = Department::find($departmentId);
+
+            return response()->json([
+                'success' => true,
+                'data' => [
+                    'department_id' => $departmentId,
+                    'department_name' => $department ? $department->department_name : null,
+                    'allocated_amount' => (float) $currentPeriod->allocated_amount,
+                    'spent_amount' => (float) $totalSpent,
+                    'remaining_amount' => (float) ($currentPeriod->allocated_amount - $totalSpent),
+                    'week_start' => $currentPeriod->week_start,
+                    'week_end' => $currentPeriod->week_end,
+                    'status' => $currentPeriod->status,
+                    'has_period' => true
+                ]
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Get department budget error: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to fetch department budget: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Get ALL departments with their budget status for Mayor's Office
+     */
+    public function getAllDepartmentsWithBudget(Request $request)
+    {
+        try {
+            $user = $request->user();
+
+            if (!$user->isMayorsOffice() && !$user->isSuperAdmin()) {
+                return response()->json(['message' => 'Unauthorized'], 403);
+            }
+
+            // Get all departments
+            $departments = Department::select('department_id', 'department_name', 'department_code')
+                ->orderBy('department_name')
+                ->get();
+
+            // Get budget information for each department
+            $departmentsWithBudget = $departments->map(function ($department) {
+                $currentPeriod = DeptBudgetPeriod::where('department_id', $department->department_id)
+                    ->where('status', 'active')
+                    ->first();
+
+                if ($currentPeriod) {
+                    $totalSpent = FundIssuance::where('period_id', $currentPeriod->period_id)
+                        ->sum('amount_released');
+                    $remaining = $currentPeriod->allocated_amount - $totalSpent;
+
+                    return [
+                        'department_id' => $department->department_id,
+                        'department_name' => $department->department_name,
+                        'department_code' => $department->department_code,
+                        'allocated_amount' => (float) $currentPeriod->allocated_amount,
+                        'spent_amount' => (float) $totalSpent,
+                        'remaining_amount' => (float) $remaining,
+                        'has_budget' => true,
+                    ];
+                } else {
+                    return [
+                        'department_id' => $department->department_id,
+                        'department_name' => $department->department_name,
+                        'department_code' => $department->department_code,
+                        'allocated_amount' => 0,
+                        'spent_amount' => 0,
+                        'remaining_amount' => 0,
+                        'has_budget' => false,
+                    ];
+                }
+            });
+
+            return response()->json([
+                'success' => true,
+                'data' => $departmentsWithBudget
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Get all departments with budget error: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to fetch departments: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Get all departments for dropdown selector (Mayor's Office only)
+     */
+    public function getAllDepartmentsForSelector(Request $request)
+    {
+        try {
+            $user = $request->user();
+
+            if (!$user->isMayorsOffice() && !$user->isSuperAdmin()) {
+                return response()->json(['message' => 'Unauthorized'], 403);
+            }
+
+            $departments = Department::select('department_id', 'department_name', 'department_code')
+                ->orderBy('department_name', 'asc')
+                ->get();
+
+            return response()->json([
+                'success' => true,
+                'data' => $departments
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Get departments selector error: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to fetch departments: ' . $e->getMessage()
+            ], 500);
+        }
+    }
 }

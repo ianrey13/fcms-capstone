@@ -212,12 +212,11 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('oic/status', [HeadOfOfficeController::class, 'getOicStatus']);
         Route::get('monitoring/active-trips', [HeadOfOfficeController::class, 'getActiveTrips']);
         Route::get('monitoring/fuel-consumption', [HeadOfOfficeController::class, 'getFuelConsumption']);
-          Route::get('vehicles', [VehicleController::class, 'getAvailableVehicles']);
-    Route::get('drivers', [UserController::class, 'getActiveDrivers']);
- Route::get('vehicles', [HeadOfOfficeController::class, 'getAvailableVehicles']);
-    Route::get('drivers', [HeadOfOfficeController::class, 'getActiveDrivers']);
+        Route::get('vehicles', [VehicleController::class, 'getAvailableVehicles']);
+        Route::get('drivers', [UserController::class, 'getActiveDrivers']);
+        Route::get('vehicles', [HeadOfOfficeController::class, 'getAvailableVehicles']);
+        Route::get('drivers', [HeadOfOfficeController::class, 'getActiveDrivers']);
         Route::post('trip-tickets/submit', [TripTicketController::class, 'submit']);
-
     });
 
     // ============ GSO ROUTES ============
@@ -253,6 +252,12 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('budget-assistance/request/{requestId}', [MayorsOfficeController::class, 'getBudgetAssistanceRequest']);
         Route::post('budget-assistance/create-ticket', [MayorsOfficeController::class, 'createMoFundedTicket']);
         Route::delete('budget-assistance/request/{requestId}', [MayorsOfficeController::class, 'removeMORequest']);
+        Route::get('departments/all', [DepartmentController::class, 'getAllDepartmentsForMO']);
+        Route::get('departments/{id}/budget', [MayorsOfficeController::class, 'getDepartmentBudget']);
+        Route::get('departments/{id}/budget', [MayorsOfficeController::class, 'getDepartmentBudget']);
+        Route::get('departments/all-with-budget', [MayorsOfficeController::class, 'getAllDepartmentsWithBudget']);
+            Route::get('departments/selector', [MayorsOfficeController::class, 'getAllDepartmentsForSelector']);
+
     });
 
     // ============ DRIVER ROUTES ============
