@@ -20,6 +20,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { driverAPI } from '../../../services/api';
 import { storage } from '../../../services/storage';
 import GasSlipModal from '../components/GasSlipModal';
+import API_URL from '../../../services/api';
 
 const { width } = Dimensions.get('window');
 
@@ -123,42 +124,61 @@ export default function DriverDashboard() {
     loadUser();
   };
 
-  const handleAcknowledge = async (tripId: number, tripNumber: string) => {
-    Alert.alert('Acknowledge Gas Slip', `Confirm acknowledgment of gas slip for trip #${tripNumber}?`, [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Acknowledge',
-        style: 'default',
-        onPress: async () => {
-          setAcknowledging(tripId);
-          try {
-            await driverAPI.acknowledgeFunds(tripId);
-            await fetchTrips();
-            Alert.alert('Acknowledged', 'Gas slip has been successfully acknowledged.');
-          } catch (error) {
-            console.error('Failed to acknowledge:', error);
-            Alert.alert('Error', 'Failed to acknowledge gas slip. Please try again.');
-          } finally {
-            setAcknowledging(null);
-          }
-        },
-      },
-    ]);
-  };
+  // Replace your handleAcknowledge function with this:
 
-  const handleViewGasSlip = async (tripId: number) => {
-    try {
-      setLoading(true);
-      const response = await driverAPI.getGasSlip(tripId);
-      setSelectedGasSlip(response.data?.data);
-      setShowGasSlipModal(true);
-    } catch (error) {
-      console.error('Failed to fetch gas slip:', error);
-      Alert.alert('Error', 'Failed to load gas slip details. Please try again.');
-    } finally {
-      setLoading(false);
+const handleAcknowledge = async (tripId: number, tripNumber: string) => {
+  // ✅ Use browser confirm for web, Alert for mobile
+  const isWeb = Platform.OS === 'web';
+
+  const userConfirmed = isWeb 
+    ? window.confirm(`Confirm acknowledgment for trip #${tripNumber}?`)
+    : await new Promise((resolve) => {
+        Alert.alert(
+          'Acknowledge Gas Slip',
+          `Confirm acknowledgment for trip #${tripNumber}?`,
+          [
+            { text: 'Cancel', onPress: () => resolve(false) },
+            { text: 'Acknowledge', onPress: () => resolve(true) },
+          ]
+        );
+      });
+
+  if (!userConfirmed) return;
+
+  setAcknowledging(tripId);
+  try {
+    const response = await driverAPI.acknowledgeFunds(tripId);
+    if (response.data.success) {
+      await fetchTrips();
+      router.push(`/auth/trips/active?id=${tripId}`);
     }
-  };
+  } catch (error) {
+    console.error('Error:', error);
+    Alert.alert('Error', 'Failed to acknowledge gas slip');
+  } finally {
+    setAcknowledging(null);
+  }
+};
+ const handleViewGasSlip = async (tripId: number) => {
+  try {
+    setLoading(true);
+    const response = await driverAPI.getGasSlip(tripId);
+    const gasSlipData = response.data?.data;
+    
+    console.log('Setting gasSlip data:', gasSlipData);
+    console.log('Vehicle data:', gasSlipData?.vehicle);
+    
+    // ✅ Set the data directly
+    setSelectedGasSlip(gasSlipData);
+    setShowGasSlipModal(true);
+  } catch (error) {
+    console.error('Failed to fetch gas slip:', error);
+    Alert.alert('Error', 'Failed to load gas slip details');
+  } finally {
+    setLoading(false);
+  }
+};
+
 
   const getStatusConfig = (status: string): StatusConfig => {
     const configs: Record<string, StatusConfig> = {

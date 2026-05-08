@@ -1,4 +1,4 @@
-// src/pages/mayor/MayorReports.jsx - Professional Version with Functional Selector
+// src/pages/mayor/MayorReports.jsx - With Month & Week Filter
 import React, { useState, useEffect, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -8,7 +8,7 @@ import {
   RefreshCw, Loader2, TrendingUp, Fuel, DollarSign, Building2, 
   Calendar, Download, Printer, AlertCircle, BarChart3, PieChart as PieChartIcon,
   ArrowUpRight, ArrowDownRight, Wallet, CheckCircle, TrendingDown,
-  Eye, Info, Zap, Target, Award, Users, Activity, Filter
+  Eye, Info, Zap, Target, Award, Users, Activity, Filter, ChevronLeft, ChevronRight
 } from 'lucide-react';
 import { mayorsOfficeAPI, reportsAPI } from '../../services/api';
 import {
@@ -37,6 +37,13 @@ const MayorReports = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [selectedDepartment, setSelectedDepartment] = useState('all');
+  
+  // Month/Week Filter State
+  const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth());
+  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
+  const [viewType, setViewType] = useState('month'); // 'month' or 'week'
+  const [selectedWeek, setSelectedWeek] = useState(1);
+  
   const [reportData, setReportData] = useState({
     departments: [],
     fuelUsage: [],
@@ -45,6 +52,7 @@ const MayorReports = () => {
     utilizationRates: [],
     weeklyData: [],
     monthlyData: [],
+    quarterlyData: [],
     departmentTrends: [],
     weeklyBudgetComparison: [],
     summary: {
@@ -66,21 +74,80 @@ const MayorReports = () => {
   const [activeTab, setActiveTab] = useState('overview');
   const [isExporting, setIsExporting] = useState(false);
 
+  // Month names
+  const monthNames = [
+    'January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December'
+  ];
+
+  // Get weeks in a month
+  const getWeeksInMonth = (year, month) => {
+    const firstDay = new Date(year, month, 1);
+    const lastDay = new Date(year, month + 1, 0);
+    const weeks = [];
+    
+    let currentWeekStart = new Date(firstDay);
+    // Adjust to Monday as start of week
+    const dayOfWeek = currentWeekStart.getDay();
+    const diffToMonday = (dayOfWeek === 0 ? 6 : dayOfWeek - 1);
+    currentWeekStart.setDate(currentWeekStart.getDate() - diffToMonday);
+    
+    let weekNumber = 1;
+    while (currentWeekStart <= lastDay) {
+      const weekEnd = new Date(currentWeekStart);
+      weekEnd.setDate(weekEnd.getDate() + 6);
+      
+      // Only include weeks that overlap with the month
+      if (weekEnd >= firstDay && currentWeekStart <= lastDay) {
+        weeks.push({
+          weekNumber: weekNumber,
+          start: new Date(currentWeekStart),
+          end: weekEnd,
+          label: `Week ${weekNumber} (${currentWeekStart.toLocaleDateString()} - ${weekEnd.toLocaleDateString()})`
+        });
+        weekNumber++;
+      }
+      currentWeekStart.setDate(currentWeekStart.getDate() + 7);
+    }
+    return weeks;
+  };
+
+  const weeksInMonth = getWeeksInMonth(selectedYear, selectedMonth);
+  const currentMonthName = monthNames[selectedMonth];
+
   useEffect(() => {
     fetchReportData();
-  }, [dateRange]);
+  }, [dateRange, selectedMonth, selectedYear, selectedWeek, viewType]);
 
   const fetchReportData = async () => {
     setLoading(true);
     setError(null);
     
     try {
+      // Build date range based on selected view
+      let startDate, endDate;
+      
+      if (viewType === 'week' && selectedWeek) {
+        const week = weeksInMonth[selectedWeek - 1];
+        if (week) {
+          startDate = week.start.toISOString().split('T')[0];
+          endDate = week.end.toISOString().split('T')[0];
+        } else {
+          startDate = dateRange.start_date;
+          endDate = dateRange.end_date;
+        }
+      } else {
+        // Month view - show whole month
+        startDate = new Date(selectedYear, selectedMonth, 1).toISOString().split('T')[0];
+        endDate = new Date(selectedYear, selectedMonth + 1, 0).toISOString().split('T')[0];
+      }
+      
       const budgetResponse = await mayorsOfficeAPI.getBudgetOverview();
       const budgetData = budgetResponse.data?.data || budgetResponse.data || [];
       
       const tripReportResponse = await reportsAPI.getTripReport({
-        start_date: dateRange.start_date,
-        end_date: dateRange.end_date
+        start_date: startDate,
+        end_date: endDate
       });
       const tripData = tripReportResponse.data?.data || tripReportResponse.data || [];
       
@@ -94,6 +161,7 @@ const MayorReports = () => {
       
       const monthlyData = generateMonthlyData(tripData);
       const weeklyData = generateWeeklyData(tripData);
+      const quarterlyData = generateQuarterlyData(tripData);
       
       const departmentTrends = budgetData.map(dept => {
         const deptTrips = tripData.filter(t => t.department_id === dept.department_id);
@@ -130,6 +198,7 @@ const MayorReports = () => {
         utilizationRates,
         weeklyData,
         monthlyData,
+        quarterlyData,
         departmentTrends,
         weeklyBudgetComparison,
         summary: {
@@ -154,29 +223,31 @@ const MayorReports = () => {
 
   const generateWeeklyData = (tripData) => {
     const weeks = [];
-    const today = new Date();
-    for (let i = 3; i >= 0; i--) {
-      const weekStart = new Date(today);
-      weekStart.setDate(today.getDate() - (i * 7));
-      const weekEnd = new Date(weekStart);
-      weekEnd.setDate(weekStart.getDate() + 6);
-      
-      const weekTrips = tripData.filter(t => {
-        const tripDate = new Date(t.trip_date);
-        return tripDate >= weekStart && tripDate <= weekEnd;
-      });
-      
-      const budgetSpent = weekTrips.reduce((sum, t) => sum + (parseFloat(t.amount_released) || 0), 0);
-      const trips = weekTrips.length;
-      
+    // Group by week of the selected month
+    const weekMap = new Map();
+    
+    tripData.forEach(trip => {
+      const tripDate = new Date(trip.trip_date);
+      if (tripDate.getMonth() === selectedMonth && tripDate.getFullYear() === selectedYear) {
+        const weekNumber = Math.ceil((tripDate.getDate()) / 7);
+        if (!weekMap.has(weekNumber)) {
+          weekMap.set(weekNumber, { budgetSpent: 0, trips: 0 });
+        }
+        const weekData = weekMap.get(weekNumber);
+        weekData.budgetSpent += parseFloat(trip.amount_released) || 0;
+        weekData.trips += 1;
+      }
+    });
+    
+    for (let i = 1; i <= 5; i++) {
+      const weekData = weekMap.get(i) || { budgetSpent: 0, trips: 0 };
       weeks.push({
-        week: `Week ${4 - i}`,
-        weekStart: weekStart.toLocaleDateString(),
-        weekEnd: weekEnd.toLocaleDateString(),
-        budgetSpent: Math.round(budgetSpent),
-        trips: trips
+        week: `Week ${i}`,
+        budgetSpent: Math.round(weekData.budgetSpent),
+        trips: weekData.trips
       });
     }
+    
     return weeks;
   };
 
@@ -206,6 +277,35 @@ const MayorReports = () => {
     return months;
   };
 
+  const generateQuarterlyData = (tripData) => {
+    const quarters = [];
+    const today = new Date();
+    for (let i = 3; i >= 0; i--) {
+      const quarterDate = new Date(today);
+      quarterDate.setMonth(today.getMonth() - (i * 3));
+      const quarterNumber = Math.floor(quarterDate.getMonth() / 3) + 1;
+      const quarterName = `Q${quarterNumber} ${quarterDate.getFullYear()}`;
+      
+      const quarterStart = new Date(quarterDate.getFullYear(), Math.floor(quarterDate.getMonth() / 3) * 3, 1);
+      const quarterEnd = new Date(quarterDate.getFullYear(), Math.floor(quarterDate.getMonth() / 3) * 3 + 3, 0);
+      
+      const quarterTrips = tripData.filter(t => {
+        const tripDate = new Date(t.trip_date);
+        return tripDate >= quarterStart && tripDate <= quarterEnd;
+      });
+      
+      const budgetSpent = quarterTrips.reduce((sum, t) => sum + (parseFloat(t.amount_released) || 0), 0);
+      const trips = quarterTrips.length;
+      
+      quarters.push({
+        quarter: quarterName,
+        budgetSpent: Math.round(budgetSpent),
+        trips: trips
+      });
+    }
+    return quarters;
+  };
+
   const generateWeeklyBudgetComparison = (budgetData, tripData) => {
     const weeks = [];
     const today = new Date();
@@ -232,8 +332,24 @@ const MayorReports = () => {
         variancePercent: weeklyAllocation > 0 ? ((totalSpent - weeklyAllocation) / weeklyAllocation) * 100 : 0
       });
     }
-    
     return weeks;
+  };
+
+  const handleMonthChange = (direction) => {
+    let newMonth = selectedMonth + direction;
+    let newYear = selectedYear;
+    
+    if (newMonth < 0) {
+      newMonth = 11;
+      newYear--;
+    } else if (newMonth > 11) {
+      newMonth = 0;
+      newYear++;
+    }
+    
+    setSelectedMonth(newMonth);
+    setSelectedYear(newYear);
+    setSelectedWeek(1);
   };
 
   const handleRefresh = () => {
@@ -292,8 +408,26 @@ const MayorReports = () => {
     return `₱${numAmount.toLocaleString()}`;
   };
 
-  // ============ FILTERED DATA FOR SELECTOR ============
-  // Filter comparison chart data based on selected department
+  // Get current chart data based on view type
+  const getCurrentChartData = () => {
+    if (viewType === 'week') {
+      // Return weekly data for the selected month
+      return reportData.weeklyData;
+    }
+    return reportData.monthlyData;
+  };
+
+  const getChartTitle = () => {
+    if (viewType === 'week') {
+      return `${currentMonthName} ${selectedYear} - Weekly Spending`;
+    }
+    return 'Monthly Spending Trends';
+  };
+
+  const currentChartData = getCurrentChartData();
+  const currentSelectedWeek = weeksInMonth[selectedWeek - 1];
+
+  // Filtered data for selector
   const filteredComparisonData = useMemo(() => {
     if (selectedDepartment === 'all') {
       return reportData.departmentTrends
@@ -319,7 +453,6 @@ const MayorReports = () => {
     }
   }, [selectedDepartment, reportData.departmentTrends]);
 
-  // Filter department details based on selector
   const filteredDepartmentDetails = useMemo(() => {
     if (selectedDepartment === 'all') {
       return reportData.departmentTrends.sort((a, b) => b.spent - a.spent);
@@ -334,8 +467,6 @@ const MayorReports = () => {
       value: reportData.budgetAllocation[i]
     }))
     .filter(d => d.value > 0);
-
-  const monthlyComparisonData = reportData.monthlyData;
 
   if (loading) {
     return (
@@ -521,7 +652,7 @@ const MayorReports = () => {
         </button>
       </div>
 
-      {/* OVERVIEW TAB */}
+      {/* OVERVIEW TAB WITH MONTH/WEEK FILTER */}
       {activeTab === 'overview' && (
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
           {/* Budget Allocation Pie Chart */}
@@ -567,51 +698,132 @@ const MayorReports = () => {
             </CardContent>
           </Card>
 
-          {/* Monthly Spending Bar Chart */}
+          {/* Month/Week Filter Card */}
           <Card className="border-0 shadow-sm overflow-hidden">
             <CardHeader className="border-b border-gray-100 bg-white/50 pb-4">
-              <CardTitle className="flex items-center gap-2 text-lg">
-                <BarChart3 className="h-5 w-5 text-emerald-600" />
-                Monthly Spending
-              </CardTitle>
+              <div className="flex items-center justify-between flex-wrap gap-4">
+                <CardTitle className="flex items-center gap-2 text-lg">
+                  <BarChart3 className="h-5 w-5 text-emerald-600" />
+                  Spending Overview
+                </CardTitle>
+                
+                {/* View Type Toggle */}
+                <div className="flex gap-1 rounded-lg bg-gray-100 p-1">
+                  <button
+                    onClick={() => setViewType('month')}
+                    className={`px-3 py-1.5 text-sm font-medium rounded-md transition-all ${
+                      viewType === 'month'
+                        ? 'bg-white text-blue-600 shadow-sm'
+                        : 'text-gray-500 hover:text-gray-700'
+                    }`}
+                  >
+                    Monthly
+                  </button>
+                  <button
+                    onClick={() => setViewType('week')}
+                    className={`px-3 py-1.5 text-sm font-medium rounded-md transition-all ${
+                      viewType === 'week'
+                        ? 'bg-white text-blue-600 shadow-sm'
+                        : 'text-gray-500 hover:text-gray-700'
+                    }`}
+                  >
+                    Weekly
+                  </button>
+                </div>
+              </div>
             </CardHeader>
             <CardContent className="pt-6">
-              <ResponsiveContainer width="100%" height={300}>
-                <BarChart data={monthlyComparisonData}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                  <XAxis dataKey="month" stroke="#94a3b8" fontSize={11} />
-                  <YAxis stroke="#94a3b8" fontSize={11} tickFormatter={(value) => formatCompactCurrency(value)} />
-                  <Tooltip formatter={(value) => formatCurrency(value)} />
-                  <Bar dataKey="budgetSpent" fill={COLORS.success} name="Spending" radius={[6, 6, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </CardContent>
-          </Card>
+              {/* Month Selector */}
+              <div className="mb-4 flex items-center justify-between gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handleMonthChange(-1)}
+                  className="p-1 h-8 w-8"
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </Button>
+                <div className="text-center">
+                  <div className="flex items-center gap-2">
+                    <Calendar className="h-4 w-4 text-gray-400" />
+                    <span className="font-semibold text-gray-700">
+                      {monthNames[selectedMonth]} {selectedYear}
+                    </span>
+                  </div>
+                  {viewType === 'week' && currentSelectedWeek && (
+                    <p className="text-xs text-gray-500 mt-1">
+                      {currentSelectedWeek.label}
+                    </p>
+                  )}
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handleMonthChange(1)}
+                  className="p-1 h-8 w-8"
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+              </div>
 
-          {/* Weekly Spending Bar Chart */}
-          <Card className="border-0 shadow-sm overflow-hidden lg:col-span-2">
-            <CardHeader className="border-b border-gray-100 bg-white/50 pb-4">
-              <CardTitle className="flex items-center gap-2 text-lg">
-                <BarChart3 className="h-5 w-5 text-purple-600" />
-                Weekly Spending Trends
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="pt-6">
-              <ResponsiveContainer width="100%" height={300}>
-                <BarChart data={reportData.weeklyData}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                  <XAxis dataKey="week" stroke="#94a3b8" fontSize={11} />
-                  <YAxis stroke="#94a3b8" fontSize={11} tickFormatter={(value) => formatCompactCurrency(value)} />
-                  <Tooltip formatter={(value) => formatCurrency(value)} />
-                  <Bar dataKey="budgetSpent" fill={COLORS.primary} name="Weekly Spending" radius={[6, 6, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
+              {/* Week Selector (only when weekly view is active) */}
+              {viewType === 'week' && weeksInMonth.length > 0 && (
+                <div className="mb-4">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Select Week
+                  </label>
+                  <div className="flex gap-2 flex-wrap">
+                    {weeksInMonth.map((week) => (
+                      <button
+                        key={week.weekNumber}
+                        onClick={() => setSelectedWeek(week.weekNumber)}
+                        className={`px-3 py-1.5 text-sm rounded-md transition-all ${
+                          selectedWeek === week.weekNumber
+                            ? 'bg-blue-600 text-white shadow-sm'
+                            : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                        }`}
+                      >
+                        Week {week.weekNumber}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Chart */}
+              {currentChartData.length > 0 ? (
+                <ResponsiveContainer width="100%" height={280}>
+                  <BarChart data={currentChartData}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                    <XAxis 
+                      dataKey={viewType === 'week' ? 'week' : 'month'} 
+                      stroke="#94a3b8" 
+                      fontSize={11} 
+                    />
+                    <YAxis stroke="#94a3b8" fontSize={11} tickFormatter={(value) => formatCompactCurrency(value)} />
+                    <Tooltip formatter={(value) => formatCurrency(value)} />
+                    <Bar dataKey="budgetSpent" fill={COLORS.success} name="Spending" radius={[6, 6, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="py-8 text-center text-gray-500">
+                  <AlertCircle className="mx-auto h-8 w-8 text-gray-400 mb-2" />
+                  <p>No data available for {currentMonthName} {selectedYear}</p>
+                </div>
+              )}
+              
+              <div className="mt-3 text-center text-xs text-gray-400">
+                {viewType === 'week' 
+                  ? `Weekly spending for ${currentMonthName} ${selectedYear}`
+                  : `Monthly spending trends (last 6 months)`
+                }
+              </div>
             </CardContent>
           </Card>
         </div>
       )}
 
-      {/* BUDGET VS ACTUAL TAB - WITH FUNCTIONAL SELECTOR */}
+      {/* BUDGET VS ACTUAL TAB */}
       {activeTab === 'comparison' && (
         <>
           <Card className="border-0 shadow-sm overflow-hidden">
@@ -625,7 +837,6 @@ const MayorReports = () => {
                   <p className="text-sm text-gray-500 mt-1">Compare budget allocated against actual spending by department</p>
                 </div>
                 
-                {/* ✅ FUNCTIONAL DEPARTMENT SELECTOR */}
                 <div className="flex items-center gap-2">
                   <Filter className="h-4 w-4 text-gray-400" />
                   <select
@@ -643,7 +854,6 @@ const MayorReports = () => {
                 </div>
               </div>
               
-              {/* Selected Department Info */}
               {selectedDepartment !== 'all' && filteredComparisonData.length === 1 && (
                 <div className="mt-3 rounded-lg bg-blue-50 p-3 text-sm text-blue-700">
                   <div className="flex items-center gap-2">
@@ -764,10 +974,9 @@ const MayorReports = () => {
         </>
       )}
 
-      {/* DEPARTMENTS TAB - WITH FUNCTIONAL SELECTOR */}
+      {/* DEPARTMENTS TAB */}
       {activeTab === 'departments' && (
         <div>
-          {/* Department Filter Bar */}
           <div className="mb-4 flex flex-wrap items-center justify-between gap-4">
             <div className="flex items-center gap-2">
               <Filter className="h-4 w-4 text-gray-400" />
@@ -870,7 +1079,10 @@ const MayorReports = () => {
 
       {/* Footer */}
       <div className="text-center text-xs text-gray-400 pt-4">
-        Data from {new Date(dateRange.start_date).toLocaleDateString()} to {new Date(dateRange.end_date).toLocaleDateString()}
+        Data period: {viewType === 'week' && currentSelectedWeek 
+          ? `${currentSelectedWeek.start.toLocaleDateString()} to ${currentSelectedWeek.end.toLocaleDateString()}`
+          : `${monthNames[selectedMonth]} ${selectedYear}`
+        }
       </div>
     </div>
   );

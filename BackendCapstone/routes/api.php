@@ -271,6 +271,9 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('trips/{id}/gas-slip', [DriverController::class, 'getGasSlip']);
         Route::post('trips/{id}/receipt', [DriverController::class, 'uploadReceipt']);
         Route::post('trips/{id}/odometer', [DriverController::class, 'updateOdometer']);
+
+            Route::post('trips/{id}/acknowledge', [DriverController::class, 'acknowledgeFunds']);
+
     });
 
     // GPS Pings

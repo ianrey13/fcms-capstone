@@ -532,74 +532,91 @@ public function getActiveTrip(Request $request)
         }
     }
 
-    /**
-     * Get gas slip details for a trip
-     */
-    public function getGasSlip(Request $request, $id)
-    {
-        try {
-            $user = $request->user();
-            Log::info('getGasSlip called', ['trip_id' => $id, 'user_id' => $user->user_id]);
-            
-            $driver = Driver::where('user_id', $user->user_id)->first();
-            
-            if (!$driver) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Driver record not found'
-                ], 404);
-            }
-            
-            $ticket = TripTicket::where('trip_ticket_id', $id)
-                ->where('driver_id', $driver->driver_id)
-                ->first();
-            
-            if (!$ticket) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Trip ticket not found'
-                ], 404);
-            }
-            
-            $gasSlip = GasSlip::where('trip_ticket_id', $id)->first();
-            
-            if (!$gasSlip) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Gas slip not found'
-                ], 404);
-            }
-            
-            $fundIssuance = FundIssuance::where('gas_slip_id', $gasSlip->gas_slip_id)->first();
-            
-            return response()->json([
-                'success' => true,
-                'data' => [
-                    'trip_ticket_id' => $ticket->trip_ticket_id,
-                    'trip_ticket_number' => $ticket->trip_ticket_number,
-                    'destination' => $ticket->destination,
-                    'trip_date' => $ticket->trip_date,
-                    'purpose' => $ticket->purpose,
-                    'charge_to' => $ticket->charge_to,
-                    'vehicle' => $ticket->vehicle ? [
-                        'plate_number' => $ticket->vehicle->plate_number,
-                        'vehicle_model' => $ticket->vehicle->vehicle_model,
-                        'fuel_type' => $ticket->vehicle->fuel_type,
-                    ] : null,
-                    'driver_name' => $driver->user ? $driver->user->full_name : null,
-                    'amount_released' => $gasSlip->amount_released,
-                    'issued_at' => $fundIssuance ? $fundIssuance->issued_at : null,
-                    'acknowledged_at' => $fundIssuance ? $fundIssuance->acknowledged_at : null,
-                    'status' => $ticket->status,
-                ]
-            ]);
-            
-        } catch (\Exception $e) {
-            Log::error('Get gas slip error: ' . $e->getMessage());
+ /**
+ * Get gas slip details for a trip
+ */
+public function getGasSlip(Request $request, $id)
+{
+    try {
+        $user = $request->user();
+        
+        $driver = Driver::where('user_id', $user->user_id)->first();
+        
+        if (!$driver) {
             return response()->json([
                 'success' => false,
-                'message' => 'Failed to fetch gas slip: ' . $e->getMessage()
-            ], 500);
+                'message' => 'Driver record not found'
+            ], 404);
         }
+        
+        // ✅ Make sure to load vehicle relationship
+        $ticket = TripTicket::with(['vehicle', 'department', 'gasSlip'])
+            ->where('trip_ticket_id', $id)
+            ->where('driver_id', $driver->driver_id)
+            ->first();
+        
+        if (!$ticket) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Trip ticket not found'
+            ], 404);
+        }
+        
+        $gasSlip = GasSlip::where('trip_ticket_id', $id)->first();
+        
+        if (!$gasSlip) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Gas slip not found'
+            ], 404);
+        }
+        
+        $fundIssuance = FundIssuance::where('gas_slip_id', $gasSlip->gas_slip_id)->first();
+        
+        // ✅ Debug log to check vehicle data
+        Log::info('getGasSlip vehicle data:', [
+            'ticket_id' => $id,
+            'has_vehicle' => $ticket->vehicle ? 'yes' : 'no',
+            'vehicle_data' => $ticket->vehicle ? [
+                'id' => $ticket->vehicle->vehicle_id,
+                'plate_number' => $ticket->vehicle->plate_number,
+                'vehicle_model' => $ticket->vehicle->vehicle_model,
+                'fuel_type' => $ticket->vehicle->fuel_type,
+            ] : 'null'
+        ]);
+        
+        return response()->json([
+            'success' => true,
+            'data' => [
+                'trip_ticket_id' => $ticket->trip_ticket_id,
+                'trip_ticket_number' => $ticket->trip_ticket_number,
+                'destination' => $ticket->destination,
+                'trip_date' => $ticket->trip_date,
+                'purpose' => $ticket->purpose,
+                'charge_to' => $ticket->charge_to,
+                // ✅ Ensure vehicle data is properly nested
+                'vehicle' => $ticket->vehicle ? [
+                    'vehicle_id' => $ticket->vehicle->vehicle_id,
+                    'plate_number' => $ticket->vehicle->plate_number,
+                    'vehicle_model' => $ticket->vehicle->vehicle_model,
+                    'fuel_type' => $ticket->vehicle->fuel_type,
+                ] : null,
+                'driver_name' => $driver->user ? $driver->user->full_name : null,
+                'amount_released' => $gasSlip->amount_released,
+                'issued_at' => $fundIssuance ? $fundIssuance->issued_at : null,
+                'acknowledged_at' => $fundIssuance ? $fundIssuance->acknowledged_at : null,
+                'status' => $ticket->status,
+            ]
+        ]);
+        
+    } catch (\Exception $e) {
+        Log::error('Get gas slip error: ' . $e->getMessage());
+        return response()->json([
+            'success' => false,
+            'message' => 'Failed to fetch gas slip: ' . $e->getMessage()
+        ], 500);
     }
+}
+
+    
 }

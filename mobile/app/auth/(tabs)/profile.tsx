@@ -281,7 +281,20 @@ export default function ProfileScreen() {
   };
 
   // ✅ Logout handler
-  const handleLogout = () => {
+
+const handleLogout = () => {
+  const isWeb = Platform.OS === 'web';
+  
+  const confirmLogout = () => {
+    performLogout();
+  };
+  
+  if (isWeb) {
+    const confirmed = window.confirm('Are you sure you want to logout?');
+    if (confirmed) {
+      confirmLogout();
+    }
+  } else {
     Alert.alert(
       'Logout',
       'Are you sure you want to logout?',
@@ -290,11 +303,12 @@ export default function ProfileScreen() {
         { 
           text: 'Logout', 
           style: 'destructive',
-          onPress: () => performLogout()
+          onPress: confirmLogout
         },
       ]
     );
-  };
+  }
+};
 
   const performLogout = async () => {
     setLoggingOut(true);
