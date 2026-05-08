@@ -29,6 +29,10 @@ import {
   AlertCircle,
   Building2,
   CheckCircle,
+  ChevronDown,
+  ChevronUp,
+  Filter,
+  Fuel,
 } from "lucide-react";
 import {
   Dialog,
@@ -43,7 +47,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "react-hot-toast";
 
-// Gas Slip Modal Component
+// Gas Slip Modal Component - Premium Design
 const GasSlipModal = ({ isOpen, onClose, gasSlipData }) => {
   if (!isOpen || !gasSlipData) return null;
 
@@ -186,8 +190,8 @@ const GasSlipModal = ({ isOpen, onClose, gasSlipData }) => {
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-[550px] p-0 overflow-hidden">
-        <div id="gas-slip-print-content" className="bg-white">
+      <DialogContent className="max-w-[550px] p-0 overflow-hidden dark:bg-slate-800 dark:border-slate-700">
+        <div id="gas-slip-print-content" className="bg-white dark:bg-slate-800">
           <div className="bg-gradient-to-r from-[#4a7c59] via-[#6b9b7a] to-[#4a7c59] px-4 py-3 flex items-center justify-between border-b-2 border-gray-800">
             <div className="w-14 h-14 bg-white rounded-full flex items-center justify-center border-2 border-yellow-500 text-[8px] text-center font-bold text-gray-600">
               MUN
@@ -214,71 +218,77 @@ const GasSlipModal = ({ isOpen, onClose, gasSlipData }) => {
               LOGO
             </div>
           </div>
-          <div className="bg-[#d4c5b5] border-b-2 border-gray-800 text-center py-2">
-            <h1 className="text-2xl font-bold tracking-widest text-gray-800">
+          <div className="bg-[#d4c5b5] dark:bg-[#6b5b4e] border-b-2 border-gray-800 text-center py-2">
+            <h1 className="text-2xl font-bold tracking-widest text-gray-800 dark:text-white">
               GAS SLIP
             </h1>
           </div>
           <div className="px-6 py-5 font-serif">
             <div className="flex items-end mb-4 gap-3">
-              <span className="text-sm font-bold text-gray-800 min-w-[120px]">
+              <span className="text-sm font-bold text-gray-800 dark:text-gray-200 min-w-[120px]">
                 Driver
               </span>
-              <div className="flex-1 border-b border-gray-800 text-sm font-semibold text-center pb-0.5">
+              <div className="flex-1 border-b border-gray-800 dark:border-gray-600 text-sm font-semibold text-center pb-0.5 dark:text-gray-300">
                 {gasSlipData.driver_name}
               </div>
             </div>
             <div className="flex gap-6 mb-4">
               <div className="flex-1 flex items-end gap-2">
-                <span className="text-sm font-bold text-gray-800 whitespace-nowrap">
+                <span className="text-sm font-bold text-gray-800 dark:text-gray-200 whitespace-nowrap">
                   Vehicle/Plate #
                 </span>
-                <div className="flex-1 border-b border-gray-800 text-sm font-semibold text-center pb-0.5">
+                <div className="flex-1 border-b border-gray-800 dark:border-gray-600 text-sm font-semibold text-center pb-0.5 dark:text-gray-300">
                   {gasSlipData.vehicle_plate}
                 </div>
               </div>
               <div className="flex-1 flex items-end gap-2">
-                <span className="text-sm font-bold text-gray-800">Date</span>
-                <div className="flex-1 border-b border-gray-800 text-sm font-semibold text-center pb-0.5">
+                <span className="text-sm font-bold text-gray-800 dark:text-gray-200">
+                  Date
+                </span>
+                <div className="flex-1 border-b border-gray-800 dark:border-gray-600 text-sm font-semibold text-center pb-0.5 dark:text-gray-300">
                   {gasSlipData.date}
                 </div>
               </div>
             </div>
             <div className="mb-4">
-              <span className="text-sm font-bold text-gray-800">Purpose</span>
-              <div className="w-full border-b border-gray-800 text-sm font-semibold uppercase mt-1 pb-0.5 pl-2">
+              <span className="text-sm font-bold text-gray-800 dark:text-gray-200">
+                Purpose
+              </span>
+              <div className="w-full border-b border-gray-800 dark:border-gray-600 text-sm font-semibold uppercase mt-1 pb-0.5 pl-2 dark:text-gray-300">
                 {gasSlipData.purpose}
               </div>
             </div>
             <div className="mb-5">
-              <span className="text-sm font-bold text-gray-800">
+              <span className="text-sm font-bold text-gray-800 dark:text-gray-200">
                 Destination
               </span>
-              <div className="w-full border-b border-gray-800 text-sm font-semibold uppercase mt-1 pb-0.5 pl-2">
+              <div className="w-full border-b border-gray-800 dark:border-gray-600 text-sm font-semibold uppercase mt-1 pb-0.5 pl-2 dark:text-gray-300">
                 {gasSlipData.destination}
               </div>
             </div>
             <div className="mb-4">
               <div className="flex text-center mb-2">
-                <div className="flex-1 text-sm font-bold uppercase tracking-wide">
+                <div className="flex-1 text-sm font-bold uppercase tracking-wide text-gray-700 dark:text-gray-300">
                   FUEL
                 </div>
-                <div className="flex-1 text-sm font-bold uppercase tracking-wide">
+                <div className="flex-1 text-sm font-bold uppercase tracking-wide text-gray-700 dark:text-gray-300">
                   LITERS
                 </div>
-                <div className="flex-1 text-sm font-bold uppercase tracking-wide">
+                <div className="flex-1 text-sm font-bold uppercase tracking-wide text-gray-700 dark:text-gray-300">
                   AMOUNT
                 </div>
               </div>
               <div className="flex items-center mb-2">
-                <div className="flex-1 text-sm italic">Premium/UNLEADED</div>
-                <div className="flex-1 border-b border-gray-800 text-center text-sm font-semibold pb-0.5">
+                <div className="flex-1 text-sm italic text-gray-600 dark:text-gray-400">
+                  Premium/UNLEADED
+                </div>
+                <div className="flex-1 border-b border-gray-800 dark:border-gray-600 text-center text-sm font-semibold pb-0.5 dark:text-gray-300">
                   {gasSlipData.fuel_type === "Premium" ||
                   gasSlipData.fuel_type === "UNLEADED"
                     ? gasSlipData.liters
                     : ""}
                 </div>
-                <div className="flex-1 border-b border-gray-800 text-center text-sm font-semibold pb-0.5 text-green-700">
+                <div className="flex-1 border-b border-gray-800 dark:border-gray-600 text-center text-sm font-semibold pb-0.5 text-green-700 dark:text-green-400">
                   {gasSlipData.fuel_type === "Premium" ||
                   gasSlipData.fuel_type === "UNLEADED"
                     ? `₱${gasSlipData.amount.toLocaleString()}`
@@ -286,57 +296,63 @@ const GasSlipModal = ({ isOpen, onClose, gasSlipData }) => {
                 </div>
               </div>
               <div className="flex items-center mb-2">
-                <div className="flex-1 text-sm italic">Diesel</div>
-                <div className="flex-1 border-b border-gray-800 text-center text-sm font-semibold pb-0.5">
+                <div className="flex-1 text-sm italic text-gray-600 dark:text-gray-400">
+                  Diesel
+                </div>
+                <div className="flex-1 border-b border-gray-800 dark:border-gray-600 text-center text-sm font-semibold pb-0.5 dark:text-gray-300">
                   {gasSlipData.fuel_type === "Diesel" ? gasSlipData.liters : ""}
                 </div>
-                <div className="flex-1 border-b border-gray-800 text-center text-sm font-semibold pb-0.5 text-green-700">
+                <div className="flex-1 border-b border-gray-800 dark:border-gray-600 text-center text-sm font-semibold pb-0.5 text-green-700 dark:text-green-400">
                   {gasSlipData.fuel_type === "Diesel"
                     ? `₱${gasSlipData.amount.toLocaleString()}`
                     : ""}
                 </div>
               </div>
               <div className="flex items-center mb-2">
-                <div className="flex-1 text-sm italic">Engine Oil</div>
-                <div className="flex-1 border-b border-gray-800 text-center text-sm pb-0.5">
+                <div className="flex-1 text-sm italic text-gray-600 dark:text-gray-400">
+                  Engine Oil
+                </div>
+                <div className="flex-1 border-b border-gray-800 dark:border-gray-600 text-center text-sm pb-0.5 dark:text-gray-400">
                   -
                 </div>
-                <div className="flex-1 border-b border-gray-800 text-center text-sm pb-0.5"></div>
+                <div className="flex-1 border-b border-gray-800 dark:border-gray-600 text-center text-sm pb-0.5 dark:text-gray-400"></div>
               </div>
               <div className="flex items-center">
-                <div className="flex-1 text-sm italic">Brake Fluid</div>
-                <div className="flex-1 border-b border-gray-800 text-center text-sm pb-0.5">
+                <div className="flex-1 text-sm italic text-gray-600 dark:text-gray-400">
+                  Brake Fluid
+                </div>
+                <div className="flex-1 border-b border-gray-800 dark:border-gray-600 text-center text-sm pb-0.5 dark:text-gray-400">
                   -
                 </div>
-                <div className="flex-1 border-b border-gray-800 text-center text-sm pb-0.5"></div>
+                <div className="flex-1 border-b border-gray-800 dark:border-gray-600 text-center text-sm pb-0.5 dark:text-gray-400"></div>
               </div>
             </div>
             <div className="flex items-center gap-3 mt-5">
-              <span className="text-sm font-bold text-gray-800">
+              <span className="text-sm font-bold text-gray-800 dark:text-gray-200">
                 Control No.
               </span>
-              <div className="flex-1 border-b border-gray-800 text-center text-sm font-bold tracking-wider pb-0.5">
+              <div className="flex-1 border-b border-gray-800 dark:border-gray-600 text-center text-sm font-bold tracking-wider pb-0.5 dark:text-gray-300">
                 {gasSlipData.control_number}
               </div>
             </div>
           </div>
           <div className="text-center pt-6 pb-8 px-8">
-            <div className="border-t border-gray-800 w-64 mx-auto pt-3 mb-2"></div>
-            <div className="text-sm font-bold uppercase tracking-wide text-gray-800">
+            <div className="border-t border-gray-800 dark:border-gray-600 w-64 mx-auto pt-3 mb-2"></div>
+            <div className="text-sm font-bold uppercase tracking-wide text-gray-800 dark:text-white">
               {gasSlipData.mayor_name}
             </div>
-            <div className="text-xs italic text-gray-600 mt-1">
+            <div className="text-xs italic text-gray-600 dark:text-gray-400 mt-1">
               Municipal Mayor
             </div>
           </div>
         </div>
-        <div className="flex gap-3 p-4 border-t bg-gray-50 no-print">
-          <Button variant="outline" onClick={onClose} className="flex-1">
+        <div className="flex gap-3 p-4 border-t bg-gray-50 dark:bg-slate-900 no-print">
+          <Button variant="outline" onClick={onClose} className="flex-1 dark:border-slate-700 dark:text-slate-300">
             Close
           </Button>
           <Button
             onClick={handlePrint}
-            className="flex-1 gap-2 bg-[#4a7c59] hover:bg-[#3d6549]"
+            className="flex-1 gap-2 bg-[#4a7c59] hover:bg-[#3d6549] dark:bg-[#4a7c59] dark:hover:bg-[#3d6549]"
           >
             <Printer className="h-4 w-4" />
             Print Gas Slip
@@ -360,6 +376,9 @@ const MayorPending = () => {
   const [rejectionNote, setRejectionNote] = useState("");
   const [amountReleased, setAmountReleased] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [showFilters, setShowFilters] = useState(false);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [departmentFilter, setDepartmentFilter] = useState("all");
 
   // Department Selector State
   const [chargeToDepartmentId, setChargeToDepartmentId] = useState("");
@@ -391,127 +410,103 @@ const MayorPending = () => {
     toast.success("Tickets refreshed");
   };
 
-  // Fetch all departments for the selector
-  const fetchAllDepartments = useCallback(async () => {
-    setLoadingDepartments(true);
-    try {
-      const response = await mayorsOfficeAPI.getAllDepartmentsForSelector();
-      const depts = response.data?.data || response.data || [];
-      setAvailableDepartments(depts);
-    } catch (error) {
-      console.error("Failed to fetch departments:", error);
-      toast.error("Could not load departments list");
-    } finally {
-      setLoadingDepartments(false);
-    }
-  }, []);
+  const clearFilters = () => {
+    setSearchTerm("");
+    setDepartmentFilter("all");
+  };
 
- // Open approve dialog with department selector (conditional)
-const openApproveDialog = async (ticket) => {
-  console.log("Opening approve dialog for ticket:", ticket);
-  setSelectedTicket(ticket);
-  setAmountReleased(ticket.estimated_cost?.toString() || "");
+  // Get unique departments for filter
+  const uniqueDepartments = [...new Map(tickets.map(ticket => [ticket.department_id, ticket.department_name])).entries()]
+    .map(([id, name]) => ({ department_id: id, department_name: name }));
 
-  // ✅ Get the department ID from multiple possible sources
-  const requestingDeptId = ticket.department_id?.toString() || 
-                           ticket.department?.id?.toString() || 
-                           ticket.department?.department_id?.toString();
-  
-  console.log("Requesting department ID:", requestingDeptId);
-  
-  // ✅ ALWAYS set the chargeToDepartmentId
-  if (!ticket.has_insufficient_budget) {
-    // Budget sufficient - force to requesting department
-    setChargeToDepartmentId(requestingDeptId || "");
-    setAvailableDepartments([]);
-    console.log("Budget sufficient, set chargeToDepartmentId to:", requestingDeptId);
-  } else {
-    // Budget insufficient - allow selection
-    setChargeToDepartmentId(requestingDeptId || "");
-    await fetchAllDepartments();
-    console.log("Budget insufficient, fetching departments, chargeToDepartmentId set to:", requestingDeptId);
-  }
-
-  setShowApproveDialog(true);
-};
-
- const handleApprove = async () => {
-
-  if (!selectedTicket) {
-    console.log("ERROR: No selectedTicket");
-    toast.error("No ticket selected");
-    return;
-  }
-
-  if (!amountReleased || parseFloat(amountReleased) <= 0) {
-    console.log("ERROR: Invalid amount", amountReleased);
-    toast.error("Please enter a valid amount to release");
-    return;
-  }
-
-  // ✅ Get the requesting department ID
-  const requestingDeptId = selectedTicket.department_id?.toString() || 
-                           selectedTicket.department?.id?.toString();
-  
-  // ✅ If chargeToDepartmentId is empty, set it to requesting department
-  let finalChargeDeptId = chargeToDepartmentId;
-  if (!finalChargeDeptId && requestingDeptId) {
-    finalChargeDeptId = requestingDeptId;
-    setChargeToDepartmentId(finalChargeDeptId);
-    console.log("Auto-set chargeToDepartmentId to:", finalChargeDeptId);
-  }
-
-  if (!finalChargeDeptId) {
-    console.log("ERROR: No chargeToDepartmentId and no requesting department ID");
-    toast.error("Please select which department to charge");
-    setSubmitting(false);
-    return;
-  }
-
-  // If budget is sufficient, force charge to requesting department
-  if (!selectedTicket.has_insufficient_budget) {
-    if (finalChargeDeptId !== requestingDeptId) {
-      console.log("ERROR: Cannot change department when budget sufficient");
-      toast.error("Your department has sufficient budget. You cannot charge another department.");
-      setChargeToDepartmentId(requestingDeptId);
-      setSubmitting(false);
-      return;
-    }
-  }
-
-  setSubmitting(true);
-  console.log("Calling API with:", {
-    ticket_id: selectedTicket.id || selectedTicket.trip_ticket_id,
-    amount_released: parseFloat(amountReleased),
-    charge_to_department_id: parseInt(finalChargeDeptId),
+  // Filter tickets
+  const filteredTickets = tickets.filter((ticket) => {
+    const matchesSearch = searchTerm === "" ||
+      ticket.ticket_number?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      ticket.trip_ticket_number?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      ticket.destination?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      ticket.department_name?.toLowerCase().includes(searchTerm.toLowerCase());
+    
+    const matchesDepartment = departmentFilter === "all" || ticket.department_id?.toString() === departmentFilter;
+    
+    return matchesSearch && matchesDepartment;
   });
 
-  try {
-    const response = await mayorsOfficeAPI.approveTicket(
-      selectedTicket.id || selectedTicket.trip_ticket_id,
-      {
-        amount_released: parseFloat(amountReleased),
-        charge_to_department_id: parseInt(finalChargeDeptId),
-      },
-    );
-    console.log("API Response:", response.data);
+  // Fetch all departments for the selector
+  const fetchAllDepartments = useCallback(async () => {
+    // This would need to be added to your API service
+    // For now, we'll use the departments from tickets
+    const uniqueDepts = [...new Map(tickets.map(ticket => [ticket.department_id, ticket.department_name])).entries()]
+      .map(([id, name]) => ({ department_id: id, department_name: name }));
+    setAvailableDepartments(uniqueDepts);
+  }, [tickets]);
 
-    if (response.data.success) {
-      toast.success(response.data.message || "Funds released successfully!");
-      setShowApproveDialog(false);
-      setSelectedTicket(null);
-      setAmountReleased("");
-      setChargeToDepartmentId("");
-      fetchTickets();
+  const openApproveDialog = async (ticket) => {
+    console.log("Opening approve dialog for ticket:", ticket);
+    setSelectedTicket(ticket);
+    setAmountReleased(ticket.estimated_cost?.toString() || "");
+
+    const requestingDeptId = ticket.department_id?.toString() || 
+                             ticket.department?.id?.toString() || 
+                             ticket.department?.department_id?.toString();
+    
+    console.log("Requesting department ID:", requestingDeptId);
+    
+    setChargeToDepartmentId(requestingDeptId || "");
+    await fetchAllDepartments();
+
+    setShowApproveDialog(true);
+  };
+
+  const handleApprove = async () => {
+    if (!selectedTicket) {
+      toast.error("No ticket selected");
+      return;
     }
-  } catch (error) {
-    console.error("API Error:", error);
-    console.error("Error response:", error.response?.data);
-    toast.error(error.response?.data?.message || "Failed to release funds");
-  } finally {
-    setSubmitting(false);
-  }
-};
+
+    if (!amountReleased || parseFloat(amountReleased) <= 0) {
+      toast.error("Please enter a valid amount to release");
+      return;
+    }
+
+    const requestingDeptId = selectedTicket.department_id?.toString() || 
+                             selectedTicket.department?.id?.toString();
+    
+    let finalChargeDeptId = chargeToDepartmentId;
+    if (!finalChargeDeptId && requestingDeptId) {
+      finalChargeDeptId = requestingDeptId;
+      setChargeToDepartmentId(finalChargeDeptId);
+    }
+
+    if (!finalChargeDeptId) {
+      toast.error("Please select which department to charge");
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      const response = await mayorsOfficeAPI.approveTicket(
+        selectedTicket.id || selectedTicket.trip_ticket_id,
+        parseFloat(amountReleased),
+        null
+      );
+      console.log("API Response:", response.data);
+
+      if (response.data.success) {
+        toast.success(response.data.message || "Funds released successfully!");
+        setShowApproveDialog(false);
+        setSelectedTicket(null);
+        setAmountReleased("");
+        setChargeToDepartmentId("");
+        fetchTickets();
+      }
+    } catch (error) {
+      console.error("API Error:", error);
+      toast.error(error.response?.data?.message || "Failed to release funds");
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   const handleReject = async () => {
     if (!selectedTicket) return;
@@ -542,13 +537,15 @@ const openApproveDialog = async (ticket) => {
   const getStatusBadge = (hasInsufficientBudget) => {
     if (hasInsufficientBudget) {
       return (
-        <Badge className="bg-red-100 text-red-700 border-red-200">
+        <Badge className="bg-red-100 text-red-700 border-red-200 dark:bg-red-900/30 dark:text-red-400 dark:border-red-800">
           ⚠️ Insufficient Budget
         </Badge>
       );
     }
     return (
-      <Badge className="bg-yellow-500 text-white">Pending Fund Release</Badge>
+      <Badge className="bg-yellow-500 text-white dark:bg-yellow-600">
+        Pending Fund Release
+      </Badge>
     );
   };
 
@@ -579,16 +576,26 @@ const openApproveDialog = async (ticket) => {
     );
   }
 
+  const hasActiveFilters = searchTerm !== "" || departmentFilter !== "all";
+
   return (
-    <div className="p-6">
-      <div className="flex justify-between items-center mb-6">
+    <div className="space-y-6 animate-fade-in-up">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold">Pending Fund Release</h1>
-          <p className="text-gray-500">
+          <h1 className="text-2xl font-bold bg-gradient-to-r from-slate-800 to-slate-600 dark:from-white dark:to-slate-300 bg-clip-text text-transparent">
+            Pending Fund Release
+          </h1>
+          <p className="text-slate-500 dark:text-slate-400 mt-1">
             Review and approve trip tickets awaiting fund release
           </p>
         </div>
-        <Button variant="outline" onClick={handleRefresh} disabled={refreshing}>
+        <Button 
+          variant="outline" 
+          onClick={handleRefresh} 
+          disabled={refreshing}
+          className="dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+        >
           {refreshing ? (
             <Loader2 className="h-4 w-4 animate-spin mr-2" />
           ) : (
@@ -598,54 +605,148 @@ const openApproveDialog = async (ticket) => {
         </Button>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
+      {/* Filters Card */}
+      <Card className="dark:bg-slate-800/80 dark:border-slate-700 overflow-hidden transition-all duration-300">
+        <div 
+          className="px-6 py-4 border-b dark:border-slate-700 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors"
+          onClick={() => setShowFilters(!showFilters)}
+        >
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Filter className="h-4 w-4 text-slate-500" />
+              <span className="font-medium text-slate-700 dark:text-slate-300">Filters</span>
+              {hasActiveFilters && (
+                <span className="px-2 py-0.5 text-xs bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-full">
+                  Active
+                </span>
+              )}
+            </div>
+            {showFilters ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+          </div>
+        </div>
+        
+        {showFilters && (
+          <div className="p-6 animate-slide-down">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-400" />
+                <Input
+                  placeholder="Search tickets..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="pl-10 dark:bg-slate-900 dark:border-slate-700"
+                />
+              </div>
+              <select
+                value={departmentFilter}
+                onChange={(e) => setDepartmentFilter(e.target.value)}
+                className="px-3 py-2 border border-slate-300 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-slate-800 dark:text-white"
+              >
+                <option value="all">All Departments</option>
+                {uniqueDepartments.map((dept) => (
+                  <option key={dept.department_id} value={dept.department_id}>
+                    {dept.department_name}
+                  </option>
+                ))}
+              </select>
+              <div className="flex gap-2">
+                {hasActiveFilters && (
+                  <Button 
+                    variant="ghost" 
+                    onClick={clearFilters}
+                    className="text-red-600 hover:text-red-700 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/30 w-full"
+                  >
+                    <X className="h-4 w-4 mr-2" />
+                    Clear Filters
+                  </Button>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+      </Card>
+
+      {/* Tickets Table */}
+      <Card className="dark:bg-slate-800/80 dark:border-slate-700 overflow-hidden">
+        <CardHeader className="border-b dark:border-slate-700">
+          <CardTitle className="flex items-center gap-2 text-slate-900 dark:text-white">
             <Clock className="h-5 w-5 text-yellow-500" />
-            Pending Tickets ({tickets.length})
+            Pending Tickets
+            <span className="ml-2 text-sm font-normal text-slate-500 dark:text-slate-400">
+              ({filteredTickets.length} {filteredTickets.length === 1 ? 'ticket' : 'tickets'})
+            </span>
           </CardTitle>
         </CardHeader>
-        <CardContent>
-          {tickets.length === 0 ? (
-            <div className="text-center py-8 text-gray-500">
-              No pending tickets
+        <CardContent className="p-0">
+          {filteredTickets.length === 0 ? (
+            <div className="text-center py-16">
+              <CheckCircle className="h-12 w-12 text-green-500 mx-auto mb-3" />
+              <p className="text-slate-500 dark:text-slate-400">No pending tickets</p>
+              {hasActiveFilters && (
+                <Button variant="link" onClick={clearFilters} className="mt-2">
+                  Clear filters
+                </Button>
+              )}
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Ticket #</TableHead>
-                    <TableHead>Date</TableHead>
-                    <TableHead>Destination</TableHead>
-                    <TableHead>Department</TableHead>
-                    <TableHead>Vehicle</TableHead>
-                    <TableHead>Driver</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {tickets.map((ticket) => (
-                    <TableRow
-                      key={ticket.id || ticket.trip_ticket_id}
-                      className="hover:bg-gray-50"
+              <table className="w-full">
+                <thead className="bg-slate-50 dark:bg-slate-900/50">
+                  <tr>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Ticket #</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Date</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Destination</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Department</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Vehicle</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Driver</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Status</th>
+                    <th className="px-4 py-3 text-right text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-200 dark:divide-slate-700">
+                  {filteredTickets.map((ticket, index) => (
+                    <tr 
+                      key={ticket.id || ticket.trip_ticket_id} 
+                      className="hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors animate-fade-in"
+                      style={{ animationDelay: `${index * 50}ms` }}
                     >
-                      <TableCell className="font-medium">
-                        {ticket.ticket_number || ticket.trip_ticket_number}
-                      </TableCell>
-                      <TableCell>{formatDate(ticket.trip_date)}</TableCell>
-                      <TableCell>{ticket.destination}</TableCell>
-                      <TableCell>{ticket.department_name}</TableCell>
-                      <TableCell>
-                        {ticket.vehicle?.plate_number || "N/A"}
-                      </TableCell>
-                      <TableCell>{ticket.driver?.full_name || "N/A"}</TableCell>
-                      <TableCell>
+                      <td className="px-4 py-3">
+                        <span className="font-mono text-sm font-semibold text-slate-900 dark:text-white">
+                          {ticket.ticket_number || ticket.trip_ticket_number}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-slate-600 dark:text-slate-400">
+                        {formatDate(ticket.trip_date)}
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-1">
+                          <MapPin className="h-3 w-3 text-slate-400" />
+                          <span className="text-slate-600 dark:text-slate-400">{ticket.destination}</span>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-1">
+                          <Building2 className="h-3 w-3 text-slate-400" />
+                          <span className="text-slate-600 dark:text-slate-400">{ticket.department_name}</span>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-1">
+                          <Truck className="h-3 w-3 text-slate-400" />
+                          <span className="text-slate-600 dark:text-slate-400">{ticket.vehicle?.plate_number || "N/A"}</span>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-1">
+                          <User className="h-3 w-3 text-slate-400" />
+                          <span className="text-slate-600 dark:text-slate-400">{ticket.driver?.full_name || "N/A"}</span>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3">
                         {getStatusBadge(ticket.has_insufficient_budget)}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex items-center justify-end gap-2">
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <div className="flex items-center justify-end gap-1">
                           <Button
                             variant="ghost"
                             size="sm"
@@ -654,35 +755,37 @@ const openApproveDialog = async (ticket) => {
                                 `/mo/tickets/${ticket.id || ticket.trip_ticket_id}`,
                               )
                             }
+                            className="text-blue-600 hover:text-blue-700 hover:bg-blue-50 dark:text-blue-400 dark:hover:text-blue-300 dark:hover:bg-blue-950/30 h-8 w-8 p-0"
+                            title="View Details"
                           >
                             <Eye className="h-4 w-4" />
                           </Button>
                           <Button
                             size="sm"
-                            className="bg-green-600 hover:bg-green-700"
                             onClick={() => openApproveDialog(ticket)}
+                            className="bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white shadow-md h-8 px-3"
                           >
-                            <DollarSign className="h-4 w-4 mr-1" />
+                            <DollarSign className="h-3 w-3 mr-1" />
                             Release
                           </Button>
                           <Button
                             size="sm"
                             variant="outline"
-                            className="text-red-600 border-red-300 hover:bg-red-50"
                             onClick={() => {
                               setSelectedTicket(ticket);
                               setShowRejectDialog(true);
                             }}
+                            className="text-red-600 border-red-300 hover:bg-red-50 dark:text-red-400 dark:border-red-800 dark:hover:bg-red-950/30 h-8 px-3"
                           >
-                            <XCircle className="h-4 w-4 mr-1" />
+                            <XCircle className="h-3 w-3 mr-1" />
                             Reject
                           </Button>
                         </div>
-                      </TableCell>
-                    </TableRow>
+                      </td>
+                    </tr>
                   ))}
-                </TableBody>
-              </Table>
+                </tbody>
+              </table>
             </div>
           )}
         </CardContent>
@@ -690,13 +793,13 @@ const openApproveDialog = async (ticket) => {
 
       {/* Approve/Fund Release Dialog */}
       <Dialog open={showApproveDialog} onOpenChange={setShowApproveDialog}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-md dark:bg-slate-800 dark:border-slate-700">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
+            <DialogTitle className="flex items-center gap-2 text-slate-900 dark:text-white">
               <DollarSign className="h-5 w-5 text-green-600" />
               Release Funds
             </DialogTitle>
-            <DialogDescription>
+            <DialogDescription className="dark:text-slate-400">
               {selectedTicket?.has_insufficient_budget
                 ? "Select which department's budget to charge. The requesting department has insufficient budget."
                 : "Your department has sufficient budget. Funds will be deducted from your department."}
@@ -705,10 +808,10 @@ const openApproveDialog = async (ticket) => {
 
           <div className="space-y-4">
             {/* Info Box */}
-            <div className="bg-blue-50 rounded-lg p-3 border border-blue-200">
+            <div className="bg-blue-50 dark:bg-blue-950/30 rounded-xl p-3 border border-blue-200 dark:border-blue-800">
               <div className="flex items-start gap-2">
-                <Info className="h-4 w-4 text-blue-500 mt-0.5" />
-                <div className="text-xs text-blue-700">
+                <Info className="h-4 w-4 text-blue-500 dark:text-blue-400 mt-0.5" />
+                <div className="text-xs text-blue-700 dark:text-blue-300">
                   <p>
                     Funds will be deducted from the{" "}
                     <strong>SELECTED department's budget</strong>.
@@ -722,15 +825,15 @@ const openApproveDialog = async (ticket) => {
 
             {/* Budget Warning */}
             {selectedTicket?.has_insufficient_budget && (
-              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
+              <div className="bg-yellow-50 dark:bg-yellow-950/30 border border-yellow-200 dark:border-yellow-800 rounded-xl p-3">
                 <div className="flex items-center gap-2">
-                  <AlertCircle className="h-4 w-4 text-yellow-600" />
-                  <div className="text-sm text-yellow-700">
+                  <AlertCircle className="h-4 w-4 text-yellow-600 dark:text-yellow-400" />
+                  <div className="text-sm text-yellow-700 dark:text-yellow-300">
                     <p className="font-medium">Insufficient Budget Notice</p>
                     <p className="text-xs mt-1">
                       Shortage:{" "}
                       <strong>
-                        ₱{selectedTicket?.budget_shortage?.toLocaleString()}
+                        {formatCurrency(selectedTicket?.budget_shortage)}
                       </strong>
                     </p>
                   </div>
@@ -739,105 +842,74 @@ const openApproveDialog = async (ticket) => {
             )}
 
             {/* Ticket Info */}
-            <div className="bg-gray-50 rounded-lg p-3">
+            <div className="bg-slate-50 dark:bg-slate-900/50 rounded-xl p-3">
               <div className="grid grid-cols-2 gap-2 text-sm">
                 <div>
-                  <p className="text-gray-500 text-xs">Ticket #</p>
-                  <p className="font-semibold text-sm">
+                  <p className="text-slate-500 dark:text-slate-400 text-xs">Ticket #</p>
+                  <p className="font-semibold text-sm text-slate-900 dark:text-white">
                     {selectedTicket?.ticket_number ||
                       selectedTicket?.trip_ticket_number}
                   </p>
                 </div>
                 <div>
-                  <p className="text-gray-500 text-xs">Requesting Dept</p>
-                  <p className="font-semibold text-sm">
+                  <p className="text-slate-500 dark:text-slate-400 text-xs">Requesting Dept</p>
+                  <p className="font-semibold text-sm text-slate-900 dark:text-white">
                     {selectedTicket?.department_name}
                   </p>
                 </div>
                 <div>
-                  <p className="text-gray-500 text-xs">Destination</p>
-                  <p className="text-sm">{selectedTicket?.destination}</p>
+                  <p className="text-slate-500 dark:text-slate-400 text-xs">Destination</p>
+                  <p className="text-sm text-slate-700 dark:text-slate-300">{selectedTicket?.destination}</p>
                 </div>
                 <div>
-                  <p className="text-gray-500 text-xs">Driver</p>
-                  <p className="text-sm">
+                  <p className="text-slate-500 dark:text-slate-400 text-xs">Driver</p>
+                  <p className="text-sm text-slate-700 dark:text-slate-300">
                     {selectedTicket?.driver?.full_name || "N/A"}
                   </p>
                 </div>
               </div>
             </div>
 
-            {/* Department Selector */}
-            <div>
-              <Label
-                htmlFor="charge_to_department"
-                className="flex items-center gap-2"
-              >
-                <Building2 className="h-4 w-4" />
-                Charge To Department <span className="text-red-500">*</span>
-              </Label>
-              <select
-                id="charge_to_department"
-                value={
-                  chargeToDepartmentId ||
-                  selectedTicket?.department_id?.toString() ||
-                  ""
-                }
-                onChange={(e) => setChargeToDepartmentId(e.target.value)}
-                className={`w-full border rounded-lg p-2 mt-1 focus:ring-2 focus:ring-blue-500 ${
-                  !selectedTicket?.has_insufficient_budget
-                    ? "bg-gray-100 cursor-not-allowed"
-                    : ""
-                }`}
-                disabled={
-                  !selectedTicket?.has_insufficient_budget || loadingDepartments
-                }
-              >
-                {loadingDepartments ? (
-                  <option>Loading departments...</option>
-                ) : (
-                  <>
-                    <option value={selectedTicket?.department_id}>
-                      📍 {selectedTicket?.department_name} (Requesting)
-                    </option>
-                    {selectedTicket?.has_insufficient_budget &&
-                      availableDepartments
-                        .filter(
-                          (dept) =>
-                            dept.department_id !==
-                            selectedTicket?.department_id,
-                        )
-                        .map((dept) => (
-                          <option
-                            key={dept.department_id}
-                            value={dept.department_id}
-                          >
-                            🏛️ {dept.department_name}
-                          </option>
-                        ))}
-                  </>
-                )}
-              </select>
-
-              {/* Helper Text - Conditional */}
-              {!selectedTicket?.has_insufficient_budget ? (
-                <p className="text-xs text-green-600 mt-1 flex items-center gap-1">
-                  <CheckCircle className="h-3 w-3" />
-                  Your department has sufficient budget. Funds will be deducted
-                  from: <strong>{selectedTicket?.department_name}</strong>
-                </p>
-              ) : (
-                <p className="text-xs text-orange-600 mt-1 flex items-center gap-1">
+            {/* Department Selector - Only show when budget insufficient */}
+            {selectedTicket?.has_insufficient_budget && (
+              <div>
+                <Label htmlFor="charge_to_department" className="flex items-center gap-2 text-slate-700 dark:text-slate-300">
+                  <Building2 className="h-4 w-4" />
+                  Charge To Department <span className="text-red-500">*</span>
+                </Label>
+                <select
+                  id="charge_to_department"
+                  value={chargeToDepartmentId}
+                  onChange={(e) => setChargeToDepartmentId(e.target.value)}
+                  className="w-full mt-1.5 px-3 py-2 border border-slate-300 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-slate-900 dark:text-white"
+                  disabled={loadingDepartments}
+                >
+                  <option value="">Select Department</option>
+                  <option value={selectedTicket?.department_id}>
+                    📍 {selectedTicket?.department_name} (Requesting)
+                  </option>
+                  {availableDepartments
+                    .filter(
+                      (dept) =>
+                        dept.department_id?.toString() !==
+                        selectedTicket?.department_id?.toString()
+                    )
+                    .map((dept) => (
+                      <option key={dept.department_id} value={dept.department_id}>
+                        🏛️ {dept.department_name}
+                      </option>
+                    ))}
+                </select>
+                <p className="text-xs text-orange-600 dark:text-orange-400 mt-1 flex items-center gap-1">
                   <AlertCircle className="h-3 w-3" />
-                  Your department has insufficient budget. Select which
-                  department to charge.
+                  Select which department's budget will cover this trip.
                 </p>
-              )}
-            </div>
+              </div>
+            )}
 
             {/* Amount Input */}
             <div>
-              <Label htmlFor="amount">Amount to Release (₱)</Label>
+              <Label htmlFor="amount" className="text-slate-700 dark:text-slate-300">Amount to Release (₱)</Label>
               <Input
                 id="amount"
                 type="number"
@@ -845,7 +917,7 @@ const openApproveDialog = async (ticket) => {
                 placeholder="Enter amount"
                 value={amountReleased}
                 onChange={(e) => setAmountReleased(e.target.value)}
-                className="mt-1"
+                className="mt-1.5 dark:bg-slate-900 dark:border-slate-700"
               />
             </div>
           </div>
@@ -854,11 +926,12 @@ const openApproveDialog = async (ticket) => {
             <Button
               variant="outline"
               onClick={() => setShowApproveDialog(false)}
+              className="dark:border-slate-700 dark:text-slate-300"
             >
               Cancel
             </Button>
             <Button
-              className="bg-green-600 hover:bg-green-700"
+              className="bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800"
               onClick={handleApprove}
               disabled={submitting}
             >
@@ -875,20 +948,20 @@ const openApproveDialog = async (ticket) => {
 
       {/* Reject Dialog */}
       <Dialog open={showRejectDialog} onOpenChange={setShowRejectDialog}>
-        <DialogContent>
+        <DialogContent className="dark:bg-slate-800 dark:border-slate-700">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
+            <DialogTitle className="flex items-center gap-2 text-slate-900 dark:text-white">
               <XCircle className="h-5 w-5 text-red-600" />
               Reject Trip Ticket
             </DialogTitle>
-            <DialogDescription>
+            <DialogDescription className="dark:text-slate-400">
               Please provide a reason for rejection. This will be sent back to
               the department.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
-            <div className="bg-gray-50 rounded-lg p-3">
-              <p className="text-sm">
+            <div className="bg-slate-50 dark:bg-slate-900/50 rounded-xl p-3">
+              <p className="text-sm text-slate-700 dark:text-slate-300">
                 <strong>Ticket:</strong>{" "}
                 {selectedTicket?.ticket_number ||
                   selectedTicket?.trip_ticket_number}
@@ -903,18 +976,19 @@ const openApproveDialog = async (ticket) => {
               value={rejectionNote}
               onChange={(e) => setRejectionNote(e.target.value)}
               rows={4}
-              className="resize-none"
+              className="resize-none dark:bg-slate-900 dark:border-slate-700 dark:text-white"
             />
           </div>
           <DialogFooter className="gap-3">
             <Button
               variant="outline"
               onClick={() => setShowRejectDialog(false)}
+              className="dark:border-slate-700 dark:text-slate-300"
             >
               Cancel
             </Button>
             <Button
-              className="bg-red-600 hover:bg-red-700"
+              className="bg-gradient-to-r from-red-600 to-red-700 hover:from-red-700 hover:to-red-800"
               onClick={handleReject}
               disabled={submitting}
             >

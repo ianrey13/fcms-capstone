@@ -36,7 +36,6 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
-import { Skeleton } from '@/components/ui/skeleton';
 
 const MayorDashboard = () => {
   const { user } = useAuth();
@@ -154,9 +153,9 @@ const MayorDashboard = () => {
 
   const getUtilizationColor = (utilization) => {
     const percent = parseFloat(utilization);
-    if (percent >= 80) return 'text-red-600';
-    if (percent >= 60) return 'text-amber-600';
-    return 'text-emerald-600';
+    if (percent >= 80) return 'text-red-600 dark:text-red-400';
+    if (percent >= 60) return 'text-amber-600 dark:text-amber-400';
+    return 'text-emerald-600 dark:text-emerald-400';
   };
 
   const getProgressColor = (utilization) => {
@@ -209,7 +208,7 @@ const MayorDashboard = () => {
   const QuickLinkCard = ({ title, description, icon: Icon, href, color, count }) => (
     <button
       onClick={() => navigate(href)}
-      className="group relative overflow-hidden rounded-xl bg-white p-4 text-left transition-all duration-300 hover:shadow-lg hover:-translate-y-1 border border-gray-100"
+      className="group relative overflow-hidden rounded-xl bg-white dark:bg-slate-800 p-4 text-left transition-all duration-300 hover:shadow-lg hover:-translate-y-1 border border-slate-100 dark:border-slate-700"
     >
       <div className={`absolute right-0 top-0 h-20 w-20 -translate-y-8 translate-x-8 rounded-full bg-gradient-to-br ${color} opacity-10 transition-transform duration-300 group-hover:scale-150`} />
       <div className="relative flex items-start justify-between">
@@ -217,36 +216,36 @@ const MayorDashboard = () => {
           <div className={`inline-flex rounded-lg ${color.replace('from-', 'bg-').replace('to-', 'bg-')}/10 p-2.5`}>
             <Icon className={`h-5 w-5 ${color.replace('from-', 'text-').split(' ')[0]}`} />
           </div>
-          <h3 className="mt-3 font-semibold text-gray-900">{title}</h3>
-          <p className="mt-1 text-sm text-gray-500">{description}</p>
+          <h3 className="mt-3 font-semibold text-slate-900 dark:text-white">{title}</h3>
+          <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{description}</p>
           {count !== undefined && (
-            <div className="mt-2 flex items-center gap-1 text-xs font-medium text-blue-600">
+            <div className="mt-2 flex items-center gap-1 text-xs font-medium text-blue-600 dark:text-blue-400">
               <span>{count} items</span>
               <ChevronRight className="h-3 w-3" />
             </div>
           )}
         </div>
-        <ChevronRight className="mt-1 h-4 w-4 text-gray-400 transition-transform duration-300 group-hover:translate-x-1" />
+        <ChevronRight className="mt-1 h-4 w-4 text-slate-400 transition-transform duration-300 group-hover:translate-x-1" />
       </div>
     </button>
   );
 
   const StatCard = ({ title, value, icon: Icon, color, subtitle, trend }) => (
-    <Card className="overflow-hidden border-0 shadow-sm hover:shadow-md transition-all duration-300">
+    <Card className="overflow-hidden border-0 shadow-sm hover:shadow-md transition-all duration-300 dark:bg-slate-800/80">
       <CardContent className="p-6">
         <div className="flex items-start justify-between">
           <div>
-            <p className="text-sm font-medium text-gray-500">{title}</p>
-            <p className="mt-2 text-3xl font-bold text-gray-900">{value}</p>
-            {subtitle && <p className="mt-1 text-xs text-gray-400">{subtitle}</p>}
+            <p className="text-sm font-medium text-slate-500 dark:text-slate-400">{title}</p>
+            <p className="mt-2 text-3xl font-bold text-slate-900 dark:text-white">{value}</p>
+            {subtitle && <p className="mt-1 text-xs text-slate-400">{subtitle}</p>}
             {trend && (
               <div className="mt-2 flex items-center gap-1">
                 <TrendingUp className="h-3 w-3 text-emerald-500" />
-                <span className="text-xs text-emerald-600">{trend}</span>
+                <span className="text-xs text-emerald-600 dark:text-emerald-400">{trend}</span>
               </div>
             )}
           </div>
-          <div className={`rounded-xl ${color} p-3`}>
+          <div className={`rounded-xl ${color} p-3 shadow-lg`}>
             <Icon className="h-6 w-6 text-white" />
           </div>
         </div>
@@ -258,19 +257,21 @@ const MayorDashboard = () => {
 
   if (loading) {
     return (
-      <div className="space-y-6 p-6 bg-gray-50 min-h-screen">
+      <div className="space-y-6 p-6 bg-slate-50 dark:bg-slate-900 min-h-screen">
         <div className="h-32 rounded-2xl bg-gradient-to-r from-slate-800 to-slate-900 animate-pulse" />
         <div className="grid grid-cols-1 md:grid-cols-4 gap-5">
-          {[1,2,3,4].map(i => <Skeleton key={i} className="h-32 rounded-xl" />)}
+          {[1,2,3,4].map(i => (
+            <div key={i} className="h-32 bg-slate-200 dark:bg-slate-700 rounded-xl animate-pulse" />
+          ))}
         </div>
-        <Skeleton className="h-96 rounded-xl" />
+        <div className="h-96 bg-slate-200 dark:bg-slate-700 rounded-xl animate-pulse" />
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
-      <div className="space-y-6 p-6">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-900 dark:to-slate-800">
+      <div className="space-y-6 p-6 animate-fade-in-up">
         {/* Hero Header */}
         <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 p-6 text-white shadow-xl">
           <div className="absolute -top-24 -right-24 h-48 w-48 rounded-full bg-blue-500/20 blur-3xl" />
@@ -345,23 +346,23 @@ const MayorDashboard = () => {
         </div>
 
         {/* Department Budget Section */}
-        <Card className="border-0 shadow-sm overflow-hidden">
-          <CardHeader className="border-b border-gray-100 bg-white/50 pb-4">
+        <Card className="border-0 shadow-sm overflow-hidden dark:bg-slate-800/80">
+          <CardHeader className="border-b border-slate-100 dark:border-slate-700 bg-white/50 dark:bg-slate-800/50 pb-4">
             <div className="flex flex-wrap items-center justify-between gap-4">
               <div className="flex items-center gap-3">
-                <div className="rounded-xl bg-blue-50 p-2.5">
-                  <PieChart className="h-5 w-5 text-blue-600" />
+                <div className="rounded-xl bg-blue-50 dark:bg-blue-900/30 p-2.5">
+                  <PieChart className="h-5 w-5 text-blue-600 dark:text-blue-400" />
                 </div>
                 <div>
-                  <CardTitle className="text-lg font-semibold text-gray-900">Department Budget Utilization</CardTitle>
-                  <p className="text-sm text-gray-500">Real-time budget consumption across departments</p>
+                  <CardTitle className="text-lg font-semibold text-slate-900 dark:text-white">Department Budget Utilization</CardTitle>
+                  <p className="text-sm text-slate-500 dark:text-slate-400">Real-time budget consumption across departments</p>
                 </div>
               </div>
               <Button 
                 variant="ghost" 
                 size="sm" 
                 onClick={() => navigate('/mo/reports')}
-                className="text-blue-600 hover:text-blue-700"
+                className="text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300"
               >
                 View Detailed Report
                 <ArrowRight className="ml-1 h-4 w-4" />
@@ -371,8 +372,8 @@ const MayorDashboard = () => {
           <CardContent className="pt-6">
             {topDepartments.length === 0 ? (
               <div className="py-12 text-center">
-                <Building2 className="mx-auto h-12 w-12 text-gray-300" />
-                <p className="mt-3 text-gray-500">No budget data available</p>
+                <Building2 className="mx-auto h-12 w-12 text-slate-300 dark:text-slate-600" />
+                <p className="mt-3 text-slate-500 dark:text-slate-400">No budget data available</p>
               </div>
             ) : (
               <div className="space-y-5">
@@ -380,12 +381,12 @@ const MayorDashboard = () => {
                   <div key={dept.department_id} className="group">
                     <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
                       <div className="flex items-center gap-2">
-                        <Building2 className="h-4 w-4 text-gray-400" />
-                        <span className="font-medium text-gray-800">{dept.department_name}</span>
+                        <Building2 className="h-4 w-4 text-slate-400" />
+                        <span className="font-medium text-slate-800 dark:text-slate-200">{dept.department_name}</span>
                         {getStatusIcon(dept.utilization)}
                       </div>
                       <div className="flex items-center gap-3">
-                        <span className="text-sm text-gray-500">
+                        <span className="text-sm text-slate-500 dark:text-slate-400">
                           ₱{dept.spent.toLocaleString()} / ₱{dept.allocated.toLocaleString()}
                         </span>
                         <span className={`text-sm font-semibold ${getUtilizationColor(dept.utilization)}`}>
@@ -396,12 +397,15 @@ const MayorDashboard = () => {
                     <div className="relative">
                       <Progress 
                         value={parseFloat(dept.utilization)} 
-                        className="h-2.5 rounded-full bg-gray-100"
-                        indicatorClassName={getProgressColor(dept.utilization)}
+                        className="h-2.5 rounded-full bg-slate-100 dark:bg-slate-700"
+                      />
+                      <div 
+                        className={`absolute top-0 left-0 h-2.5 rounded-full transition-all duration-500 ${getProgressColor(dept.utilization)}`}
+                        style={{ width: `${Math.min(parseFloat(dept.utilization), 100)}%` }}
                       />
                     </div>
                     {parseFloat(dept.utilization) >= 80 && (
-                      <p className="mt-1.5 text-xs text-amber-600 flex items-center gap-1">
+                      <p className="mt-1.5 text-xs text-amber-600 dark:text-amber-400 flex items-center gap-1">
                         <AlertCircle className="h-3 w-3" />
                         Approaching or exceeding budget limit
                       </p>
@@ -413,7 +417,7 @@ const MayorDashboard = () => {
                     <Button 
                       variant="link" 
                       onClick={() => navigate('/mo/reports')}
-                      className="text-blue-600"
+                      className="text-blue-600 dark:text-blue-400"
                     >
                       View all {departmentBudgets.length} departments
                       <ArrowRight className="ml-1 h-4 w-4" />
@@ -428,43 +432,43 @@ const MayorDashboard = () => {
         {/* Two Column Layout */}
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
           {/* Recent Releases */}
-          <Card className="border-0 shadow-sm overflow-hidden">
-            <CardHeader className="border-b border-gray-100 bg-white/50 pb-4">
+          <Card className="border-0 shadow-sm overflow-hidden dark:bg-slate-800/80">
+            <CardHeader className="border-b border-slate-100 dark:border-slate-700 bg-white/50 dark:bg-slate-800/50 pb-4">
               <div className="flex items-center gap-3">
-                <div className="rounded-xl bg-emerald-50 p-2.5">
-                  <Zap className="h-5 w-5 text-emerald-600" />
+                <div className="rounded-xl bg-emerald-50 dark:bg-emerald-900/30 p-2.5">
+                  <Zap className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
                 </div>
                 <div>
-                  <CardTitle className="text-lg font-semibold text-gray-900">Recent Fund Releases</CardTitle>
-                  <p className="text-sm text-gray-500">Last 5 transactions</p>
+                  <CardTitle className="text-lg font-semibold text-slate-900 dark:text-white">Recent Fund Releases</CardTitle>
+                  <p className="text-sm text-slate-500 dark:text-slate-400">Last 5 transactions</p>
                 </div>
               </div>
             </CardHeader>
             <CardContent className="pt-4">
               {recentReleases.length === 0 ? (
                 <div className="py-12 text-center">
-                  <DollarSign className="mx-auto h-12 w-12 text-gray-300" />
-                  <p className="mt-3 text-gray-500">No funds released yet</p>
+                  <DollarSign className="mx-auto h-12 w-12 text-slate-300 dark:text-slate-600" />
+                  <p className="mt-3 text-slate-500 dark:text-slate-400">No funds released yet</p>
                 </div>
               ) : (
-                <div className="divide-y divide-gray-100">
+                <div className="divide-y divide-slate-100 dark:divide-slate-700">
                   {recentReleases.map((ticket, idx) => (
                     <div key={ticket.id || ticket.trip_ticket_id} className="group flex items-center justify-between py-3 first:pt-0 last:pb-0">
                       <div className="flex-1">
                         <div className="flex items-center gap-2">
-                          <span className="font-mono text-sm font-medium text-gray-900">
+                          <span className="font-mono text-sm font-medium text-slate-900 dark:text-white">
                             {ticket.ticket_number || ticket.trip_ticket_number}
                           </span>
-                          <Badge variant="outline" className="text-xs">
+                          <Badge variant="outline" className="text-xs dark:border-slate-600 dark:text-slate-400">
                             {formatDate(ticket.trip_date)}
                           </Badge>
                           {ticket.is_mo_funded && (
-                            <Badge className="bg-purple-100 text-purple-700 text-xs">
+                            <Badge className="bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400 text-xs">
                               MO Funded
                             </Badge>
                           )}
                         </div>
-                        <div className="mt-1 flex flex-wrap items-center gap-3 text-sm text-gray-500">
+                        <div className="mt-1 flex flex-wrap items-center gap-3 text-sm text-slate-500 dark:text-slate-400">
                           <span className="flex items-center gap-1">
                             <Building2 className="h-3 w-3" />
                             {ticket.department_name}
@@ -476,14 +480,14 @@ const MayorDashboard = () => {
                         </div>
                       </div>
                       <div className="text-right">
-                        <div className="font-semibold text-emerald-600">
+                        <div className="font-semibold text-emerald-600 dark:text-emerald-400">
                           {formatCurrency(ticket.amount_released)}
                         </div>
                         <Button
                           variant="ghost"
                           size="sm"
                           onClick={() => navigate(`/mo/tickets/${ticket.id || ticket.trip_ticket_id}`)}
-                          className="mt-1 h-7 text-blue-600 hover:text-blue-700"
+                          className="mt-1 h-7 text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300"
                         >
                           <Eye className="mr-1 h-3 w-3" />
                           View
@@ -496,7 +500,7 @@ const MayorDashboard = () => {
                       <Button 
                         variant="link" 
                         onClick={() => navigate('/mo/approved')}
-                        className="text-blue-600"
+                        className="text-blue-600 dark:text-blue-400"
                       >
                         View all {approvedTickets.length} releases
                         <ArrowRight className="ml-1 h-4 w-4" />
@@ -509,15 +513,15 @@ const MayorDashboard = () => {
           </Card>
 
           {/* Quick Links */}
-          <Card className="border-0 shadow-sm overflow-hidden">
-            <CardHeader className="border-b border-gray-100 bg-white/50 pb-4">
+          <Card className="border-0 shadow-sm overflow-hidden dark:bg-slate-800/80">
+            <CardHeader className="border-b border-slate-100 dark:border-slate-700 bg-white/50 dark:bg-slate-800/50 pb-4">
               <div className="flex items-center gap-3">
-                <div className="rounded-xl bg-purple-50 p-2.5">
-                  <Shield className="h-5 w-5 text-purple-600" />
+                <div className="rounded-xl bg-purple-50 dark:bg-purple-900/30 p-2.5">
+                  <Shield className="h-5 w-5 text-purple-600 dark:text-purple-400" />
                 </div>
                 <div>
-                  <CardTitle className="text-lg font-semibold text-gray-900">Quick Navigation</CardTitle>
-                  <p className="text-sm text-gray-500">Access key management features</p>
+                  <CardTitle className="text-lg font-semibold text-slate-900 dark:text-white">Quick Navigation</CardTitle>
+                  <p className="text-sm text-slate-500 dark:text-slate-400">Access key management features</p>
                 </div>
               </div>
             </CardHeader>
@@ -549,30 +553,30 @@ const MayorDashboard = () => {
               </div>
 
               {/* Quick Stats Footer */}
-              <div className="mt-6 rounded-xl bg-gradient-to-r from-slate-50 to-gray-50 p-4">
+              <div className="mt-6 rounded-xl bg-gradient-to-r from-slate-50 to-gray-50 dark:from-slate-900 dark:to-slate-800 p-4">
                 <div className="flex flex-wrap items-center justify-between gap-4">
                   <div className="flex items-center gap-2">
                     <Award className="h-5 w-5 text-blue-500" />
-                    <span className="text-sm text-gray-600">Department Performance</span>
+                    <span className="text-sm text-slate-600 dark:text-slate-400">Department Performance</span>
                   </div>
                   <div className="flex gap-4">
                     <div className="text-center">
-                      <div className="text-lg font-bold text-emerald-600">
+                      <div className="text-lg font-bold text-emerald-600 dark:text-emerald-400">
                         {departmentBudgets.filter(d => parseFloat(d.utilization) < 60).length}
                       </div>
-                      <div className="text-xs text-gray-500">Good Standing</div>
+                      <div className="text-xs text-slate-500 dark:text-slate-400">Good Standing</div>
                     </div>
                     <div className="text-center">
-                      <div className="text-lg font-bold text-amber-600">
+                      <div className="text-lg font-bold text-amber-600 dark:text-amber-400">
                         {departmentBudgets.filter(d => parseFloat(d.utilization) >= 60 && parseFloat(d.utilization) < 80).length}
                       </div>
-                      <div className="text-xs text-gray-500">Warning</div>
+                      <div className="text-xs text-slate-500 dark:text-slate-400">Warning</div>
                     </div>
                     <div className="text-center">
-                      <div className="text-lg font-bold text-red-600">
+                      <div className="text-lg font-bold text-red-600 dark:text-red-400">
                         {departmentBudgets.filter(d => parseFloat(d.utilization) >= 80).length}
                       </div>
-                      <div className="text-xs text-gray-500">Critical</div>
+                      <div className="text-xs text-slate-500 dark:text-slate-400">Critical</div>
                     </div>
                   </div>
                 </div>

@@ -1,4 +1,4 @@
-// src/pages/AdminDashboard.jsx - Modern Redesign with Real Database Data
+// src/pages/AdminDashboard.jsx - Modern Redesign with Dark Mode Support
 import React, { useEffect, useState, useCallback } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
@@ -8,7 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import {
   Shield, Building2, Car, Users as UsersIcon,
   Activity, FileText, Settings, RefreshCw, Loader2, Zap, ArrowUpRight,
-  ArrowDownRight, Wallet, Fuel, CalendarDays
+  ArrowDownRight, Wallet, Fuel, CalendarDays, TrendingUp, TrendingDown
 } from 'lucide-react';
 import { departmentAPI, vehicleAPI, userAPI, budgetPolicyAPI, reportsAPI } from '../services/api';
 import {
@@ -117,7 +117,6 @@ const AdminDashboard = () => {
       if (budgetByDepartment.length > 0) {
         setBudgetChartData(budgetByDepartment.slice(0, 6));
       } else {
-        // Fallback data if no real data
         setBudgetChartData([
           { name: 'No Data', allocated: 0, spent: 0, remaining: 0 }
         ]);
@@ -128,7 +127,6 @@ const AdminDashboard = () => {
       if (tripReportRes.status === 'fulfilled') {
         const tripData = tripReportRes.value.data?.data || tripReportRes.value.data || [];
         if (Array.isArray(tripData)) {
-          // Group trips by month
           const monthlyMap = new Map();
           tripData.forEach(trip => {
             if (trip.trip_date) {
@@ -149,7 +147,6 @@ const AdminDashboard = () => {
         }
       }
       
-      // If no real data, use default months
       if (tripMonthlyData.length === 0) {
         tripMonthlyData = [
           { month: 'Jan', trips: 0, fuel: 0 },
@@ -233,7 +230,7 @@ const AdminDashboard = () => {
           title: 'Vehicles', 
           value: vehiclesCount, 
           icon: Car, 
-          gradient: 'from-green-500 to-green-600',
+          gradient: 'from-emerald-500 to-emerald-600',
           subtitle: `${activeVehiclesCount} active`,
           trend: `${activeVehiclesCount}/${vehiclesCount}`,
           trendUp: true,
@@ -253,8 +250,8 @@ const AdminDashboard = () => {
           title: 'Budget Used', 
           value: `${budgetUtilization.toFixed(1)}%`, 
           icon: Wallet, 
-          gradient: 'from-orange-500 to-orange-600',
-          subtitle: `₱${(totalSpent/1000).toFixed(0)}K spent / ₱${(totalBudget/1000).toFixed(0)}K`,
+          gradient: 'from-amber-500 to-amber-600',
+          subtitle: `₱${(totalSpent/1000).toFixed(0)}K / ₱${(totalBudget/1000).toFixed(0)}K`,
           trend: budgetUtilization > 70 ? 'High Usage' : 'Normal',
           trendUp: budgetUtilization > 70,
           onClick: () => navigate('/admin/budget-policies')
@@ -298,10 +295,7 @@ const AdminDashboard = () => {
         }));
         setRecentActivities(activities);
       } else {
-        // Fallback activities if no logs
-        setRecentActivities([
-          { id: 1, action: 'System initialized', user: 'System', time: 'Just now', type: 'info' }
-        ]);
+        setRecentActivities([]);
       }
     } catch (error) {
       console.error('Failed to fetch recent activities:', error);
@@ -339,8 +333,8 @@ const AdminDashboard = () => {
     return (
       <div className="flex items-center justify-center h-96">
         <div className="text-center">
-          <Loader2 className="h-12 w-12 animate-spin text-blue-600 mx-auto mb-4" />
-          <p className="text-gray-500">Loading dashboard data...</p>
+          <Loader2 className="h-12 w-12 animate-spin text-blue-600 dark:text-blue-400 mx-auto mb-4" />
+          <p className="text-slate-500 dark:text-slate-400">Loading dashboard data...</p>
         </div>
       </div>
     );
@@ -348,16 +342,16 @@ const AdminDashboard = () => {
 
   return (
     <div className="space-y-6">
-      {/* Welcome Section */}
-      <div className="relative overflow-hidden bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 rounded-2xl p-6 text-white">
+      {/* Welcome Section - Premium Gradient with Dark Mode */}
+      <div className="relative overflow-hidden bg-gradient-to-r from-slate-900 via-slate-800 to-blue-900 rounded-2xl p-6 text-white">
         <div className="absolute top-0 right-0 w-64 h-64 bg-blue-500/20 rounded-full blur-3xl" />
         <div className="absolute bottom-0 left-0 w-64 h-64 bg-purple-500/20 rounded-full blur-3xl" />
         
         <div className="relative z-10 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
             <div className="flex items-center gap-2 mb-2">
-              <Badge className="bg-green-500/20 text-green-300 border-green-500/30">
-                <span className="h-1.5 w-1.5 rounded-full bg-green-400 mr-1 animate-pulse"></span>
+              <Badge className="bg-emerald-500/20 text-emerald-300 border-emerald-500/30">
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 mr-1 animate-pulse"></span>
                 Live Data
               </Badge>
               <Badge className="bg-blue-500/20 text-blue-300 border-blue-500/30">
@@ -368,14 +362,14 @@ const AdminDashboard = () => {
             <p className="text-slate-300 mt-1">Here's what's happening with your system today.</p>
           </div>
           <div className="flex items-center gap-3">
-            <div className="text-right">
+            <div className="text-right hidden sm:block">
               <p className="text-sm text-slate-300">{new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}</p>
               <p className="text-xs text-slate-400">{new Date().toLocaleTimeString()}</p>
             </div>
             <Button 
               onClick={handleRefresh} 
               variant="outline" 
-              className="bg-white/10 border-white/20 text-white hover:bg-white/20"
+              className="bg-white/10 border-white/20 text-white hover:bg-white/20 dark:bg-white/5 dark:hover:bg-white/15"
               disabled={refreshing}
             >
               {refreshing ? (
@@ -389,7 +383,7 @@ const AdminDashboard = () => {
         </div>
       </div>
 
-      {/* Stats Grid */}
+      {/* Stats Grid - Dark Mode Compatible */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-5">
         {stats.map((stat, index) => (
           <div
@@ -397,7 +391,7 @@ const AdminDashboard = () => {
             className="transform transition-all duration-300 hover:scale-105 hover:shadow-xl cursor-pointer"
             onClick={stat.onClick}
           >
-            <Card className="relative overflow-hidden group">
+            <Card className="relative overflow-hidden group dark:bg-slate-800/80 dark:border-slate-700">
               <div className={`absolute top-0 right-0 w-32 h-32 bg-gradient-to-br ${stat.gradient} opacity-10 rounded-full -translate-y-1/2 translate-x-1/2 group-hover:scale-150 transition-transform duration-500`} />
               <CardContent className="p-5">
                 <div className="flex items-start justify-between mb-3">
@@ -405,20 +399,20 @@ const AdminDashboard = () => {
                     <stat.icon className="h-5 w-5 text-white" />
                   </div>
                   <div className="flex items-center gap-1">
-                    <span className={`text-xs font-medium ${stat.trendUp ? 'text-green-600' : 'text-red-600'}`}>
+                    <span className={`text-xs font-medium ${stat.trendUp ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
                       {stat.trend}
                     </span>
                     {stat.trendUp ? (
-                      <ArrowUpRight className="h-3 w-3 text-green-600" />
+                      <TrendingUp className="h-3 w-3 text-emerald-600 dark:text-emerald-400" />
                     ) : (
-                      <ArrowDownRight className="h-3 w-3 text-red-600" />
+                      <TrendingDown className="h-3 w-3 text-red-600 dark:text-red-400" />
                     )}
                   </div>
                 </div>
                 <div>
-                  <p className="text-3xl font-bold text-gray-900">{stat.value}</p>
-                  <p className="text-sm text-gray-500 mt-1">{stat.title}</p>
-                  <p className="text-xs text-gray-400 mt-1">{stat.subtitle}</p>
+                  <p className="text-3xl font-bold text-slate-900 dark:text-white">{stat.value}</p>
+                  <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">{stat.title}</p>
+                  <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">{stat.subtitle}</p>
                 </div>
               </CardContent>
             </Card>
@@ -426,15 +420,15 @@ const AdminDashboard = () => {
         ))}
       </div>
 
-      {/* Charts Section */}
+      {/* Charts Section - Dark Mode Compatible */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Trip & Fuel Trends */}
-        <Card className="overflow-hidden">
+        <Card className="overflow-hidden dark:bg-slate-800/80 dark:border-slate-700">
           <CardHeader className="pb-0">
             <div className="flex items-center justify-between">
               <div>
-                <CardTitle className="text-lg font-semibold">Trip & Fuel Trends</CardTitle>
-                <p className="text-sm text-gray-500 mt-1">Monthly overview (Real data from database)</p>
+                <CardTitle className="text-lg font-semibold dark:text-white">Trip & Fuel Trends</CardTitle>
+                <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">Monthly overview (Real data from database)</p>
               </div>
             </div>
           </CardHeader>
@@ -451,12 +445,13 @@ const AdminDashboard = () => {
                     <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
                   </linearGradient>
                 </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                <XAxis dataKey="month" stroke="#9ca3af" />
+                <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" className="dark:stroke-slate-700" />
+                <XAxis dataKey="month" stroke="#9ca3af" className="dark:stroke-slate-500" />
                 <YAxis yAxisId="left" stroke="#3b82f6" />
                 <YAxis yAxisId="right" orientation="right" stroke="#10b981" />
                 <Tooltip 
                   contentStyle={{ backgroundColor: 'white', borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
+                  itemStyle={{ color: '#1e293b' }}
                 />
                 <Area type="monotone" dataKey="trips" stroke="#3b82f6" fill="url(#colorTrips)" yAxisId="left" name="Trips" />
                 <Area type="monotone" dataKey="fuel" stroke="#10b981" fill="url(#colorFuel)" yAxisId="right" name="Fuel (L)" />
@@ -464,20 +459,20 @@ const AdminDashboard = () => {
               </AreaChart>
             </ResponsiveContainer>
             {chartData.every(d => d.trips === 0 && d.fuel === 0) && (
-              <p className="text-center text-gray-400 text-sm mt-4">No trip data available. Create trips to see trends.</p>
+              <p className="text-center text-slate-400 text-sm mt-4">No trip data available. Create trips to see trends.</p>
             )}
           </CardContent>
         </Card>
 
         {/* Budget Utilization Pie Chart */}
-        <Card className="overflow-hidden">
+        <Card className="overflow-hidden dark:bg-slate-800/80 dark:border-slate-700">
           <CardHeader className="pb-0">
             <div className="flex items-center justify-between">
               <div>
-                <CardTitle className="text-lg font-semibold">Budget Utilization</CardTitle>
-                <p className="text-sm text-gray-500 mt-1">Department budget allocation (Real data)</p>
+                <CardTitle className="text-lg font-semibold dark:text-white">Budget Utilization</CardTitle>
+                <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">Department budget allocation (Real data)</p>
               </div>
-              <Badge variant="outline" className="text-blue-600">Current Period</Badge>
+              <Badge variant="outline" className="text-blue-600 dark:text-blue-400 dark:border-slate-600">Current Period</Badge>
             </div>
           </CardHeader>
           <CardContent className="pt-4">
@@ -510,17 +505,17 @@ const AdminDashboard = () => {
                   {budgetChartData.map((item, index) => (
                     <div key={index} className="flex items-center gap-2">
                       <div className="w-3 h-3 rounded-full" style={{ backgroundColor: COLORS[index] }} />
-                      <span className="text-xs text-gray-600">{item.name}</span>
-                      <span className="text-xs font-semibold">₱{(item.allocated/1000).toFixed(0)}K</span>
+                      <span className="text-xs text-slate-600 dark:text-slate-400">{item.name}</span>
+                      <span className="text-xs font-semibold dark:text-white">₱{(item.allocated/1000).toFixed(0)}K</span>
                     </div>
                   ))}
                 </div>
               </>
             ) : (
               <div className="text-center py-12">
-                <Wallet className="h-12 w-12 text-gray-300 mx-auto mb-3" />
-                <p className="text-gray-500">No budget data available</p>
-                <p className="text-sm text-gray-400 mt-1">Add budget policies to see utilization</p>
+                <Wallet className="h-12 w-12 text-slate-300 dark:text-slate-600 mx-auto mb-3" />
+                <p className="text-slate-500 dark:text-slate-400">No budget data available</p>
+                <p className="text-sm text-slate-400 dark:text-slate-500 mt-1">Add budget policies to see utilization</p>
               </div>
             )}
           </CardContent>
@@ -529,21 +524,21 @@ const AdminDashboard = () => {
 
       {/* Daily Trip Trends */}
       <div>
-        <Card>
+        <Card className="dark:bg-slate-800/80 dark:border-slate-700">
           <CardHeader className="pb-0">
             <div className="flex items-center justify-between">
               <div>
-                <CardTitle className="text-lg font-semibold">Daily Trip Performance</CardTitle>
-                <p className="text-sm text-gray-500 mt-1">Real data from your trip tickets</p>
+                <CardTitle className="text-lg font-semibold dark:text-white">Daily Trip Performance</CardTitle>
+                <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">Real data from your trip tickets</p>
               </div>
             </div>
           </CardHeader>
           <CardContent className="pt-4">
             <ResponsiveContainer width="100%" height={300}>
               <BarChart data={tripTrendData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                <XAxis dataKey="day" stroke="#9ca3af" />
-                <YAxis stroke="#9ca3af" />
+                <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" className="dark:stroke-slate-700" />
+                <XAxis dataKey="day" stroke="#9ca3af" className="dark:stroke-slate-500" />
+                <YAxis stroke="#9ca3af" className="dark:stroke-slate-500" />
                 <Tooltip 
                   contentStyle={{ backgroundColor: 'white', borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
                 />
@@ -554,7 +549,7 @@ const AdminDashboard = () => {
               </BarChart>
             </ResponsiveContainer>
             {tripTrendData.every(d => d.completed === 0 && d.pending === 0 && d.inTransit === 0) && (
-              <p className="text-center text-gray-400 text-sm mt-4">No trip data available yet</p>
+              <p className="text-center text-slate-400 text-sm mt-4">No trip data available yet</p>
             )}
           </CardContent>
         </Card>
@@ -563,41 +558,41 @@ const AdminDashboard = () => {
       {/* Recent Activity & Quick Actions */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Recent Activity */}
-        <Card className="lg:col-span-2">
+        <Card className="lg:col-span-2 dark:bg-slate-800/80 dark:border-slate-700">
           <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle className="text-lg font-semibold">Recent Activity</CardTitle>
+            <CardTitle className="text-lg font-semibold dark:text-white">Recent Activity</CardTitle>
             <button 
               onClick={() => navigate('/admin/event-logs')}
-              className="text-sm text-blue-600 hover:text-blue-700 font-medium"
+              className="text-sm text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 font-medium"
             >
               View All →
             </button>
           </CardHeader>
           <CardContent>
             {recentActivities.length === 0 ? (
-              <div className="text-center py-8 text-gray-500">
-                <Activity className="h-12 w-12 mx-auto mb-3 text-gray-300" />
+              <div className="text-center py-8 text-slate-500 dark:text-slate-400">
+                <Activity className="h-12 w-12 mx-auto mb-3 text-slate-300 dark:text-slate-600" />
                 <p>No recent activity to display</p>
               </div>
             ) : (
               <div className="space-y-4">
                 {recentActivities.map((activity, index) => (
-                  <div key={activity.id} className="flex items-center justify-between py-3 border-b last:border-0 transition-all hover:bg-gray-50 rounded-lg px-2">
+                  <div key={activity.id} className="flex items-center justify-between py-3 border-b dark:border-slate-700 last:border-0 transition-all hover:bg-slate-50 dark:hover:bg-slate-700/50 rounded-lg px-2">
                     <div className="flex items-center space-x-3">
                       <div className={`p-2 rounded-full ${
-                        activity.type === 'success' ? 'bg-green-100' :
-                        activity.type === 'warning' ? 'bg-yellow-100' : 'bg-blue-100'
+                        activity.type === 'success' ? 'bg-emerald-100 dark:bg-emerald-900/30' :
+                        activity.type === 'warning' ? 'bg-amber-100 dark:bg-amber-900/30' : 'bg-blue-100 dark:bg-blue-900/30'
                       }`}>
-                        {activity.type === 'success' && <Activity className="h-4 w-4 text-green-600" />}
-                        {activity.type === 'info' && <Activity className="h-4 w-4 text-blue-600" />}
-                        {activity.type === 'warning' && <Activity className="h-4 w-4 text-yellow-600" />}
+                        {activity.type === 'success' && <Activity className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />}
+                        {activity.type === 'info' && <Activity className="h-4 w-4 text-blue-600 dark:text-blue-400" />}
+                        {activity.type === 'warning' && <Activity className="h-4 w-4 text-amber-600 dark:text-amber-400" />}
                       </div>
                       <div>
-                        <p className="text-sm font-medium text-gray-900">{activity.action}</p>
-                        <p className="text-xs text-gray-500">by {activity.user}</p>
+                        <p className="text-sm font-medium text-slate-900 dark:text-white">{activity.action}</p>
+                        <p className="text-xs text-slate-500 dark:text-slate-400">by {activity.user}</p>
                       </div>
                     </div>
-                    <span className="text-xs text-gray-400">{activity.time}</span>
+                    <span className="text-xs text-slate-400 dark:text-slate-500">{activity.time}</span>
                   </div>
                 ))}
               </div>
@@ -606,20 +601,20 @@ const AdminDashboard = () => {
         </Card>
 
         {/* Quick Actions */}
-        <Card>
+        <Card className="dark:bg-slate-800/80 dark:border-slate-700">
           <CardHeader>
-            <CardTitle className="text-lg font-semibold">Quick Actions</CardTitle>
-            <p className="text-sm text-gray-500 mt-1">Common tasks and shortcuts</p>
+            <CardTitle className="text-lg font-semibold dark:text-white">Quick Actions</CardTitle>
+            <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">Common tasks and shortcuts</p>
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-2 gap-3">
               {[
-                { title: 'Add Department', icon: Building2, color: 'bg-blue-50 text-blue-700 hover:bg-blue-100', href: '/admin/departments' },
-                { title: 'Register Vehicle', icon: Car, color: 'bg-green-50 text-green-700 hover:bg-green-100', href: '/admin/vehicles' },
-                { title: 'Create User', icon: UsersIcon, color: 'bg-purple-50 text-purple-700 hover:bg-purple-100', href: '/admin/users' },
-                { title: 'Set Budget', icon: Wallet, color: 'bg-orange-50 text-orange-700 hover:bg-orange-100', href: '/admin/budget-policies' },
-                { title: 'View Reports', icon: FileText, color: 'bg-indigo-50 text-indigo-700 hover:bg-indigo-100', href: '/admin/reports' },
-                { title: 'Settings', icon: Settings, color: 'bg-gray-50 text-gray-700 hover:bg-gray-100', href: '/admin/settings' },
+                { title: 'Add Department', icon: Building2, color: 'bg-blue-50 text-blue-700 hover:bg-blue-100 dark:bg-blue-900/20 dark:text-blue-400 dark:hover:bg-blue-900/30', href: '/admin/departments' },
+                { title: 'Register Vehicle', icon: Car, color: 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100 dark:bg-emerald-900/20 dark:text-emerald-400 dark:hover:bg-emerald-900/30', href: '/admin/vehicles' },
+                { title: 'Create User', icon: UsersIcon, color: 'bg-purple-50 text-purple-700 hover:bg-purple-100 dark:bg-purple-900/20 dark:text-purple-400 dark:hover:bg-purple-900/30', href: '/admin/users' },
+                { title: 'Set Budget', icon: Wallet, color: 'bg-amber-50 text-amber-700 hover:bg-amber-100 dark:bg-amber-900/20 dark:text-amber-400 dark:hover:bg-amber-900/30', href: '/admin/budget-policies' },
+                { title: 'View Reports', icon: FileText, color: 'bg-indigo-50 text-indigo-700 hover:bg-indigo-100 dark:bg-indigo-900/20 dark:text-indigo-400 dark:hover:bg-indigo-900/30', href: '/admin/reports' },
+                { title: 'Settings', icon: Settings, color: 'bg-slate-50 text-slate-700 hover:bg-slate-100 dark:bg-slate-800 dark:text-slate-400 dark:hover:bg-slate-700', href: '/admin/settings' },
               ].map((action, index) => (
                 <button
                   key={index}
@@ -637,25 +632,25 @@ const AdminDashboard = () => {
 
       {/* System Information Footer */}
       <div>
-        <Card>
+        <Card className="dark:bg-slate-800/80 dark:border-slate-700">
           <CardContent className="py-4">
             <div className="flex flex-wrap items-center justify-between gap-4">
               <div className="flex items-center gap-6">
                 <div className="flex items-center gap-2">
-                  <span className="h-2 w-2 rounded-full bg-green-500 animate-pulse" />
-                  <span className="text-sm text-gray-600">Data Source: Database</span>
+                  <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+                  <span className="text-sm text-slate-600 dark:text-slate-400">Data Source: Database</span>
                 </div>
                 <div className="flex items-center gap-2">
-                  <Zap className="h-4 w-4 text-yellow-500" />
-                  <span className="text-sm text-gray-600">Live Data</span>
+                  <Zap className="h-4 w-4 text-amber-500" />
+                  <span className="text-sm text-slate-600 dark:text-slate-400">Live Data</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <CalendarDays className="h-4 w-4 text-blue-500" />
-                  <span className="text-sm text-gray-600">Auto-refresh on load</span>
+                  <span className="text-sm text-slate-600 dark:text-slate-400">Auto-refresh on load</span>
                 </div>
               </div>
-              <div className="text-sm text-gray-400">
-                FCMS v2.0.0 • Data fetched from production database
+              <div className="text-sm text-slate-400 dark:text-slate-500">
+                FCMS v2.0.0 
               </div>
             </div>
           </CardContent>

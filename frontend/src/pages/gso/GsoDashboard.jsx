@@ -24,7 +24,9 @@ import {
   Building2,
   FileCheck,
   TrendingUp,
-  ChevronRight
+  ChevronRight,
+  ChevronDown,
+  ChevronUp
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -71,14 +73,12 @@ const GsoDashboard = () => {
   const [activeTab, setActiveTab] = useState('pending');
   const [searchQuery, setSearchQuery] = useState('');
 
-  // Department name for display (clean, no PNP)
   const departmentName = user?.department_name?.replace('Philippine National Police - ', '').replace('PNP - ', '') || 'General Services Office';
 
   useEffect(() => {
     fetchAllData();
   }, []);
 
-  // Filter tickets when search changes
   useEffect(() => {
     filterTickets();
   }, [searchQuery, pendingTickets, forwardableTickets, forwardedTickets]);
@@ -284,7 +284,7 @@ const GsoDashboard = () => {
   const getStatusBadge = (status) => {
     const config = {
       pending_gso_review: { color: 'bg-yellow-500', label: 'Pending GSO Review', icon: Clock },
-      pending_mayors_office: { color: 'bg-green-500', label: 'Ready for MO', icon: Send },
+      pending_mayors_office: { color: 'bg-emerald-500', label: 'Ready for MO', icon: Send },
       with_mayors_office: { color: 'bg-blue-500', label: 'With Mayor\'s Office', icon: Building2 },
       funds_issued: { color: 'bg-purple-500', label: 'Funds Issued', icon: CheckCircle },
       in_transit: { color: 'bg-indigo-500', label: 'In Transit', icon: Truck },
@@ -292,10 +292,10 @@ const GsoDashboard = () => {
       returned_for_revision: { color: 'bg-red-500', label: 'Returned', icon: XCircle },
       rejected: { color: 'bg-red-600', label: 'Rejected', icon: XCircle },
     };
-    const c = config[status] || { color: 'bg-gray-500', label: status?.replace(/_/g, ' ') || 'Unknown', icon: AlertCircle };
+    const c = config[status] || { color: 'bg-slate-500', label: status?.replace(/_/g, ' ') || 'Unknown', icon: AlertCircle };
     const IconComponent = c.icon;
     return (
-      <Badge className={`${c.color} text-white flex items-center gap-1 px-2 py-1`}>
+      <Badge className={`${c.color} text-white flex items-center gap-1 px-2.5 py-1.5 rounded-lg`}>
         <IconComponent className="h-3 w-3" />
         {c.label}
       </Badge>
@@ -304,27 +304,34 @@ const GsoDashboard = () => {
 
   const formatDate = (dateString) => {
     if (!dateString) return 'N/A';
-    return new Date(dateString).toLocaleDateString();
+    return new Date(dateString).toLocaleDateString('en-PH', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric'
+    });
   };
 
   // Ticket Table Component
   const TicketTable = ({ tickets, showForwardButton = false, onForward, onView, onVerify, onReject, isLoading }) => {
     if (isLoading) {
       return (
-        <div className="flex justify-center py-12">
-          <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+        <div className="flex justify-center py-16">
+          <div className="text-center">
+            <Loader2 className="h-8 w-8 animate-spin text-blue-600 dark:text-blue-400 mx-auto mb-3" />
+            <p className="text-slate-500 dark:text-slate-400 text-sm">Loading tickets...</p>
+          </div>
         </div>
       );
     }
     
     if (tickets.length === 0) {
       return (
-        <div className="text-center py-12">
-          <div className="h-16 w-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-            <CheckCircle className="h-8 w-8 text-gray-400" />
+        <div className="text-center py-16">
+          <div className="w-16 h-16 bg-slate-100 dark:bg-slate-800 rounded-2xl flex items-center justify-center mx-auto mb-4">
+            <CheckCircle className="h-8 w-8 text-slate-400 dark:text-slate-500" />
           </div>
-          <p className="text-gray-500 font-medium">No tickets found</p>
-          <p className="text-sm text-gray-400 mt-1">Tickets will appear here once available</p>
+          <p className="text-slate-600 dark:text-slate-400 font-medium">No tickets found</p>
+          <p className="text-sm text-slate-400 dark:text-slate-500 mt-1">Tickets will appear here once available</p>
         </div>
       );
     }
@@ -333,39 +340,39 @@ const GsoDashboard = () => {
       <div className="overflow-x-auto">
         <Table>
           <TableHeader>
-            <TableRow className="bg-gray-50">
-              <TableHead className="font-semibold">Ticket #</TableHead>
-              <TableHead className="font-semibold">Date</TableHead>
-              <TableHead className="font-semibold">Destination</TableHead>
-              <TableHead className="font-semibold">Department</TableHead>
-              <TableHead className="font-semibold">Status</TableHead>
-              <TableHead className="font-semibold text-right">Actions</TableHead>
+            <TableRow className="bg-slate-50 dark:bg-slate-900/50 border-b dark:border-slate-700">
+              <TableHead className="font-semibold text-slate-600 dark:text-slate-400">Ticket #</TableHead>
+              <TableHead className="font-semibold text-slate-600 dark:text-slate-400">Date</TableHead>
+              <TableHead className="font-semibold text-slate-600 dark:text-slate-400">Destination</TableHead>
+              <TableHead className="font-semibold text-slate-600 dark:text-slate-400">Department</TableHead>
+              <TableHead className="font-semibold text-slate-600 dark:text-slate-400">Status</TableHead>
+              <TableHead className="font-semibold text-slate-600 dark:text-slate-400 text-right">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {tickets.map((ticket) => (
-              <TableRow key={ticket.id || ticket.trip_ticket_id} className="hover:bg-gray-50 transition-colors">
+            {tickets.map((ticket, index) => (
+              <TableRow key={ticket.id || ticket.trip_ticket_id} className="hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors animate-fade-in" style={{ animationDelay: `${index * 30}ms` }}>
                 <TableCell className="font-medium">
-                  <span className="font-mono text-sm">
+                  <span className="font-mono text-sm font-semibold text-slate-800 dark:text-white">
                     {ticket.ticket_number || ticket.trip_ticket_number}
                   </span>
                 </TableCell>
                 <TableCell>
-                  <div className="flex items-center gap-1">
-                    <Calendar className="h-3 w-3 text-gray-400" />
-                    <span className="text-sm">{formatDate(ticket.trip_date)}</span>
+                  <div className="flex items-center gap-1.5">
+                    <Calendar className="h-3.5 w-3.5 text-slate-400" />
+                    <span className="text-sm text-slate-600 dark:text-slate-400">{formatDate(ticket.trip_date)}</span>
                   </div>
                 </TableCell>
                 <TableCell>
-                  <div className="flex items-center gap-1">
-                    <MapPin className="h-3 w-3 text-gray-400" />
-                    <span className="text-sm truncate max-w-[200px]">{ticket.destination}</span>
+                  <div className="flex items-center gap-1.5">
+                    <MapPin className="h-3.5 w-3.5 text-slate-400" />
+                    <span className="text-sm text-slate-600 dark:text-slate-400 truncate max-w-[200px]">{ticket.destination}</span>
                   </div>
                 </TableCell>
                 <TableCell>
-                  <div className="flex items-center gap-1">
-                    <Building2 className="h-3 w-3 text-gray-400" />
-                    <span className="text-sm">{ticket.department_name || 'N/A'}</span>
+                  <div className="flex items-center gap-1.5">
+                    <Building2 className="h-3.5 w-3.5 text-slate-400" />
+                    <span className="text-sm text-slate-600 dark:text-slate-400">{ticket.department_name || 'N/A'}</span>
                   </div>
                 </TableCell>
                 <TableCell>{getStatusBadge(ticket.status)}</TableCell>
@@ -375,18 +382,19 @@ const GsoDashboard = () => {
                       variant="ghost"
                       size="sm"
                       onClick={() => onView(ticket.id || ticket.trip_ticket_id)}
-                      className="text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                      className="text-blue-600 hover:text-blue-700 hover:bg-blue-50 dark:text-blue-400 dark:hover:text-blue-300 dark:hover:bg-blue-950/30 h-8 w-8 p-0"
+                      title="View Details"
                     >
                       <Eye className="h-4 w-4" />
                     </Button>
                     {showForwardButton && (
                       <Button
                         size="sm"
-                        className="bg-blue-600 hover:bg-blue-700"
+                        className="bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm h-8 px-3"
                         onClick={() => onForward(ticket.id || ticket.trip_ticket_id)}
                         disabled={submitting}
                       >
-                        <Send className="h-4 w-4 mr-1" />
+                        <Send className="h-3.5 w-3.5 mr-1" />
                         Forward
                       </Button>
                     )}
@@ -394,19 +402,19 @@ const GsoDashboard = () => {
                       <>
                         <Button
                           size="sm"
-                          className="bg-green-600 hover:bg-green-700"
+                          className="bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm h-8 px-3"
                           onClick={() => onVerify(ticket)}
                         >
-                          <Check className="h-4 w-4 mr-1" />
+                          <Check className="h-3.5 w-3.5 mr-1" />
                           Verify
                         </Button>
                         <Button
                           size="sm"
                           variant="outline"
-                          className="text-red-600 border-red-300 hover:bg-red-50"
+                          className="text-red-600 border-red-300 hover:bg-red-50 dark:text-red-400 dark:border-red-800 dark:hover:bg-red-950/30 h-8 px-3"
                           onClick={() => onReject(ticket)}
                         >
-                          <X className="h-4 w-4 mr-1" />
+                          <X className="h-3.5 w-3.5 mr-1" />
                           Reject
                         </Button>
                       </>
@@ -425,32 +433,32 @@ const GsoDashboard = () => {
     return (
       <div className="flex items-center justify-center h-96">
         <div className="text-center">
-          <Loader2 className="h-12 w-12 animate-spin text-blue-600 mx-auto mb-4" />
-          <p className="text-gray-500">Loading dashboard...</p>
+          <Loader2 className="h-12 w-12 animate-spin text-blue-600 dark:text-blue-400 mx-auto mb-4" />
+          <p className="text-slate-500 dark:text-slate-400">Loading dashboard...</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="space-y-6 p-6 bg-gradient-to-br from-gray-50 to-gray-100 min-h-screen">
-      {/* Header Section */}
-      <div className="relative overflow-hidden bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 rounded-2xl p-6 text-white shadow-xl">
+    <div className="space-y-6 p-6 bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-900 dark:to-slate-800 min-h-screen">
+      {/* Header Section - Premium Gradient */}
+      <div className="relative overflow-hidden bg-gradient-to-r from-slate-900 via-slate-800 to-blue-900 rounded-2xl p-6 text-white shadow-xl">
         <div className="absolute top-0 right-0 w-64 h-64 bg-blue-500/20 rounded-full blur-3xl" />
-        <div className="absolute bottom-0 left-0 w-64 h-64 bg-green-500/20 rounded-full blur-3xl" />
+        <div className="absolute bottom-0 left-0 w-64 h-64 bg-emerald-500/20 rounded-full blur-3xl" />
         
         <div className="relative z-10 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
           <div>
-            <div className="flex items-center gap-2 mb-2">
-              <Badge className="bg-green-500/20 text-green-300 border-green-500/30">
-                <span className="h-1.5 w-1.5 rounded-full bg-green-400 mr-1 animate-pulse" />
+            <div className="flex items-center gap-2 mb-3">
+              <Badge className="bg-emerald-500/20 text-emerald-300 border-emerald-500/30 rounded-full px-3 py-1">
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 mr-1.5 animate-pulse" />
                 GSO Staff
               </Badge>
-              <Badge className="bg-blue-500/20 text-blue-300 border-blue-500/30">
+              <Badge className="bg-blue-500/20 text-blue-300 border-blue-500/30 rounded-full px-3 py-1">
                 {departmentName}
               </Badge>
             </div>
-            <h1 className="text-3xl font-bold">GSO Dashboard</h1>
+            <h1 className="text-3xl font-bold bg-gradient-to-r from-white to-slate-300 bg-clip-text text-transparent">GSO Dashboard</h1>
             <p className="text-slate-300 mt-1">
               Review and verify trip tickets forwarded by Department Heads
             </p>
@@ -460,7 +468,7 @@ const GsoDashboard = () => {
               variant="outline" 
               onClick={() => fetchAllData(true)} 
               disabled={refreshing}
-              className="bg-white/10 border-white/20 text-white hover:bg-white/20"
+              className="bg-white/10 border-white/20 text-white hover:bg-white/20 rounded-xl"
             >
               {refreshing ? (
                 <Loader2 className="h-4 w-4 animate-spin mr-2" />
@@ -475,61 +483,61 @@ const GsoDashboard = () => {
 
       {/* Stats Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
-        <Card className="hover:shadow-lg transition-all duration-300 hover:scale-105">
+        <Card className="hover:shadow-lg transition-all duration-300 hover:-translate-y-1 dark:bg-slate-800/80 dark:border-slate-700">
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-gray-500 text-sm font-medium">Pending Review</p>
-                <p className="text-3xl font-bold text-yellow-600 mt-1">{pendingTickets.length}</p>
-                <p className="text-xs text-gray-400 mt-1">Awaiting verification</p>
+                <p className="text-slate-500 dark:text-slate-400 text-sm font-medium">Pending Review</p>
+                <p className="text-3xl font-bold text-yellow-600 dark:text-yellow-400 mt-1">{pendingTickets.length}</p>
+                <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">Awaiting verification</p>
               </div>
-              <div className="h-12 w-12 bg-yellow-100 rounded-xl flex items-center justify-center">
-                <Clock className="h-6 w-6 text-yellow-600" />
+              <div className="h-12 w-12 bg-yellow-100 dark:bg-yellow-950/50 rounded-2xl flex items-center justify-center">
+                <Clock className="h-6 w-6 text-yellow-600 dark:text-yellow-400" />
               </div>
             </div>
           </CardContent>
         </Card>
         
-        <Card className="hover:shadow-lg transition-all duration-300 hover:scale-105">
+        <Card className="hover:shadow-lg transition-all duration-300 hover:-translate-y-1 dark:bg-slate-800/80 dark:border-slate-700">
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-gray-500 text-sm font-medium">Ready to Forward</p>
-                <p className="text-3xl font-bold text-green-600 mt-1">{forwardableTickets.length}</p>
-                <p className="text-xs text-gray-400 mt-1">Verified tickets</p>
+                <p className="text-slate-500 dark:text-slate-400 text-sm font-medium">Ready to Forward</p>
+                <p className="text-3xl font-bold text-emerald-600 dark:text-emerald-400 mt-1">{forwardableTickets.length}</p>
+                <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">Verified tickets</p>
               </div>
-              <div className="h-12 w-12 bg-green-100 rounded-xl flex items-center justify-center">
-                <FileCheck className="h-6 w-6 text-green-600" />
+              <div className="h-12 w-12 bg-emerald-100 dark:bg-emerald-950/50 rounded-2xl flex items-center justify-center">
+                <FileCheck className="h-6 w-6 text-emerald-600 dark:text-emerald-400" />
               </div>
             </div>
           </CardContent>
         </Card>
         
-        <Card className="hover:shadow-lg transition-all duration-300 hover:scale-105">
+        <Card className="hover:shadow-lg transition-all duration-300 hover:-translate-y-1 dark:bg-slate-800/80 dark:border-slate-700">
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-gray-500 text-sm font-medium">With Mayor's Office</p>
-                <p className="text-3xl font-bold text-blue-600 mt-1">{withMayorsOffice}</p>
-                <p className="text-xs text-gray-400 mt-1">Awaiting fund release</p>
+                <p className="text-slate-500 dark:text-slate-400 text-sm font-medium">With Mayor's Office</p>
+                <p className="text-3xl font-bold text-blue-600 dark:text-blue-400 mt-1">{withMayorsOffice}</p>
+                <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">Awaiting fund release</p>
               </div>
-              <div className="h-12 w-12 bg-blue-100 rounded-xl flex items-center justify-center">
-                <Send className="h-6 w-6 text-blue-600" />
+              <div className="h-12 w-12 bg-blue-100 dark:bg-blue-950/50 rounded-2xl flex items-center justify-center">
+                <Send className="h-6 w-6 text-blue-600 dark:text-blue-400" />
               </div>
             </div>
           </CardContent>
         </Card>
         
-        <Card className="hover:shadow-lg transition-all duration-300 hover:scale-105">
+        <Card className="hover:shadow-lg transition-all duration-300 hover:-translate-y-1 dark:bg-slate-800/80 dark:border-slate-700">
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-gray-500 text-sm font-medium">Returned</p>
-                <p className="text-3xl font-bold text-red-600 mt-1">{returnedCount}</p>
-                <p className="text-xs text-gray-400 mt-1">Needs revision</p>
+                <p className="text-slate-500 dark:text-slate-400 text-sm font-medium">Returned</p>
+                <p className="text-3xl font-bold text-red-600 dark:text-red-400 mt-1">{returnedCount}</p>
+                <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">Needs revision</p>
               </div>
-              <div className="h-12 w-12 bg-red-100 rounded-xl flex items-center justify-center">
-                <XCircle className="h-6 w-6 text-red-600" />
+              <div className="h-12 w-12 bg-red-100 dark:bg-red-950/50 rounded-2xl flex items-center justify-center">
+                <XCircle className="h-6 w-6 text-red-600 dark:text-red-400" />
               </div>
             </div>
           </CardContent>
@@ -538,27 +546,27 @@ const GsoDashboard = () => {
 
       {/* Search Bar */}
       <div className="relative">
-        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-400" />
         <Input
           placeholder="Search by ticket number, destination, or department..."
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
-          className="pl-9 bg-white"
+          className="pl-9 bg-white dark:bg-slate-800 dark:border-slate-700 rounded-xl"
         />
       </div>
 
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid w-full max-w-md grid-cols-3 bg-gray-100 p-1 rounded-lg">
-          <TabsTrigger value="pending" className="rounded-md data-[state=active]:bg-white data-[state=active]:shadow-sm">
+        <TabsList className="grid w-full max-w-md grid-cols-3 bg-slate-100 dark:bg-slate-800 p-1 rounded-xl">
+          <TabsTrigger value="pending" className="rounded-lg data-[state=active]:bg-white dark:data-[state=active]:bg-slate-900 data-[state=active]:shadow-sm">
             <Clock className="h-4 w-4 mr-2" />
             Pending ({pendingTickets.length})
           </TabsTrigger>
-          <TabsTrigger value="ready" className="rounded-md data-[state=active]:bg-white data-[state=active]:shadow-sm">
+          <TabsTrigger value="ready" className="rounded-lg data-[state=active]:bg-white dark:data-[state=active]:bg-slate-900 data-[state=active]:shadow-sm">
             <Send className="h-4 w-4 mr-2" />
             Ready ({forwardableTickets.length})
           </TabsTrigger>
-          <TabsTrigger value="forwarded" className="rounded-md data-[state=active]:bg-white data-[state=active]:shadow-sm">
+          <TabsTrigger value="forwarded" className="rounded-lg data-[state=active]:bg-white dark:data-[state=active]:bg-slate-900 data-[state=active]:shadow-sm">
             <Printer className="h-4 w-4 mr-2" />
             Forwarded ({forwardedTickets.length})
           </TabsTrigger>
@@ -566,13 +574,13 @@ const GsoDashboard = () => {
 
         {/* Pending Review Tab */}
         <TabsContent value="pending" className="space-y-4 mt-6">
-          <Card>
+          <Card className="dark:bg-slate-800/80 dark:border-slate-700">
             <CardHeader>
-              <CardTitle className="flex items-center gap-2">
+              <CardTitle className="flex items-center gap-2 text-slate-800 dark:text-white">
                 <Clock className="h-5 w-5 text-yellow-500" />
                 Trip Tickets Awaiting Review
               </CardTitle>
-              <CardDescription>
+              <CardDescription className="dark:text-slate-400">
                 Verify the details of each trip ticket before forwarding
               </CardDescription>
             </CardHeader>
@@ -596,13 +604,13 @@ const GsoDashboard = () => {
 
         {/* Ready to Forward Tab */}
         <TabsContent value="ready" className="space-y-4 mt-6">
-          <Card>
+          <Card className="dark:bg-slate-800/80 dark:border-slate-700">
             <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Send className="h-5 w-5 text-green-500" />
+              <CardTitle className="flex items-center gap-2 text-slate-800 dark:text-white">
+                <Send className="h-5 w-5 text-emerald-500" />
                 Ready to Forward to Mayor's Office
               </CardTitle>
-              <CardDescription>
+              <CardDescription className="dark:text-slate-400">
                 These tickets are verified and ready for fund release
               </CardDescription>
             </CardHeader>
@@ -620,13 +628,13 @@ const GsoDashboard = () => {
 
         {/* Forwarded Tab */}
         <TabsContent value="forwarded" className="space-y-4 mt-6">
-          <Card>
+          <Card className="dark:bg-slate-800/80 dark:border-slate-700">
             <CardHeader>
-              <CardTitle className="flex items-center gap-2">
+              <CardTitle className="flex items-center gap-2 text-slate-800 dark:text-white">
                 <Printer className="h-5 w-5 text-blue-500" />
                 Forwarded to Mayor's Office
               </CardTitle>
-              <CardDescription>
+              <CardDescription className="dark:text-slate-400">
                 Tickets awaiting fund release or in progress
               </CardDescription>
             </CardHeader>
@@ -643,31 +651,31 @@ const GsoDashboard = () => {
 
       {/* Approve Dialog */}
       <Dialog open={showApproveDialog} onOpenChange={setShowApproveDialog}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-md dark:bg-slate-800 dark:border-slate-700">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <FileCheck className="h-5 w-5 text-green-600" />
+            <DialogTitle className="flex items-center gap-2 text-slate-800 dark:text-white">
+              <FileCheck className="h-5 w-5 text-emerald-600" />
               Verify Trip Ticket
             </DialogTitle>
-            <DialogDescription>
+            <DialogDescription className="dark:text-slate-400">
               Are you sure you want to verify this trip ticket? 
               It will be marked as verified and ready for Mayor's Office approval.
             </DialogDescription>
           </DialogHeader>
-          <div className="bg-yellow-50 rounded-lg p-4 space-y-2">
-            <p className="text-sm font-medium text-yellow-800">Ticket Details</p>
+          <div className="bg-yellow-50 dark:bg-yellow-950/30 rounded-xl p-4 space-y-2 border border-yellow-200 dark:border-yellow-800">
+            <p className="text-sm font-medium text-yellow-800 dark:text-yellow-400">Ticket Details</p>
             <div className="space-y-1 text-sm">
-              <p><span className="text-gray-600">Number:</span> <span className="font-mono">{selectedTicket?.ticket_number || selectedTicket?.trip_ticket_number}</span></p>
-              <p><span className="text-gray-600">Destination:</span> {selectedTicket?.destination}</p>
-              <p><span className="text-gray-600">Department:</span> {selectedTicket?.department_name}</p>
-              <p><span className="text-gray-600">Est. Fuel:</span> {selectedTicket?.estimated_fuel_liters || 'N/A'} L</p>
+              <p><span className="text-slate-600 dark:text-slate-400">Number:</span> <span className="font-mono font-semibold dark:text-white">{selectedTicket?.ticket_number || selectedTicket?.trip_ticket_number}</span></p>
+              <p><span className="text-slate-600 dark:text-slate-400">Destination:</span> <span className="dark:text-white">{selectedTicket?.destination}</span></p>
+              <p><span className="text-slate-600 dark:text-slate-400">Department:</span> <span className="dark:text-white">{selectedTicket?.department_name}</span></p>
+              <p><span className="text-slate-600 dark:text-slate-400">Est. Fuel:</span> <span className="dark:text-white">{selectedTicket?.estimated_fuel_liters || 'N/A'} L</span></p>
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowApproveDialog(false)}>
+            <Button variant="outline" onClick={() => setShowApproveDialog(false)} className="dark:border-slate-700 dark:text-slate-300">
               Cancel
             </Button>
-            <Button className="bg-green-600 hover:bg-green-700" onClick={handleApprove} disabled={submitting}>
+            <Button className="bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm" onClick={handleApprove} disabled={submitting}>
               {submitting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Check className="h-4 w-4 mr-2" />}
               Verify Ticket
             </Button>
@@ -677,40 +685,40 @@ const GsoDashboard = () => {
 
       {/* Reject Dialog */}
       <Dialog open={showRejectDialog} onOpenChange={setShowRejectDialog}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-md dark:bg-slate-800 dark:border-slate-700">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
+            <DialogTitle className="flex items-center gap-2 text-slate-800 dark:text-white">
               <XCircle className="h-5 w-5 text-red-600" />
               Reject Trip Ticket
             </DialogTitle>
-            <DialogDescription>
+            <DialogDescription className="dark:text-slate-400">
               Please provide a reason for rejection. This will be sent back to the department.
             </DialogDescription>
           </DialogHeader>
-          <div className="bg-yellow-50 rounded-lg p-4 space-y-2">
-            <p className="text-sm font-medium text-yellow-800">Ticket Details</p>
+          <div className="bg-yellow-50 dark:bg-yellow-950/30 rounded-xl p-4 space-y-2 border border-yellow-200 dark:border-yellow-800">
+            <p className="text-sm font-medium text-yellow-800 dark:text-yellow-400">Ticket Details</p>
             <div className="space-y-1 text-sm">
-              <p><span className="text-gray-600">Number:</span> <span className="font-mono">{selectedTicket?.ticket_number || selectedTicket?.trip_ticket_number}</span></p>
-              <p><span className="text-gray-600">Destination:</span> {selectedTicket?.destination}</p>
-              <p><span className="text-gray-600">Department:</span> {selectedTicket?.department_name}</p>
+              <p><span className="text-slate-600 dark:text-slate-400">Number:</span> <span className="font-mono font-semibold dark:text-white">{selectedTicket?.ticket_number || selectedTicket?.trip_ticket_number}</span></p>
+              <p><span className="text-slate-600 dark:text-slate-400">Destination:</span> <span className="dark:text-white">{selectedTicket?.destination}</span></p>
+              <p><span className="text-slate-600 dark:text-slate-400">Department:</span> <span className="dark:text-white">{selectedTicket?.department_name}</span></p>
             </div>
           </div>
           <div className="space-y-2">
-            <label className="text-sm font-medium">Rejection Reason</label>
+            <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Rejection Reason</label>
             <Textarea
               placeholder="Enter rejection reason..."
               value={rejectionNote}
               onChange={(e) => setRejectionNote(e.target.value)}
               rows={4}
-              className="resize-none"
+              className="resize-none dark:bg-slate-900 dark:border-slate-700 dark:text-white"
             />
-            <p className="text-xs text-gray-500">This reason will be visible to the department staff</p>
+            <p className="text-xs text-slate-500 dark:text-slate-400">This reason will be visible to the department staff</p>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowRejectDialog(false)}>
+            <Button variant="outline" onClick={() => setShowRejectDialog(false)} className="dark:border-slate-700 dark:text-slate-300">
               Cancel
             </Button>
-            <Button className="bg-red-600 hover:bg-red-700" onClick={handleReject} disabled={submitting}>
+            <Button className="bg-red-600 hover:bg-red-700 text-white shadow-sm" onClick={handleReject} disabled={submitting}>
               {submitting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <X className="h-4 w-4 mr-2" />}
               Reject Ticket
             </Button>

@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { CheckCircle, Send, RefreshCw, Loader2, Eye, Calendar, MapPin, Printer } from 'lucide-react';
+import { CheckCircle, Send, RefreshCw, Loader2, Eye, Calendar, MapPin, Printer, ChevronDown, ChevronUp, Filter, X } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -135,8 +135,8 @@ const GasSlipViewModal = ({ isOpen, onClose, ticket }) => {
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-[550px] p-0 overflow-hidden rounded-none">
-        <div className="bg-white">
+      <DialogContent className="max-w-[550px] p-0 overflow-hidden rounded-2xl dark:bg-slate-800">
+        <div className="bg-white dark:bg-slate-800">
           <div className="bg-gradient-to-r from-[#2d5a3f] via-[#4a7c59] to-[#2d5a3f] px-4 py-3 flex items-center justify-between border-b-2 border-gray-800">
             <div className="w-14 h-14 bg-white rounded-full flex items-center justify-center border-2 border-yellow-500 text-[8px] text-center font-bold text-[#2d5a3f]">MUN<br/>LOGO</div>
             <div className="text-center flex-1 text-white">
@@ -147,23 +147,23 @@ const GasSlipViewModal = ({ isOpen, onClose, ticket }) => {
             </div>
             <div className="w-14 h-14 bg-white rounded-full flex items-center justify-center border-2 border-yellow-500 text-[8px] text-center font-bold text-[#2d5a3f]">GSO<br/>LOGO</div>
           </div>
-          <div className="bg-[#d4c5b5] border-b-2 border-gray-800 text-center py-2"><h1 className="text-2xl font-bold tracking-widest text-gray-800">GAS SLIP</h1></div>
+          <div className="bg-[#d4c5b5] dark:bg-amber-900/50 border-b-2 border-gray-800 text-center py-2"><h1 className="text-2xl font-bold tracking-widest text-gray-800 dark:text-white">GAS SLIP</h1></div>
           <div className="px-6 py-5 font-serif">
-            <div className="flex items-end mb-4 gap-3"><span className="text-sm font-bold text-gray-800 min-w-[120px]">Driver</span><div className="flex-1 border-b border-gray-800 text-sm font-semibold text-center pb-0.5">{ticket.driver?.full_name || ticket.driver_name || 'N/A'}</div></div>
-            <div className="flex gap-6 mb-4"><div className="flex-1 flex items-end gap-2"><span className="text-sm font-bold text-gray-800 whitespace-nowrap">Vehicle/Plate #</span><div className="flex-1 border-b border-gray-800 text-sm font-semibold text-center pb-0.5">{ticket.vehicle?.plate_number || 'N/A'} - {ticket.vehicle?.vehicle_model || ''}</div></div><div className="flex-1 flex items-end gap-2"><span className="text-sm font-bold text-gray-800">Date</span><div className="flex-1 border-b border-gray-800 text-sm font-semibold text-center pb-0.5">{new Date(ticket.trip_date).toLocaleDateString()}</div></div></div>
-            <div className="mb-4"><span className="text-sm font-bold text-gray-800">Purpose</span><div className="w-full border-b border-gray-800 text-sm font-semibold uppercase mt-1 pb-0.5 pl-2">{ticket.purpose || 'N/A'}</div></div>
-            <div className="mb-5"><span className="text-sm font-bold text-gray-800">Destination</span><div className="w-full border-b border-gray-800 text-sm font-semibold uppercase mt-1 pb-0.5 pl-2">{ticket.destination || 'N/A'}</div></div>
-            <div className="mb-4"><div className="flex text-center mb-2"><div className="flex-1 text-sm font-bold uppercase tracking-wide">FUEL</div><div className="flex-1 text-sm font-bold uppercase tracking-wide">LITERS</div><div className="flex-1 text-sm font-bold uppercase tracking-wide">AMOUNT</div></div>
-            <div className="flex items-center mb-2"><div className="flex-1 text-sm italic">Diesel</div><div className="flex-1 border-b border-gray-800 text-center text-sm font-semibold pb-0.5">{ticket.fuel_liters || '_____'}</div><div className="flex-1 border-b border-gray-800 text-center text-sm font-semibold pb-0.5 text-green-700">₱{ticket.amount_released?.toLocaleString() || '0'}</div></div>
-            <div className="flex items-center mb-2"><div className="flex-1 text-sm italic">Engine Oil</div><div className="flex-1 border-b border-gray-800 text-center text-sm pb-0.5">-</div><div className="flex-1 border-b border-gray-800 text-center text-sm pb-0.5"></div></div>
-            <div className="flex items-center"><div className="flex-1 text-sm italic">Brake Fluid</div><div className="flex-1 border-b border-gray-800 text-center text-sm pb-0.5">-</div><div className="flex-1 border-b border-gray-800 text-center text-sm pb-0.5"></div></div></div>
-            <div className="flex items-center gap-3 mt-5"><span className="text-sm font-bold text-gray-800">Control No.</span><div className="flex-1 border-b border-gray-800 text-center text-sm font-bold tracking-wider pb-0.5">{ticket.trip_ticket_number || ticket.ticket_number}</div></div>
+            <div className="flex items-end mb-4 gap-3"><span className="text-sm font-bold text-gray-800 dark:text-gray-300 min-w-[120px]">Driver</span><div className="flex-1 border-b border-gray-800 dark:border-gray-600 text-sm font-semibold text-center pb-0.5 dark:text-white">{ticket.driver?.full_name || ticket.driver_name || 'N/A'}</div></div>
+            <div className="flex gap-6 mb-4"><div className="flex-1 flex items-end gap-2"><span className="text-sm font-bold text-gray-800 dark:text-gray-300 whitespace-nowrap">Vehicle/Plate #</span><div className="flex-1 border-b border-gray-800 dark:border-gray-600 text-sm font-semibold text-center pb-0.5 dark:text-white">{ticket.vehicle?.plate_number || 'N/A'} - {ticket.vehicle?.vehicle_model || ''}</div></div><div className="flex-1 flex items-end gap-2"><span className="text-sm font-bold text-gray-800 dark:text-gray-300">Date</span><div className="flex-1 border-b border-gray-800 dark:border-gray-600 text-sm font-semibold text-center pb-0.5 dark:text-white">{new Date(ticket.trip_date).toLocaleDateString()}</div></div></div>
+            <div className="mb-4"><span className="text-sm font-bold text-gray-800 dark:text-gray-300">Purpose</span><div className="w-full border-b border-gray-800 dark:border-gray-600 text-sm font-semibold uppercase mt-1 pb-0.5 pl-2 dark:text-white">{ticket.purpose || 'N/A'}</div></div>
+            <div className="mb-5"><span className="text-sm font-bold text-gray-800 dark:text-gray-300">Destination</span><div className="w-full border-b border-gray-800 dark:border-gray-600 text-sm font-semibold uppercase mt-1 pb-0.5 pl-2 dark:text-white">{ticket.destination || 'N/A'}</div></div>
+            <div className="mb-4"><div className="flex text-center mb-2"><div className="flex-1 text-sm font-bold uppercase tracking-wide dark:text-gray-300">FUEL</div><div className="flex-1 text-sm font-bold uppercase tracking-wide dark:text-gray-300">LITERS</div><div className="flex-1 text-sm font-bold uppercase tracking-wide dark:text-gray-300">AMOUNT</div></div>
+            <div className="flex items-center mb-2"><div className="flex-1 text-sm italic dark:text-gray-400">Diesel</div><div className="flex-1 border-b border-gray-800 dark:border-gray-600 text-center text-sm font-semibold pb-0.5 dark:text-white">{ticket.fuel_liters || '_____'}</div><div className="flex-1 border-b border-gray-800 dark:border-gray-600 text-center text-sm font-semibold pb-0.5 text-green-700 dark:text-green-400">₱{ticket.amount_released?.toLocaleString() || '0'}</div></div>
+            <div className="flex items-center mb-2"><div className="flex-1 text-sm italic dark:text-gray-400">Engine Oil</div><div className="flex-1 border-b border-gray-800 dark:border-gray-600 text-center text-sm pb-0.5">-</div><div className="flex-1 border-b border-gray-800 dark:border-gray-600 text-center text-sm pb-0.5"></div></div>
+            <div className="flex items-center"><div className="flex-1 text-sm italic dark:text-gray-400">Brake Fluid</div><div className="flex-1 border-b border-gray-800 dark:border-gray-600 text-center text-sm pb-0.5">-</div><div className="flex-1 border-b border-gray-800 dark:border-gray-600 text-center text-sm pb-0.5"></div></div></div>
+            <div className="flex items-center gap-3 mt-5"><span className="text-sm font-bold text-gray-800 dark:text-gray-300">Control No.</span><div className="flex-1 border-b border-gray-800 dark:border-gray-600 text-center text-sm font-bold tracking-wider pb-0.5 dark:text-white">{ticket.trip_ticket_number || ticket.ticket_number}</div></div>
           </div>
-          <div className="text-center pt-6 pb-8 px-8"><div className="border-t border-gray-800 w-64 mx-auto pt-3 mb-2"></div><div className="text-sm font-bold uppercase tracking-wide text-gray-800">HON. AMY. ROY I. MACUA</div><div className="text-xs italic text-gray-600 mt-1">Municipal Mayor</div></div>
+          <div className="text-center pt-6 pb-8 px-8"><div className="border-t border-gray-800 dark:border-gray-600 w-64 mx-auto pt-3 mb-2"></div><div className="text-sm font-bold uppercase tracking-wide text-gray-800 dark:text-white">HON. AMY. ROY I. MACUA</div><div className="text-xs italic text-gray-600 dark:text-gray-400 mt-1">Municipal Mayor</div></div>
         </div>
-        <div className="flex gap-3 p-4 border-t bg-gray-50 no-print">
-          <Button variant="outline" onClick={onClose} className="flex-1">Close</Button>
-          <Button onClick={handlePrint} className="flex-1 gap-2 bg-[#2d5a3f] hover:bg-[#1e3d2a]"><Printer className="h-4 w-4" />Print Gas Slip</Button>
+        <div className="flex gap-3 p-4 border-t bg-gray-50 dark:bg-slate-900 no-print">
+          <Button variant="outline" onClick={onClose} className="flex-1 dark:border-slate-700 dark:text-slate-300">Close</Button>
+          <Button onClick={handlePrint} className="flex-1 gap-2 bg-[#2d5a3f] hover:bg-[#1e3d2a] dark:bg-emerald-700 dark:hover:bg-emerald-800"><Printer className="h-4 w-4" />Print Gas Slip</Button>
         </div>
       </DialogContent>
     </Dialog>
@@ -171,325 +171,436 @@ const GasSlipViewModal = ({ isOpen, onClose, ticket }) => {
 };
 
 const GsoVerified = () => {
-    const navigate = useNavigate();
-    const [pendingTickets, setPendingTickets] = useState([]);
-    const [forwardedTickets, setForwardedTickets] = useState([]);
-    const [loading, setLoading] = useState(true);
-    const [submitting, setSubmitting] = useState(false);
-    const [activeTab, setActiveTab] = useState('pending');
-    const [selectedTicket, setSelectedTicket] = useState(null);
-    const [showGasSlipModal, setShowGasSlipModal] = useState(false);
+  const navigate = useNavigate();
+  const [pendingTickets, setPendingTickets] = useState([]);
+  const [forwardedTickets, setForwardedTickets] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+  const [activeTab, setActiveTab] = useState('pending');
+  const [selectedTicket, setSelectedTicket] = useState(null);
+  const [showGasSlipModal, setShowGasSlipModal] = useState(false);
+  const [showFilters, setShowFilters] = useState(false);
+  const [departmentFilter, setDepartmentFilter] = useState('all');
 
-    useEffect(() => {
-        fetchAllTickets();
-    }, []);
+  useEffect(() => {
+    fetchAllTickets();
+  }, []);
 
- // Update fetchAllTickets function
-const fetchAllTickets = async () => {
+  const fetchAllTickets = async () => {
     setLoading(true);
     try {
-        // Fetch ALL tickets that have GSO verification (approved)
-        const response = await gsoAPI.getVerifiedTickets();
-        let allTickets = response.data?.data || response.data || [];
-        allTickets = Array.isArray(allTickets) ? allTickets : [];
-        
-        // Separate by whether they've been forwarded to MO
-        const pending = allTickets.filter(t => 
-            t.status === 'pending_mayors_office' || 
-            t.status === 'gso_verified_pending'
-        );
-        
-        const forwarded = allTickets.filter(t => 
-            t.status === 'with_mayors_office' ||
-            t.status === 'funds_issued' ||
-            t.status === 'in_transit' ||
-            t.status === 'pending_reconciliation'
-        );
-        
-        setPendingTickets(pending);
-        setForwardedTickets(forwarded);
-        
+      const response = await gsoAPI.getVerifiedTickets();
+      let allTickets = response.data?.data || response.data || [];
+      allTickets = Array.isArray(allTickets) ? allTickets : [];
+      
+      const pending = allTickets.filter(t => 
+        t.status === 'pending_mayors_office' || 
+        t.status === 'gso_verified_pending'
+      );
+      
+      const forwarded = allTickets.filter(t => 
+        t.status === 'with_mayors_office' ||
+        t.status === 'funds_issued' ||
+        t.status === 'in_transit' ||
+        t.status === 'pending_reconciliation'
+      );
+      
+      setPendingTickets(pending);
+      setForwardedTickets(forwarded);
     } catch (error) {
-        console.error('Failed to fetch tickets:', error);
+      console.error('Failed to fetch tickets:', error);
     } finally {
-        setLoading(false);
+      setLoading(false);
     }
-};
+  };
 
-
-
-    const handleForwardToMO = async (ticketId) => {
-        setSubmitting(true);
-        try {
-            await gsoAPI.forwardToMO([ticketId]);
-            
-            // Find the ticket being forwarded
-            const forwardedTicket = pendingTickets.find(ticket => 
-                (ticket.trip_ticket_id || ticket.id) === ticketId
-            );
-            
-            if (forwardedTicket) {
-                // Add to forwarded list with updated status
-                const updatedTicket = { 
-                    ...forwardedTicket, 
-                    status: 'with_mayors_office',
-                    forwarded_at: new Date().toISOString()
-                };
-                setForwardedTickets(prev => [updatedTicket, ...prev]);
-                
-                // Remove from pending list
-                setPendingTickets(prev => prev.filter(ticket => 
-                    (ticket.trip_ticket_id || ticket.id) !== ticketId
-                ));
-            }
-            
-            alert('Ticket forwarded to Mayor\'s Office successfully');
-        } catch (error) {
-            console.error('Failed to forward ticket:', error);
-            alert(error.response?.data?.message || 'Failed to forward ticket');
-        } finally {
-            setSubmitting(false);
-        }
-    };
-
-    const handleViewGasSlip = (ticket) => {
-        const gasSlipData = {
-            ...ticket,
-            fuel_liters: ticket.estimated_fuel_liters || '_____',
-            amount_released: ticket.amount_released || 0,
+  const handleForwardToMO = async (ticketId) => {
+    setSubmitting(true);
+    try {
+      await gsoAPI.forwardToMO([ticketId]);
+      
+      const forwardedTicket = pendingTickets.find(ticket => 
+        (ticket.trip_ticket_id || ticket.id) === ticketId
+      );
+      
+      if (forwardedTicket) {
+        const updatedTicket = { 
+          ...forwardedTicket, 
+          status: 'with_mayors_office',
+          forwarded_at: new Date().toISOString()
         };
-        setSelectedTicket(gasSlipData);
-        setShowGasSlipModal(true);
-    };
-
-    const getStatusBadge = (status, isForwarded = false) => {
-        if (isForwarded || status === 'with_mayors_office' || status === 'forwarded_to_mo') {
-            return <Badge className="bg-blue-500 text-white">Forwarded to MO</Badge>;
-        }
-        return <Badge className="bg-green-500 text-white">Verified - Ready for MO</Badge>;
-    };
-
-    const formatDate = (dateString) => {
-        if (!dateString) return 'N/A';
-        return new Date(dateString).toLocaleDateString();
-    };
-
-    if (loading) {
-        return (
-            <div className="flex justify-center py-12">
-                <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
-            </div>
-        );
+        setForwardedTickets(prev => [updatedTicket, ...prev]);
+        setPendingTickets(prev => prev.filter(ticket => 
+          (ticket.trip_ticket_id || ticket.id) !== ticketId
+        ));
+      }
+      
+      alert('Ticket forwarded to Mayor\'s Office successfully');
+    } catch (error) {
+      console.error('Failed to forward ticket:', error);
+      alert(error.response?.data?.message || 'Failed to forward ticket');
+    } finally {
+      setSubmitting(false);
     }
+  };
 
-    return (
-        <div className="p-6">
-            <div className="flex justify-between items-center mb-6">
-                <div>
-                    <h1 className="text-2xl font-bold">Verified Tickets</h1>
-                    <p className="text-gray-500">Manage and forward verified tickets to Mayor's Office</p>
-                </div>
-                <Button variant="outline" onClick={fetchAllTickets}>
-                    <RefreshCw className="h-4 w-4 mr-2" />
-                    Refresh
-                </Button>
-            </div>
+  const handleViewGasSlip = (ticket) => {
+    const gasSlipData = {
+      ...ticket,
+      fuel_liters: ticket.estimated_fuel_liters || '_____',
+      amount_released: ticket.amount_released || 0,
+    };
+    setSelectedTicket(gasSlipData);
+    setShowGasSlipModal(true);
+  };
 
-            {/* Tab Navigation */}
-            <div className="flex gap-2 mb-6 border-b">
-                <button
-                    onClick={() => setActiveTab('pending')}
-                    className={`px-4 py-2 font-medium text-sm transition-colors ${
-                        activeTab === 'pending'
-                            ? 'border-b-2 border-blue-500 text-blue-600'
-                            : 'text-gray-500 hover:text-gray-700'
-                    }`}
-                >
-                    Ready to Forward ({pendingTickets.length})
-                </button>
-                <button
-                    onClick={() => setActiveTab('forwarded')}
-                    className={`px-4 py-2 font-medium text-sm transition-colors ${
-                        activeTab === 'forwarded'
-                            ? 'border-b-2 border-blue-500 text-blue-600'
-                            : 'text-gray-500 hover:text-gray-700'
-                    }`}
-                >
-                    Forwarded to MO ({forwardedTickets.length})
-                </button>
-            </div>
+  const getStatusBadge = (status, isForwarded = false) => {
+    if (isForwarded || status === 'with_mayors_office' || status === 'forwarded_to_mo') {
+      return <Badge className="bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400">Forwarded to MO</Badge>;
+    }
+    return <Badge className="bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400">Verified - Ready for MO</Badge>;
+  };
 
-            {/* Ready to Forward Tab */}
-            {activeTab === 'pending' && (
-                <Card>
-                    <CardHeader>
-                        <CardTitle className="flex items-center gap-2">
-                            <CheckCircle className="h-5 w-5 text-green-500" />
-                            Ready to Forward ({pendingTickets.length})
-                        </CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                        {pendingTickets.length === 0 ? (
-                            <div className="text-center py-8 text-gray-500">No tickets ready to forward</div>
-                        ) : (
-                            <div className="overflow-x-auto">
-                                <Table>
-                                    <TableHeader>
-                                        <TableRow>
-                                            <TableHead>Ticket #</TableHead>
-                                            <TableHead>Date</TableHead>
-                                            <TableHead>Destination</TableHead>
-                                            <TableHead>Department</TableHead>
-                                            <TableHead>Status</TableHead>
-                                            <TableHead className="text-right">Actions</TableHead>
-                                        </TableRow>
-                                    </TableHeader>
-                                    <TableBody>
-                                        {pendingTickets.map((ticket) => (
-                                            <TableRow key={ticket.trip_ticket_id || ticket.id} className="hover:bg-gray-50">
-                                                <TableCell className="font-medium">
-                                                    {ticket.trip_ticket_number || ticket.ticket_number}
-                                                </TableCell>
-                                                <TableCell>
-                                                    <div className="flex items-center gap-1">
-                                                        <Calendar className="h-3 w-3 text-gray-400" />
-                                                        {formatDate(ticket.trip_date)}
-                                                    </div>
-                                                </TableCell>
-                                                <TableCell>
-                                                    <div className="flex items-center gap-1">
-                                                        <MapPin className="h-3 w-3 text-gray-400" />
-                                                        {ticket.destination}
-                                                    </div>
-                                                </TableCell>
-                                                <TableCell>
-                                                    {ticket.department?.department_name || ticket.department_name || 'N/A'}
-                                                </TableCell>
-                                                <TableCell>{getStatusBadge(ticket.status, false)}</TableCell>
-                                                <TableCell className="text-right">
-                                                    <div className="flex items-center justify-end gap-2">
-                                                        <Button
-                                                            variant="ghost"
-                                                            size="sm"
-                                                            onClick={() => navigate(`/gso/tickets/${ticket.trip_ticket_id || ticket.id}`)}
-                                                            title="View Trip Ticket"
-                                                        >
-                                                            <Eye className="h-4 w-4" />
-                                                        </Button>
-                                                        <Button
-                                                            variant="ghost"
-                                                            size="sm"
-                                                            onClick={() => handleViewGasSlip(ticket)}
-                                                            title="View Gas Slip"
-                                                        >
-                                                            <Printer className="h-4 w-4" />
-                                                        </Button>
-                                                        <Button
-                                                            size="sm"
-                                                            className="bg-blue-600 hover:bg-blue-700"
-                                                            onClick={() => handleForwardToMO(ticket.trip_ticket_id || ticket.id)}
-                                                            disabled={submitting}
-                                                        >
-                                                            <Send className="h-4 w-4 mr-1" />
-                                                            Forward to MO
-                                                        </Button>
-                                                    </div>
-                                                </TableCell>
-                                            </TableRow>
-                                        ))}
-                                    </TableBody>
-                                </Table>
-                            </div>
-                        )}
-                    </CardContent>
-                </Card>
-            )}
+  const formatDate = (dateString) => {
+    if (!dateString) return 'N/A';
+    return new Date(dateString).toLocaleDateString();
+  };
 
-            {/* Forwarded Tab - View Only, No Forward Button */}
-            {activeTab === 'forwarded' && (
-                <Card>
-                    <CardHeader>
-                        <CardTitle className="flex items-center gap-2">
-                            <Printer className="h-5 w-5 text-blue-500" />
-                            Forwarded to Mayor's Office ({forwardedTickets.length})
-                        </CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                        {forwardedTickets.length === 0 ? (
-                            <div className="text-center py-8 text-gray-500">No forwarded tickets found in database</div>
-                        ) : (
-                            <div className="overflow-x-auto">
-                                <Table>
-                                    <TableHeader>
-                                        <TableRow>
-                                            <TableHead>Ticket #</TableHead>
-                                            <TableHead>Date</TableHead>
-                                            <TableHead>Destination</TableHead>
-                                            <TableHead>Department</TableHead>
-                                            <TableHead>Status</TableHead>
-                                            <TableHead className="text-right">Actions</TableHead>
-                                        </TableRow>
-                                    </TableHeader>
-                                    <TableBody>
-                                        {forwardedTickets.map((ticket) => (
-                                            <TableRow key={ticket.trip_ticket_id || ticket.id} className="hover:bg-gray-50">
-                                                <TableCell className="font-medium">
-                                                    {ticket.trip_ticket_number || ticket.ticket_number}
-                                                </TableCell>
-                                                <TableCell>
-                                                    <div className="flex items-center gap-1">
-                                                        <Calendar className="h-3 w-3 text-gray-400" />
-                                                        {formatDate(ticket.trip_date)}
-                                                    </div>
-                                                </TableCell>
-                                                <TableCell>
-                                                    <div className="flex items-center gap-1">
-                                                        <MapPin className="h-3 w-3 text-gray-400" />
-                                                        {ticket.destination}
-                                                    </div>
-                                                </TableCell>
-                                                <TableCell>
-                                                    {ticket.department?.department_name || ticket.department_name || 'N/A'}
-                                                </TableCell>
-                                                <TableCell>{getStatusBadge(ticket.status, true)}</TableCell>
-                                                <TableCell className="text-right">
-                                                    <div className="flex items-center justify-end gap-2">
-                                                        <Button
-                                                            variant="ghost"
-                                                            size="sm"
-                                                            onClick={() => navigate(`/gso/tickets/${ticket.trip_ticket_id || ticket.id}`)}
-                                                            title="View Trip Ticket"
-                                                        >
-                                                            <Eye className="h-4 w-4" />
-                                                        </Button>
-                                                        <Button
-                                                            variant="ghost"
-                                                            size="sm"
-                                                            onClick={() => handleViewGasSlip(ticket)}
-                                                            title="View Gas Slip"
-                                                        >
-                                                            <Printer className="h-4 w-4" />
-                                                        </Button>
-                                                    </div>
-                                                </TableCell>
-                                            </TableRow>
-                                        ))}
-                                    </TableBody>
-                                </Table>
-                            </div>
-                        )}
-                    </CardContent>
-                </Card>
-            )}
+  const getUniqueDepartments = () => {
+    const allTickets = [...pendingTickets, ...forwardedTickets];
+    const depts = new Set();
+    allTickets.forEach(ticket => {
+      const deptName = ticket.department?.department_name || ticket.department_name;
+      if (deptName) depts.add(deptName);
+    });
+    return Array.from(depts);
+  };
 
-            {/* Gas Slip Modal */}
-            <GasSlipViewModal
-                isOpen={showGasSlipModal}
-                onClose={() => setShowGasSlipModal(false)}
-                ticket={selectedTicket}
-            />
-        </div>
+  const filteredByDepartment = (tickets) => {
+    if (departmentFilter === 'all') return tickets;
+    return tickets.filter(ticket => 
+      (ticket.department?.department_name || ticket.department_name) === departmentFilter
     );
+  };
+
+  const filteredPending = filteredByDepartment(pendingTickets);
+  const filteredForwarded = filteredByDepartment(forwardedTickets);
+  const departments = getUniqueDepartments();
+  const hasActiveFilters = departmentFilter !== 'all';
+  
+  const clearFilters = () => {
+    setDepartmentFilter('all');
+  };
+
+  if (loading) {
+    return (
+      <div className="flex justify-center py-16">
+        <Loader2 className="h-8 w-8 animate-spin text-blue-600 dark:text-blue-400" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6 p-6 animate-fade-in-up">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold bg-gradient-to-r from-slate-800 to-slate-600 dark:from-white dark:to-slate-300 bg-clip-text text-transparent">
+            Verified Tickets
+          </h1>
+          <p className="text-slate-500 dark:text-slate-400 mt-1">
+            Manage and forward verified tickets to Mayor's Office
+          </p>
+        </div>
+        <Button 
+          variant="outline" 
+          onClick={fetchAllTickets}
+          className="dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+        >
+          <RefreshCw className="h-4 w-4 mr-2" />
+          Refresh
+        </Button>
+      </div>
+
+      {/* Filters Card */}
+      <Card className="dark:bg-slate-800/80 dark:border-slate-700 overflow-hidden transition-all duration-300">
+        <div 
+          className="px-6 py-4 border-b dark:border-slate-700 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors"
+          onClick={() => setShowFilters(!showFilters)}
+        >
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Filter className="h-4 w-4 text-slate-500" />
+              <span className="font-medium text-slate-700 dark:text-slate-300">Filters</span>
+              {hasActiveFilters && (
+                <span className="px-2 py-0.5 text-xs bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-full">
+                  Active
+                </span>
+              )}
+            </div>
+            {showFilters ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+          </div>
+        </div>
+        
+        {showFilters && (
+          <div className="p-6 animate-slide-down">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <select
+                value={departmentFilter}
+                onChange={(e) => setDepartmentFilter(e.target.value)}
+                className="px-3 py-2 border border-slate-300 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-slate-800 dark:text-white"
+              >
+                <option value="all">All Departments</option>
+                {departments.map((dept, index) => (
+                  <option key={index} value={dept}>{dept}</option>
+                ))}
+              </select>
+              <div className="flex gap-2">
+                {hasActiveFilters && (
+                  <Button 
+                    variant="ghost" 
+                    onClick={clearFilters}
+                    className="text-red-600 hover:text-red-700 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/30"
+                  >
+                    <X className="h-4 w-4 mr-1" />
+                    Clear Filters
+                  </Button>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+      </Card>
+
+      {/* Tab Navigation */}
+      <div className="flex gap-2 border-b dark:border-slate-700">
+        <button
+          onClick={() => setActiveTab('pending')}
+          className={`px-4 py-2 font-medium text-sm transition-all duration-200 ${
+            activeTab === 'pending'
+              ? 'border-b-2 border-blue-500 text-blue-600 dark:text-blue-400'
+              : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300'
+          }`}
+        >
+          Ready to Forward ({filteredPending.length})
+        </button>
+        <button
+          onClick={() => setActiveTab('forwarded')}
+          className={`px-4 py-2 font-medium text-sm transition-all duration-200 ${
+            activeTab === 'forwarded'
+              ? 'border-b-2 border-blue-500 text-blue-600 dark:text-blue-400'
+              : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300'
+          }`}
+        >
+          Forwarded to MO ({filteredForwarded.length})
+        </button>
+      </div>
+
+      {/* Ready to Forward Tab */}
+      {activeTab === 'pending' && (
+        <Card className="dark:bg-slate-800/80 dark:border-slate-700 overflow-hidden">
+          <CardHeader className="border-b dark:border-slate-700">
+            <CardTitle className="flex items-center gap-2 text-slate-900 dark:text-white">
+              <CheckCircle className="h-5 w-5 text-green-500" />
+              Ready to Forward
+              <span className="ml-2 text-sm font-normal text-slate-500 dark:text-slate-400">
+                ({filteredPending.length} {filteredPending.length === 1 ? 'ticket' : 'tickets'})
+              </span>
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-0">
+            {filteredPending.length === 0 ? (
+              <div className="text-center py-16">
+                <CheckCircle className="h-12 w-12 text-slate-300 dark:text-slate-600 mx-auto mb-3" />
+                <p className="text-slate-500 dark:text-slate-400">No tickets ready to forward</p>
+                {hasActiveFilters && (
+                  <Button variant="link" onClick={clearFilters} className="mt-2">
+                    Clear filters
+                  </Button>
+                )}
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="bg-slate-50 dark:bg-slate-900/50">
+                      <TableHead className="text-slate-600 dark:text-slate-400">Ticket #</TableHead>
+                      <TableHead className="text-slate-600 dark:text-slate-400">Date</TableHead>
+                      <TableHead className="text-slate-600 dark:text-slate-400">Destination</TableHead>
+                      <TableHead className="text-slate-600 dark:text-slate-400">Department</TableHead>
+                      <TableHead className="text-slate-600 dark:text-slate-400">Status</TableHead>
+                      <TableHead className="text-right text-slate-600 dark:text-slate-400">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredPending.map((ticket, index) => (
+                      <TableRow 
+                        key={ticket.trip_ticket_id || ticket.id} 
+                        className="hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors animate-fade-in"
+                        style={{ animationDelay: `${index * 50}ms` }}
+                      >
+                        <TableCell className="font-medium text-slate-900 dark:text-white">
+                          {ticket.trip_ticket_number || ticket.ticket_number}
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-1">
+                            <Calendar className="h-3 w-3 text-slate-400" />
+                            <span className="text-slate-600 dark:text-slate-400">{formatDate(ticket.trip_date)}</span>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-1">
+                            <MapPin className="h-3 w-3 text-slate-400" />
+                            <span className="text-slate-600 dark:text-slate-400">{ticket.destination}</span>
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-slate-600 dark:text-slate-400">
+                          {ticket.department?.department_name || ticket.department_name || 'N/A'}
+                        </TableCell>
+                        <TableCell>{getStatusBadge(ticket.status, false)}</TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex items-center justify-end gap-2">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => navigate(`/gso/tickets/${ticket.trip_ticket_id || ticket.id}`)}
+                              className="text-blue-600 hover:text-blue-700 hover:bg-blue-50 dark:text-blue-400 dark:hover:text-blue-300 dark:hover:bg-blue-950/30 h-8 w-8 p-0"
+                              title="View Trip Ticket"
+                            >
+                              <Eye className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleViewGasSlip(ticket)}
+                              className="text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 dark:text-emerald-400 dark:hover:text-emerald-300 dark:hover:bg-emerald-950/30 h-8 w-8 p-0"
+                              title="View Gas Slip"
+                            >
+                              <Printer className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              size="sm"
+                              className="bg-blue-600 hover:bg-blue-700 text-white shadow-sm"
+                              onClick={() => handleForwardToMO(ticket.trip_ticket_id || ticket.id)}
+                              disabled={submitting}
+                            >
+                              <Send className="h-3 w-3 mr-1" />
+                              Forward
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Forwarded Tab - View Only */}
+      {activeTab === 'forwarded' && (
+        <Card className="dark:bg-slate-800/80 dark:border-slate-700 overflow-hidden">
+          <CardHeader className="border-b dark:border-slate-700">
+            <CardTitle className="flex items-center gap-2 text-slate-900 dark:text-white">
+              <Printer className="h-5 w-5 text-blue-500" />
+              Forwarded to Mayor's Office
+              <span className="ml-2 text-sm font-normal text-slate-500 dark:text-slate-400">
+                ({filteredForwarded.length} {filteredForwarded.length === 1 ? 'ticket' : 'tickets'})
+              </span>
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-0">
+            {filteredForwarded.length === 0 ? (
+              <div className="text-center py-16">
+                <Send className="h-12 w-12 text-slate-300 dark:text-slate-600 mx-auto mb-3" />
+                <p className="text-slate-500 dark:text-slate-400">No forwarded tickets found</p>
+                {hasActiveFilters && (
+                  <Button variant="link" onClick={clearFilters} className="mt-2">
+                    Clear filters
+                  </Button>
+                )}
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="bg-slate-50 dark:bg-slate-900/50">
+                      <TableHead className="text-slate-600 dark:text-slate-400">Ticket #</TableHead>
+                      <TableHead className="text-slate-600 dark:text-slate-400">Date</TableHead>
+                      <TableHead className="text-slate-600 dark:text-slate-400">Destination</TableHead>
+                      <TableHead className="text-slate-600 dark:text-slate-400">Department</TableHead>
+                      <TableHead className="text-slate-600 dark:text-slate-400">Status</TableHead>
+                      <TableHead className="text-right text-slate-600 dark:text-slate-400">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredForwarded.map((ticket, index) => (
+                      <TableRow 
+                        key={ticket.trip_ticket_id || ticket.id} 
+                        className="hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors animate-fade-in"
+                        style={{ animationDelay: `${index * 50}ms` }}
+                      >
+                        <TableCell className="font-medium text-slate-900 dark:text-white">
+                          {ticket.trip_ticket_number || ticket.ticket_number}
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-1">
+                            <Calendar className="h-3 w-3 text-slate-400" />
+                            <span className="text-slate-600 dark:text-slate-400">{formatDate(ticket.trip_date)}</span>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-1">
+                            <MapPin className="h-3 w-3 text-slate-400" />
+                            <span className="text-slate-600 dark:text-slate-400">{ticket.destination}</span>
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-slate-600 dark:text-slate-400">
+                          {ticket.department?.department_name || ticket.department_name || 'N/A'}
+                        </TableCell>
+                        <TableCell>{getStatusBadge(ticket.status, true)}</TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex items-center justify-end gap-2">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => navigate(`/gso/tickets/${ticket.trip_ticket_id || ticket.id}`)}
+                              className="text-blue-600 hover:text-blue-700 hover:bg-blue-50 dark:text-blue-400 dark:hover:text-blue-300 dark:hover:bg-blue-950/30 h-8 w-8 p-0"
+                              title="View Trip Ticket"
+                            >
+                              <Eye className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleViewGasSlip(ticket)}
+                              className="text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 dark:text-emerald-400 dark:hover:text-emerald-300 dark:hover:bg-emerald-950/30 h-8 w-8 p-0"
+                              title="View Gas Slip"
+                            >
+                              <Printer className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Gas Slip Modal */}
+      <GasSlipViewModal
+        isOpen={showGasSlipModal}
+        onClose={() => setShowGasSlipModal(false)}
+        ticket={selectedTicket}
+      />
+    </div>
+  );
 };
 
 export default GsoVerified;

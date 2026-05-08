@@ -1,4 +1,4 @@
-// src/pages/mayor/MayorReports.jsx - With Month & Week Filter
+// src/pages/mayor/MayorReports.jsx - With Dark Mode & Premium Theme
 import React, { useState, useEffect, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -8,7 +8,8 @@ import {
   RefreshCw, Loader2, TrendingUp, Fuel, DollarSign, Building2, 
   Calendar, Download, Printer, AlertCircle, BarChart3, PieChart as PieChartIcon,
   ArrowUpRight, ArrowDownRight, Wallet, CheckCircle, TrendingDown,
-  Eye, Info, Zap, Target, Award, Users, Activity, Filter, ChevronLeft, ChevronRight
+  Eye, Info, Zap, Target, Award, Users, Activity, Filter, ChevronLeft, ChevronRight,
+  Sun, Moon
 } from 'lucide-react';
 import { mayorsOfficeAPI, reportsAPI } from '../../services/api';
 import {
@@ -33,15 +34,35 @@ const COLORS = {
 
 const CHART_COLORS = [COLORS.primary, COLORS.success, COLORS.warning, COLORS.purple, COLORS.cyan, COLORS.pink, COLORS.indigo];
 
+// Helper functions
+const formatCurrency = (amount) => {
+  const numAmount = typeof amount === 'number' ? amount : parseFloat(amount);
+  if (isNaN(numAmount)) return '₱0.00';
+  return new Intl.NumberFormat('en-PH', {
+    style: 'currency',
+    currency: 'PHP',
+    minimumFractionDigits: 2,
+  }).format(numAmount);
+};
+
+const formatCompactCurrency = (amount) => {
+  const numAmount = typeof amount === 'number' ? amount : parseFloat(amount);
+  if (isNaN(numAmount)) return '₱0';
+  if (numAmount >= 1000000) return `₱${(numAmount / 1000000).toFixed(1)}M`;
+  if (numAmount >= 1000) return `₱${(numAmount / 1000).toFixed(1)}K`;
+  return `₱${numAmount.toLocaleString()}`;
+};
+
 const MayorReports = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [selectedDepartment, setSelectedDepartment] = useState('all');
+  const [isDarkMode, setIsDarkMode] = useState(false);
   
   // Month/Week Filter State
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth());
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
-  const [viewType, setViewType] = useState('month'); // 'month' or 'week'
+  const [viewType, setViewType] = useState('month');
   const [selectedWeek, setSelectedWeek] = useState(1);
   
   const [reportData, setReportData] = useState({
@@ -74,20 +95,27 @@ const MayorReports = () => {
   const [activeTab, setActiveTab] = useState('overview');
   const [isExporting, setIsExporting] = useState(false);
 
-  // Month names
-  const monthNames = [
-    'January', 'February', 'March', 'April', 'May', 'June',
-    'July', 'August', 'September', 'October', 'November', 'December'
-  ];
+  // Check for dark mode preference
+  useEffect(() => {
+    const isDark = document.documentElement.classList.contains('dark');
+    setIsDarkMode(isDark);
+    
+    const observer = new MutationObserver(() => {
+      setIsDarkMode(document.documentElement.classList.contains('dark'));
+    });
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
+    return () => observer.disconnect();
+  }, []);
 
-  // Get weeks in a month
+  const monthNames = ['January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December'];
+
   const getWeeksInMonth = (year, month) => {
     const firstDay = new Date(year, month, 1);
     const lastDay = new Date(year, month + 1, 0);
     const weeks = [];
     
     let currentWeekStart = new Date(firstDay);
-    // Adjust to Monday as start of week
     const dayOfWeek = currentWeekStart.getDay();
     const diffToMonday = (dayOfWeek === 0 ? 6 : dayOfWeek - 1);
     currentWeekStart.setDate(currentWeekStart.getDate() - diffToMonday);
@@ -97,7 +125,6 @@ const MayorReports = () => {
       const weekEnd = new Date(currentWeekStart);
       weekEnd.setDate(weekEnd.getDate() + 6);
       
-      // Only include weeks that overlap with the month
       if (weekEnd >= firstDay && currentWeekStart <= lastDay) {
         weeks.push({
           weekNumber: weekNumber,
@@ -124,7 +151,6 @@ const MayorReports = () => {
     setError(null);
     
     try {
-      // Build date range based on selected view
       let startDate, endDate;
       
       if (viewType === 'week' && selectedWeek) {
@@ -137,7 +163,6 @@ const MayorReports = () => {
           endDate = dateRange.end_date;
         }
       } else {
-        // Month view - show whole month
         startDate = new Date(selectedYear, selectedMonth, 1).toISOString().split('T')[0];
         endDate = new Date(selectedYear, selectedMonth + 1, 0).toISOString().split('T')[0];
       }
@@ -223,7 +248,6 @@ const MayorReports = () => {
 
   const generateWeeklyData = (tripData) => {
     const weeks = [];
-    // Group by week of the selected month
     const weekMap = new Map();
     
     tripData.forEach(trip => {
@@ -247,7 +271,6 @@ const MayorReports = () => {
         trips: weekData.trips
       });
     }
-    
     return weeks;
   };
 
@@ -380,9 +403,9 @@ const MayorReports = () => {
 
   const getUtilizationColor = (utilization) => {
     const percent = parseFloat(utilization);
-    if (percent >= 80) return 'text-red-600';
-    if (percent >= 60) return 'text-amber-600';
-    return 'text-emerald-600';
+    if (percent >= 80) return 'text-red-600 dark:text-red-400';
+    if (percent >= 60) return 'text-amber-600 dark:text-amber-400';
+    return 'text-emerald-600 dark:text-emerald-400';
   };
 
   const getProgressColor = (utilization) => {
@@ -392,42 +415,16 @@ const MayorReports = () => {
     return 'bg-emerald-500';
   };
 
-  const formatCurrency = (amount) => {
-    const numAmount = parseFloat(amount);
-    if (isNaN(numAmount)) return '₱0';
-    if (numAmount >= 1000000) return `₱${(numAmount / 1000000).toFixed(1)}M`;
-    if (numAmount >= 1000) return `₱${(numAmount / 1000).toFixed(1)}K`;
-    return `₱${numAmount.toLocaleString()}`;
-  };
-
-  const formatCompactCurrency = (amount) => {
-    const numAmount = parseFloat(amount);
-    if (isNaN(numAmount)) return '₱0';
-    if (numAmount >= 1000000) return `₱${(numAmount / 1000000).toFixed(1)}M`;
-    if (numAmount >= 1000) return `₱${(numAmount / 1000).toFixed(1)}K`;
-    return `₱${numAmount.toLocaleString()}`;
-  };
-
-  // Get current chart data based on view type
   const getCurrentChartData = () => {
     if (viewType === 'week') {
-      // Return weekly data for the selected month
       return reportData.weeklyData;
     }
     return reportData.monthlyData;
   };
 
-  const getChartTitle = () => {
-    if (viewType === 'week') {
-      return `${currentMonthName} ${selectedYear} - Weekly Spending`;
-    }
-    return 'Monthly Spending Trends';
-  };
-
   const currentChartData = getCurrentChartData();
   const currentSelectedWeek = weeksInMonth[selectedWeek - 1];
 
-  // Filtered data for selector
   const filteredComparisonData = useMemo(() => {
     if (selectedDepartment === 'all') {
       return reportData.departmentTrends
@@ -472,8 +469,8 @@ const MayorReports = () => {
     return (
       <div className="flex items-center justify-center h-96">
         <div className="text-center">
-          <Loader2 className="h-12 w-12 animate-spin text-blue-600 mx-auto mb-4" />
-          <p className="text-gray-500">Loading report data...</p>
+          <Loader2 className="h-12 w-12 animate-spin text-blue-600 dark:text-blue-400 mx-auto mb-4" />
+          <p className="text-gray-500 dark:text-gray-400">Loading report data...</p>
         </div>
       </div>
     );
@@ -482,8 +479,8 @@ const MayorReports = () => {
   if (error) {
     return (
       <div className="flex flex-col justify-center items-center h-96">
-        <AlertCircle className="h-16 w-16 text-red-400 mb-4" />
-        <p className="text-red-600 text-lg mb-2">{error}</p>
+        <AlertCircle className="h-16 w-16 text-red-400 dark:text-red-500 mb-4" />
+        <p className="text-red-600 dark:text-red-400 text-lg mb-2">{error}</p>
         <Button onClick={handleRefresh} className="mt-4">
           <RefreshCw className="h-4 w-4 mr-2" />
           Try Again
@@ -493,9 +490,9 @@ const MayorReports = () => {
   }
 
   return (
-    <div className="space-y-6 p-6 bg-gradient-to-br from-gray-50 to-gray-100 min-h-screen">
+    <div className="space-y-6 p-6 bg-gradient-to-br from-gray-50 to-gray-100 dark:from-slate-900 dark:to-slate-800 min-h-screen transition-colors duration-300">
       {/* Header */}
-      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 p-6 text-white shadow-xl">
+      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 dark:from-slate-800 dark:via-slate-700 dark:to-slate-800 p-6 text-white shadow-xl">
         <div className="absolute -top-24 -right-24 h-48 w-48 rounded-full bg-blue-500/20 blur-3xl" />
         <div className="absolute -bottom-24 -left-24 h-48 w-48 rounded-full bg-purple-500/20 blur-3xl" />
         
@@ -514,20 +511,20 @@ const MayorReports = () => {
             <p className="mt-1 text-sm text-slate-300">Budget vs Actual analysis and department spending insights</p>
           </div>
           <div className="flex flex-wrap gap-2">
-            <div className="flex items-center gap-2 rounded-lg bg-white/10 px-3 py-2">
+            <div className="flex items-center gap-2 rounded-lg bg-white/10 px-3 py-2 backdrop-blur-sm">
               <Calendar className="h-4 w-4 text-slate-300" />
               <input
                 type="date"
                 value={dateRange.start_date}
                 onChange={(e) => setDateRange(prev => ({ ...prev, start_date: e.target.value }))}
-                className="w-28 bg-transparent text-sm text-white focus:outline-none"
+                className="w-28 bg-transparent text-sm text-white focus:outline-none [&::-webkit-calendar-picker-indicator]:invert"
               />
               <span className="text-slate-300">to</span>
               <input
                 type="date"
                 value={dateRange.end_date}
                 onChange={(e) => setDateRange(prev => ({ ...prev, end_date: e.target.value }))}
-                className="w-28 bg-transparent text-sm text-white focus:outline-none"
+                className="w-28 bg-transparent text-sm text-white focus:outline-none [&::-webkit-calendar-picker-indicator]:invert"
               />
             </div>
             <Button onClick={handleRefresh} variant="outline" className="border-white/20 bg-white/10 text-white hover:bg-white/20">
@@ -548,61 +545,61 @@ const MayorReports = () => {
 
       {/* Summary Stats */}
       <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
-        <Card className="border-0 shadow-sm">
+        <Card className="border-0 shadow-sm dark:bg-slate-800/80 dark:border-slate-700">
           <CardContent className="p-5">
             <div className="flex items-start justify-between">
               <div>
-                <p className="text-sm text-gray-500">Total Fuel Consumed</p>
-                <p className="mt-1 text-2xl font-bold text-gray-900">{reportData.summary.totalFuelUsed} L</p>
+                <p className="text-sm text-gray-500 dark:text-slate-400">Total Fuel Consumed</p>
+                <p className="mt-1 text-2xl font-bold text-gray-900 dark:text-white">{reportData.summary.totalFuelUsed} L</p>
               </div>
-              <div className="rounded-xl bg-blue-100 p-3">
-                <Fuel className="h-5 w-5 text-blue-600" />
+              <div className="rounded-xl bg-blue-100 dark:bg-blue-900/30 p-3">
+                <Fuel className="h-5 w-5 text-blue-600 dark:text-blue-400" />
               </div>
             </div>
           </CardContent>
         </Card>
-        <Card className="border-0 shadow-sm">
+        <Card className="border-0 shadow-sm dark:bg-slate-800/80 dark:border-slate-700">
           <CardContent className="p-5">
             <div className="flex items-start justify-between">
               <div>
-                <p className="text-sm text-gray-500">Budget Spent</p>
-                <p className="mt-1 text-2xl font-bold text-gray-900">{formatCompactCurrency(reportData.summary.totalBudgetSpent)}</p>
-                <p className="text-xs text-gray-400">{formatCurrency(reportData.summary.totalBudgetSpent)}</p>
+                <p className="text-sm text-gray-500 dark:text-slate-400">Budget Spent</p>
+                <p className="mt-1 text-2xl font-bold text-gray-900 dark:text-white">{formatCompactCurrency(reportData.summary.totalBudgetSpent)}</p>
+                <p className="text-xs text-gray-400 dark:text-slate-500">{formatCurrency(reportData.summary.totalBudgetSpent)}</p>
               </div>
-              <div className="rounded-xl bg-emerald-100 p-3">
-                <DollarSign className="h-5 w-5 text-emerald-600" />
+              <div className="rounded-xl bg-emerald-100 dark:bg-emerald-900/30 p-3">
+                <DollarSign className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
               </div>
             </div>
           </CardContent>
         </Card>
-        <Card className="border-0 shadow-sm">
+        <Card className="border-0 shadow-sm dark:bg-slate-800/80 dark:border-slate-700">
           <CardContent className="p-5">
             <div className="flex items-start justify-between">
               <div>
-                <p className="text-sm text-gray-500">Budget Utilization</p>
-                <p className="mt-1 text-2xl font-bold text-gray-900">{reportData.summary.averageUtilization}%</p>
+                <p className="text-sm text-gray-500 dark:text-slate-400">Budget Utilization</p>
+                <p className="mt-1 text-2xl font-bold text-gray-900 dark:text-white">{reportData.summary.averageUtilization}%</p>
                 <Progress value={parseFloat(reportData.summary.averageUtilization)} className="mt-2 h-1.5" />
               </div>
-              <div className="rounded-xl bg-purple-100 p-3">
-                <Target className="h-5 w-5 text-purple-600" />
+              <div className="rounded-xl bg-purple-100 dark:bg-purple-900/30 p-3">
+                <Target className="h-5 w-5 text-purple-600 dark:text-purple-400" />
               </div>
             </div>
           </CardContent>
         </Card>
-        <Card className="border-0 shadow-sm">
+        <Card className="border-0 shadow-sm dark:bg-slate-800/80 dark:border-slate-700">
           <CardContent className="p-5">
             <div className="flex items-start justify-between">
               <div>
-                <p className="text-sm text-gray-500">Total Trips</p>
-                <p className="mt-1 text-2xl font-bold text-gray-900">{reportData.summary.totalTrips}</p>
+                <p className="text-sm text-gray-500 dark:text-slate-400">Total Trips</p>
+                <p className="mt-1 text-2xl font-bold text-gray-900 dark:text-white">{reportData.summary.totalTrips}</p>
                 <div className="mt-1 flex gap-2 text-xs">
-                  <span className="text-emerald-600">Active: {reportData.summary.activeTrips}</span>
-                  <span className="text-gray-400">•</span>
-                  <span className="text-blue-600">Completed: {reportData.summary.completedTrips}</span>
+                  <span className="text-emerald-600 dark:text-emerald-400">Active: {reportData.summary.activeTrips}</span>
+                  <span className="text-gray-400 dark:text-slate-500">•</span>
+                  <span className="text-blue-600 dark:text-blue-400">Completed: {reportData.summary.completedTrips}</span>
                 </div>
               </div>
-              <div className="rounded-xl bg-amber-100 p-3">
-                <Activity className="h-5 w-5 text-amber-600" />
+              <div className="rounded-xl bg-amber-100 dark:bg-amber-900/30 p-3">
+                <Activity className="h-5 w-5 text-amber-600 dark:text-amber-400" />
               </div>
             </div>
           </CardContent>
@@ -610,13 +607,13 @@ const MayorReports = () => {
       </div>
 
       {/* Tab Navigation */}
-      <div className="flex flex-wrap gap-1 border-b">
+      <div className="flex flex-wrap gap-1 border-b dark:border-slate-700">
         <button
           onClick={() => setActiveTab('overview')}
           className={`rounded-t-lg px-4 py-2 text-sm font-medium transition-colors ${
             activeTab === 'overview'
-              ? 'border-b-2 border-blue-600 text-blue-600'
-              : 'text-gray-500 hover:text-gray-700'
+              ? 'border-b-2 border-blue-600 text-blue-600 dark:text-blue-400'
+              : 'text-gray-500 dark:text-slate-400 hover:text-gray-700 dark:hover:text-slate-300'
           }`}
         >
           <div className="flex items-center gap-2">
@@ -628,8 +625,8 @@ const MayorReports = () => {
           onClick={() => setActiveTab('comparison')}
           className={`rounded-t-lg px-4 py-2 text-sm font-medium transition-colors ${
             activeTab === 'comparison'
-              ? 'border-b-2 border-blue-600 text-blue-600'
-              : 'text-gray-500 hover:text-gray-700'
+              ? 'border-b-2 border-blue-600 text-blue-600 dark:text-blue-400'
+              : 'text-gray-500 dark:text-slate-400 hover:text-gray-700 dark:hover:text-slate-300'
           }`}
         >
           <div className="flex items-center gap-2">
@@ -641,8 +638,8 @@ const MayorReports = () => {
           onClick={() => setActiveTab('departments')}
           className={`rounded-t-lg px-4 py-2 text-sm font-medium transition-colors ${
             activeTab === 'departments'
-              ? 'border-b-2 border-blue-600 text-blue-600'
-              : 'text-gray-500 hover:text-gray-700'
+              ? 'border-b-2 border-blue-600 text-blue-600 dark:text-blue-400'
+              : 'text-gray-500 dark:text-slate-400 hover:text-gray-700 dark:hover:text-slate-300'
           }`}
         >
           <div className="flex items-center gap-2">
@@ -652,14 +649,14 @@ const MayorReports = () => {
         </button>
       </div>
 
-      {/* OVERVIEW TAB WITH MONTH/WEEK FILTER */}
+      {/* OVERVIEW TAB */}
       {activeTab === 'overview' && (
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
           {/* Budget Allocation Pie Chart */}
-          <Card className="border-0 shadow-sm overflow-hidden">
-            <CardHeader className="border-b border-gray-100 bg-white/50 pb-4">
-              <CardTitle className="flex items-center gap-2 text-lg">
-                <PieChartIcon className="h-5 w-5 text-blue-600" />
+          <Card className="border-0 shadow-sm overflow-hidden dark:bg-slate-800/80 dark:border-slate-700">
+            <CardHeader className="border-b border-gray-100 dark:border-slate-700 bg-white/50 dark:bg-slate-800/50 pb-4">
+              <CardTitle className="flex items-center gap-2 text-lg dark:text-white">
+                <PieChartIcon className="h-5 w-5 text-blue-600 dark:text-blue-400" />
                 Budget Allocation by Department
               </CardTitle>
             </CardHeader>
@@ -681,40 +678,39 @@ const MayorReports = () => {
                       <Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />
                     ))}
                   </Pie>
-                  <Tooltip formatter={(value) => formatCurrency(value)} />
+                  <Tooltip formatter={(value) => formatCurrency(value)} contentStyle={{ backgroundColor: isDarkMode ? '#1e293b' : '#fff', borderColor: isDarkMode ? '#334155' : '#e2e8f0' }} />
                 </PieChart>
               </ResponsiveContainer>
               <div className="mt-4 flex flex-wrap justify-center gap-3">
                 {budgetPieData.slice(0, 5).map((item, index) => (
                   <div key={index} className="flex items-center gap-1.5">
                     <div className="h-3 w-3 rounded-full" style={{ backgroundColor: CHART_COLORS[index] }} />
-                    <span className="text-xs text-gray-600">{item.name}</span>
+                    <span className="text-xs text-gray-600 dark:text-slate-400">{item.name}</span>
                   </div>
                 ))}
                 {budgetPieData.length > 5 && (
-                  <span className="text-xs text-gray-400">+{budgetPieData.length - 5} more</span>
+                  <span className="text-xs text-gray-400 dark:text-slate-500">+{budgetPieData.length - 5} more</span>
                 )}
               </div>
             </CardContent>
           </Card>
 
           {/* Month/Week Filter Card */}
-          <Card className="border-0 shadow-sm overflow-hidden">
-            <CardHeader className="border-b border-gray-100 bg-white/50 pb-4">
+          <Card className="border-0 shadow-sm overflow-hidden dark:bg-slate-800/80 dark:border-slate-700">
+            <CardHeader className="border-b border-gray-100 dark:border-slate-700 bg-white/50 dark:bg-slate-800/50 pb-4">
               <div className="flex items-center justify-between flex-wrap gap-4">
-                <CardTitle className="flex items-center gap-2 text-lg">
-                  <BarChart3 className="h-5 w-5 text-emerald-600" />
+                <CardTitle className="flex items-center gap-2 text-lg dark:text-white">
+                  <BarChart3 className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
                   Spending Overview
                 </CardTitle>
                 
-                {/* View Type Toggle */}
-                <div className="flex gap-1 rounded-lg bg-gray-100 p-1">
+                <div className="flex gap-1 rounded-lg bg-gray-100 dark:bg-slate-700 p-1">
                   <button
                     onClick={() => setViewType('month')}
                     className={`px-3 py-1.5 text-sm font-medium rounded-md transition-all ${
                       viewType === 'month'
-                        ? 'bg-white text-blue-600 shadow-sm'
-                        : 'text-gray-500 hover:text-gray-700'
+                        ? 'bg-white dark:bg-slate-600 text-blue-600 dark:text-blue-400 shadow-sm'
+                        : 'text-gray-500 dark:text-slate-400 hover:text-gray-700 dark:hover:text-slate-300'
                     }`}
                   >
                     Monthly
@@ -723,8 +719,8 @@ const MayorReports = () => {
                     onClick={() => setViewType('week')}
                     className={`px-3 py-1.5 text-sm font-medium rounded-md transition-all ${
                       viewType === 'week'
-                        ? 'bg-white text-blue-600 shadow-sm'
-                        : 'text-gray-500 hover:text-gray-700'
+                        ? 'bg-white dark:bg-slate-600 text-blue-600 dark:text-blue-400 shadow-sm'
+                        : 'text-gray-500 dark:text-slate-400 hover:text-gray-700 dark:hover:text-slate-300'
                     }`}
                   >
                     Weekly
@@ -733,25 +729,24 @@ const MayorReports = () => {
               </div>
             </CardHeader>
             <CardContent className="pt-6">
-              {/* Month Selector */}
               <div className="mb-4 flex items-center justify-between gap-2">
                 <Button
                   variant="outline"
                   size="sm"
                   onClick={() => handleMonthChange(-1)}
-                  className="p-1 h-8 w-8"
+                  className="p-1 h-8 w-8 dark:border-slate-600 dark:text-slate-300"
                 >
                   <ChevronLeft className="h-4 w-4" />
                 </Button>
                 <div className="text-center">
                   <div className="flex items-center gap-2">
-                    <Calendar className="h-4 w-4 text-gray-400" />
-                    <span className="font-semibold text-gray-700">
+                    <Calendar className="h-4 w-4 text-gray-400 dark:text-slate-500" />
+                    <span className="font-semibold text-gray-700 dark:text-slate-300">
                       {monthNames[selectedMonth]} {selectedYear}
                     </span>
                   </div>
                   {viewType === 'week' && currentSelectedWeek && (
-                    <p className="text-xs text-gray-500 mt-1">
+                    <p className="text-xs text-gray-500 dark:text-slate-400 mt-1">
                       {currentSelectedWeek.label}
                     </p>
                   )}
@@ -760,16 +755,15 @@ const MayorReports = () => {
                   variant="outline"
                   size="sm"
                   onClick={() => handleMonthChange(1)}
-                  className="p-1 h-8 w-8"
+                  className="p-1 h-8 w-8 dark:border-slate-600 dark:text-slate-300"
                 >
                   <ChevronRight className="h-4 w-4" />
                 </Button>
               </div>
 
-              {/* Week Selector (only when weekly view is active) */}
               {viewType === 'week' && weeksInMonth.length > 0 && (
                 <div className="mb-4">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-2">
                     Select Week
                   </label>
                   <div className="flex gap-2 flex-wrap">
@@ -780,7 +774,7 @@ const MayorReports = () => {
                         className={`px-3 py-1.5 text-sm rounded-md transition-all ${
                           selectedWeek === week.weekNumber
                             ? 'bg-blue-600 text-white shadow-sm'
-                            : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                            : 'bg-gray-100 dark:bg-slate-700 text-gray-600 dark:text-slate-300 hover:bg-gray-200 dark:hover:bg-slate-600'
                         }`}
                       >
                         Week {week.weekNumber}
@@ -790,29 +784,28 @@ const MayorReports = () => {
                 </div>
               )}
 
-              {/* Chart */}
               {currentChartData.length > 0 ? (
                 <ResponsiveContainer width="100%" height={280}>
                   <BarChart data={currentChartData}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                    <CartesianGrid strokeDasharray="3 3" stroke={isDarkMode ? '#334155' : '#e5e7eb'} />
                     <XAxis 
                       dataKey={viewType === 'week' ? 'week' : 'month'} 
-                      stroke="#94a3b8" 
+                      stroke={isDarkMode ? '#94a3b8' : '#64748b'} 
                       fontSize={11} 
                     />
-                    <YAxis stroke="#94a3b8" fontSize={11} tickFormatter={(value) => formatCompactCurrency(value)} />
-                    <Tooltip formatter={(value) => formatCurrency(value)} />
+                    <YAxis stroke={isDarkMode ? '#94a3b8' : '#64748b'} fontSize={11} tickFormatter={(value) => formatCompactCurrency(value)} />
+                    <Tooltip formatter={(value) => formatCurrency(value)} contentStyle={{ backgroundColor: isDarkMode ? '#1e293b' : '#fff', borderColor: isDarkMode ? '#334155' : '#e2e8f0' }} />
                     <Bar dataKey="budgetSpent" fill={COLORS.success} name="Spending" radius={[6, 6, 0, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
               ) : (
-                <div className="py-8 text-center text-gray-500">
-                  <AlertCircle className="mx-auto h-8 w-8 text-gray-400 mb-2" />
+                <div className="py-8 text-center text-gray-500 dark:text-slate-400">
+                  <AlertCircle className="mx-auto h-8 w-8 mb-2" />
                   <p>No data available for {currentMonthName} {selectedYear}</p>
                 </div>
               )}
               
-              <div className="mt-3 text-center text-xs text-gray-400">
+              <div className="mt-3 text-center text-xs text-gray-400 dark:text-slate-500">
                 {viewType === 'week' 
                   ? `Weekly spending for ${currentMonthName} ${selectedYear}`
                   : `Monthly spending trends (last 6 months)`
@@ -826,23 +819,23 @@ const MayorReports = () => {
       {/* BUDGET VS ACTUAL TAB */}
       {activeTab === 'comparison' && (
         <>
-          <Card className="border-0 shadow-sm overflow-hidden">
-            <CardHeader className="border-b border-gray-100 bg-white/50 pb-4">
+          <Card className="border-0 shadow-sm overflow-hidden dark:bg-slate-800/80 dark:border-slate-700">
+            <CardHeader className="border-b border-gray-100 dark:border-slate-700 bg-white/50 dark:bg-slate-800/50 pb-4">
               <div className="flex flex-wrap items-center justify-between gap-4">
                 <div>
-                  <CardTitle className="flex items-center gap-2 text-lg">
-                    <BarChart3 className="h-5 w-5 text-blue-600" />
+                  <CardTitle className="flex items-center gap-2 text-lg dark:text-white">
+                    <BarChart3 className="h-5 w-5 text-blue-600 dark:text-blue-400" />
                     Budget Allocation vs Actual Spending
                   </CardTitle>
-                  <p className="text-sm text-gray-500 mt-1">Compare budget allocated against actual spending by department</p>
+                  <p className="text-sm text-gray-500 dark:text-slate-400 mt-1">Compare budget allocated against actual spending by department</p>
                 </div>
                 
                 <div className="flex items-center gap-2">
-                  <Filter className="h-4 w-4 text-gray-400" />
+                  <Filter className="h-4 w-4 text-gray-400 dark:text-slate-500" />
                   <select
                     value={selectedDepartment}
                     onChange={(e) => setSelectedDepartment(e.target.value)}
-                    className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 min-w-[180px]"
+                    className="rounded-lg border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:text-white min-w-[180px]"
                   >
                     <option value="all">📊 All Departments</option>
                     {reportData.departmentTrends.map(dept => (
@@ -855,7 +848,7 @@ const MayorReports = () => {
               </div>
               
               {selectedDepartment !== 'all' && filteredComparisonData.length === 1 && (
-                <div className="mt-3 rounded-lg bg-blue-50 p-3 text-sm text-blue-700">
+                <div className="mt-3 rounded-lg bg-blue-50 dark:bg-blue-950/30 p-3 text-sm text-blue-700 dark:text-blue-400">
                   <div className="flex items-center gap-2">
                     <Info className="h-4 w-4" />
                     <span>Showing data for <strong>{selectedDepartment}</strong> only</span>
@@ -863,7 +856,7 @@ const MayorReports = () => {
                       variant="link" 
                       size="sm" 
                       onClick={() => setSelectedDepartment('all')}
-                      className="ml-auto text-blue-600"
+                      className="ml-auto text-blue-600 dark:text-blue-400"
                     >
                       View All Departments
                     </Button>
@@ -874,8 +867,8 @@ const MayorReports = () => {
             <CardContent className="pt-6">
               {filteredComparisonData.length === 0 ? (
                 <div className="py-12 text-center">
-                  <AlertCircle className="mx-auto h-12 w-12 text-gray-400" />
-                  <p className="mt-3 text-gray-500">No data available for the selected department</p>
+                  <AlertCircle className="mx-auto h-12 w-12 text-gray-400 dark:text-slate-500" />
+                  <p className="mt-3 text-gray-500 dark:text-slate-400">No data available for the selected department</p>
                 </div>
               ) : (
                 <ResponsiveContainer width="100%" height={Math.max(400, filteredComparisonData.length * 50)}>
@@ -884,11 +877,11 @@ const MayorReports = () => {
                     layout="vertical" 
                     margin={{ left: 100, right: 30, top: 20, bottom: 20 }}
                   >
-                    <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                    <CartesianGrid strokeDasharray="3 3" stroke={isDarkMode ? '#334155' : '#e5e7eb'} />
                     <XAxis type="number" tickFormatter={(value) => formatCompactCurrency(value)} />
-                    <YAxis type="category" dataKey="name" width={100} tick={{ fontSize: 11 }} />
-                    <Tooltip formatter={(value) => formatCurrency(value)} />
-                    <Legend />
+                    <YAxis type="category" dataKey="name" width={100} tick={{ fontSize: 11, fill: isDarkMode ? '#cbd5e1' : '#475569' }} />
+                    <Tooltip formatter={(value) => formatCurrency(value)} contentStyle={{ backgroundColor: isDarkMode ? '#1e293b' : '#fff', borderColor: isDarkMode ? '#334155' : '#e2e8f0' }} />
+                    <Legend wrapperStyle={{ color: isDarkMode ? '#cbd5e1' : '#475569' }} />
                     <Bar dataKey="allocated" fill={COLORS.primary} name="Budget Allocated" radius={[0, 4, 4, 0]} />
                     <Bar dataKey="spent" fill={COLORS.success} name="Actual Spent" radius={[0, 4, 4, 0]} />
                   </BarChart>
@@ -899,50 +892,50 @@ const MayorReports = () => {
 
           {/* Variance Summary Cards */}
           <div className="grid grid-cols-1 gap-5 sm:grid-cols-3">
-            <Card className="border-emerald-200 bg-gradient-to-br from-emerald-50 to-white">
+            <Card className="border-emerald-200 dark:border-emerald-800 bg-gradient-to-br from-emerald-50 to-white dark:from-emerald-950/30 dark:to-slate-800">
               <CardContent className="p-5">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-sm text-emerald-600">Under Budget</p>
-                    <p className="text-3xl font-bold text-emerald-700">
+                    <p className="text-sm text-emerald-600 dark:text-emerald-400">Under Budget</p>
+                    <p className="text-3xl font-bold text-emerald-700 dark:text-emerald-300">
                       {reportData.departmentTrends.filter(d => d.variance < 0).length}
                     </p>
-                    <p className="text-xs text-emerald-500">departments</p>
+                    <p className="text-xs text-emerald-500 dark:text-emerald-500">departments</p>
                   </div>
-                  <div className="rounded-full bg-emerald-100 p-3">
-                    <TrendingDown className="h-6 w-6 text-emerald-600" />
+                  <div className="rounded-full bg-emerald-100 dark:bg-emerald-900/50 p-3">
+                    <TrendingDown className="h-6 w-6 text-emerald-600 dark:text-emerald-400" />
                   </div>
                 </div>
               </CardContent>
             </Card>
-            <Card className="border-amber-200 bg-gradient-to-br from-amber-50 to-white">
+            <Card className="border-amber-200 dark:border-amber-800 bg-gradient-to-br from-amber-50 to-white dark:from-amber-950/30 dark:to-slate-800">
               <CardContent className="p-5">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-sm text-amber-600">Within 10% of Budget</p>
-                    <p className="text-3xl font-bold text-amber-700">
+                    <p className="text-sm text-amber-600 dark:text-amber-400">Within 10% of Budget</p>
+                    <p className="text-3xl font-bold text-amber-700 dark:text-amber-300">
                       {reportData.departmentTrends.filter(d => Math.abs(d.variancePercent) <= 10).length}
                     </p>
-                    <p className="text-xs text-amber-500">departments</p>
+                    <p className="text-xs text-amber-500 dark:text-amber-500">departments</p>
                   </div>
-                  <div className="rounded-full bg-amber-100 p-3">
-                    <CheckCircle className="h-6 w-6 text-amber-600" />
+                  <div className="rounded-full bg-amber-100 dark:bg-amber-900/50 p-3">
+                    <CheckCircle className="h-6 w-6 text-amber-600 dark:text-amber-400" />
                   </div>
                 </div>
               </CardContent>
             </Card>
-            <Card className="border-red-200 bg-gradient-to-br from-red-50 to-white">
+            <Card className="border-red-200 dark:border-red-800 bg-gradient-to-br from-red-50 to-white dark:from-red-950/30 dark:to-slate-800">
               <CardContent className="p-5">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-sm text-red-600">Over Budget</p>
-                    <p className="text-3xl font-bold text-red-700">
+                    <p className="text-sm text-red-600 dark:text-red-400">Over Budget</p>
+                    <p className="text-3xl font-bold text-red-700 dark:text-red-300">
                       {reportData.departmentTrends.filter(d => d.variance > 0).length}
                     </p>
-                    <p className="text-xs text-red-500">departments</p>
+                    <p className="text-xs text-red-500 dark:text-red-500">departments</p>
                   </div>
-                  <div className="rounded-full bg-red-100 p-3">
-                    <ArrowUpRight className="h-6 w-6 text-red-600" />
+                  <div className="rounded-full bg-red-100 dark:bg-red-900/50 p-3">
+                    <ArrowUpRight className="h-6 w-6 text-red-600 dark:text-red-400" />
                   </div>
                 </div>
               </CardContent>
@@ -950,21 +943,21 @@ const MayorReports = () => {
           </div>
 
           {/* Weekly Budget Comparison Bar Chart */}
-          <Card className="border-0 shadow-sm overflow-hidden">
-            <CardHeader className="border-b border-gray-100 bg-white/50 pb-4">
-              <CardTitle className="flex items-center gap-2 text-lg">
-                <BarChart3 className="h-5 w-5 text-indigo-600" />
+          <Card className="border-0 shadow-sm overflow-hidden dark:bg-slate-800/80 dark:border-slate-700">
+            <CardHeader className="border-b border-gray-100 dark:border-slate-700 bg-white/50 dark:bg-slate-800/50 pb-4">
+              <CardTitle className="flex items-center gap-2 text-lg dark:text-white">
+                <BarChart3 className="h-5 w-5 text-indigo-600 dark:text-indigo-400" />
                 Weekly Budget Comparison
               </CardTitle>
             </CardHeader>
             <CardContent className="pt-6">
               <ResponsiveContainer width="100%" height={350}>
                 <BarChart data={reportData.weeklyBudgetComparison}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                  <XAxis dataKey="week" stroke="#94a3b8" />
-                  <YAxis stroke="#94a3b8" tickFormatter={(value) => formatCompactCurrency(value)} />
-                  <Tooltip formatter={(value) => formatCurrency(value)} />
-                  <Legend />
+                  <CartesianGrid strokeDasharray="3 3" stroke={isDarkMode ? '#334155' : '#e5e7eb'} />
+                  <XAxis dataKey="week" stroke={isDarkMode ? '#94a3b8' : '#64748b'} />
+                  <YAxis stroke={isDarkMode ? '#94a3b8' : '#64748b'} tickFormatter={(value) => formatCompactCurrency(value)} />
+                  <Tooltip formatter={(value) => formatCurrency(value)} contentStyle={{ backgroundColor: isDarkMode ? '#1e293b' : '#fff', borderColor: isDarkMode ? '#334155' : '#e2e8f0' }} />
+                  <Legend wrapperStyle={{ color: isDarkMode ? '#cbd5e1' : '#475569' }} />
                   <Bar dataKey="allocated" fill={COLORS.primary} name="Budget Allocated" radius={[4, 4, 0, 0]} />
                   <Bar dataKey="spent" fill={COLORS.warning} name="Actual Spent" radius={[4, 4, 0, 0]} />
                 </BarChart>
@@ -979,11 +972,11 @@ const MayorReports = () => {
         <div>
           <div className="mb-4 flex flex-wrap items-center justify-between gap-4">
             <div className="flex items-center gap-2">
-              <Filter className="h-4 w-4 text-gray-400" />
+              <Filter className="h-4 w-4 text-gray-400 dark:text-slate-500" />
               <select
                 value={selectedDepartment}
                 onChange={(e) => setSelectedDepartment(e.target.value)}
-                className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 min-w-[180px]"
+                className="rounded-lg border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:text-white min-w-[180px]"
               >
                 <option value="all">🏛️ All Departments</option>
                 {reportData.departmentTrends.map(dept => (
@@ -997,72 +990,71 @@ const MayorReports = () => {
                   variant="ghost" 
                   size="sm" 
                   onClick={() => setSelectedDepartment('all')}
-                  className="text-blue-600"
+                  className="text-blue-600 dark:text-blue-400"
                 >
                   Clear Filter
                 </Button>
               )}
             </div>
-            <p className="text-sm text-gray-500">
+            <p className="text-sm text-gray-500 dark:text-slate-400">
               Showing {filteredDepartmentDetails.length} of {reportData.departmentTrends.length} departments
             </p>
           </div>
 
           <div className="grid grid-cols-1 gap-5">
             {filteredDepartmentDetails.length === 0 ? (
-              <Card className="p-12 text-center">
-                <AlertCircle className="mx-auto h-12 w-12 text-gray-400" />
-                <p className="mt-3 text-gray-500">No department data available</p>
+              <Card className="p-12 text-center dark:bg-slate-800/80">
+                <AlertCircle className="mx-auto h-12 w-12 text-gray-400 dark:text-slate-500" />
+                <p className="mt-3 text-gray-500 dark:text-slate-400">No department data available</p>
               </Card>
             ) : (
               filteredDepartmentDetails.map((dept, index) => {
                 const utilization = dept.utilization;
-                const statusColor = utilization >= 80 ? 'text-red-600' : utilization >= 50 ? 'text-amber-600' : 'text-emerald-600';
-                const statusBg = utilization >= 80 ? 'bg-red-100' : utilization >= 50 ? 'bg-amber-100' : 'bg-emerald-100';
+                const statusColor = utilization >= 80 ? 'text-red-600 dark:text-red-400' : utilization >= 50 ? 'text-amber-600 dark:text-amber-400' : 'text-emerald-600 dark:text-emerald-400';
+                const statusBg = utilization >= 80 ? 'bg-red-100 dark:bg-red-900/30' : utilization >= 50 ? 'bg-amber-100 dark:bg-amber-900/30' : 'bg-emerald-100 dark:bg-emerald-900/30';
                 const statusText = utilization >= 80 ? 'Critical' : utilization >= 50 ? 'Warning' : 'Good';
                 
                 return (
-                  <Card key={index} className="border-0 shadow-sm overflow-hidden hover:shadow-md transition-all">
+                  <Card key={index} className="border-0 shadow-sm overflow-hidden hover:shadow-md transition-all dark:bg-slate-800/80 dark:border-slate-700">
                     <CardContent className="p-5">
                       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                         <div className="flex-1">
                           <div className="mb-3 flex items-center gap-3">
-                            <Building2 className="h-5 w-5 text-gray-400" />
-                            <h3 className="text-lg font-semibold text-gray-900">{dept.name}</h3>
+                            <Building2 className="h-5 w-5 text-gray-400 dark:text-slate-500" />
+                            <h3 className="text-lg font-semibold text-gray-900 dark:text-white">{dept.name}</h3>
                             <Badge className={`${statusBg} ${statusColor}`}>{statusText}</Badge>
                           </div>
                           
                           <div className="mb-2 flex flex-wrap items-center justify-between gap-2 text-sm">
-                            <span className="text-gray-500">Budget Allocated</span>
-                            <span className="font-semibold text-gray-700">{formatCurrency(dept.allocated)}</span>
+                            <span className="text-gray-500 dark:text-slate-400">Budget Allocated</span>
+                            <span className="font-semibold text-gray-700 dark:text-slate-300">{formatCurrency(dept.allocated)}</span>
                           </div>
                           <div className="mb-2 flex flex-wrap items-center justify-between gap-2 text-sm">
-                            <span className="text-gray-500">Amount Used</span>
-                            <span className={`font-semibold ${dept.spent > dept.allocated ? 'text-red-600' : 'text-emerald-600'}`}>
+                            <span className="text-gray-500 dark:text-slate-400">Amount Used</span>
+                            <span className={`font-semibold ${dept.spent > dept.allocated ? 'text-red-600 dark:text-red-400' : 'text-emerald-600 dark:text-emerald-400'}`}>
                               {formatCurrency(dept.spent)}
                             </span>
                           </div>
                           <div className="mb-3 flex flex-wrap items-center justify-between gap-2 text-sm">
-                            <span className="text-gray-500">Remaining</span>
-                            <span className="font-semibold text-blue-600">{formatCurrency(dept.remaining)}</span>
+                            <span className="text-gray-500 dark:text-slate-400">Remaining</span>
+                            <span className="font-semibold text-blue-600 dark:text-blue-400">{formatCurrency(dept.remaining)}</span>
                           </div>
                           <div className="mt-2">
                             <div className="mb-1 flex justify-between text-xs">
-                              <span>Utilization Rate</span>
+                              <span className="text-gray-600 dark:text-slate-400">Utilization Rate</span>
                               <span className={getUtilizationColor(utilization)}>{utilization.toFixed(1)}%</span>
                             </div>
                             <Progress 
                               value={dept.utilization} 
                               className="h-2"
-                              indicatorClassName={getProgressColor(utilization)}
                             />
                           </div>
                         </div>
-                        <div className="flex min-w-[120px] flex-col items-center gap-1 rounded-xl bg-gray-50 p-4 text-center">
-                          <div className="text-2xl font-bold text-gray-800">{dept.trips}</div>
-                          <p className="text-xs text-gray-500">Total Trips</p>
+                        <div className="flex min-w-[120px] flex-col items-center gap-1 rounded-xl bg-gray-50 dark:bg-slate-700/50 p-4 text-center">
+                          <div className="text-2xl font-bold text-gray-800 dark:text-white">{dept.trips}</div>
+                          <p className="text-xs text-gray-500 dark:text-slate-400">Total Trips</p>
                           <div className="mt-2 text-xs">
-                            <span className={dept.variance > 0 ? 'text-red-500' : 'text-emerald-500'}>
+                            <span className={dept.variance > 0 ? 'text-red-500 dark:text-red-400' : 'text-emerald-500 dark:text-emerald-400'}>
                               Variance: {dept.variance > 0 ? '+' : ''}{formatCurrency(dept.variance)}
                             </span>
                           </div>
@@ -1078,7 +1070,7 @@ const MayorReports = () => {
       )}
 
       {/* Footer */}
-      <div className="text-center text-xs text-gray-400 pt-4">
+      <div className="text-center text-xs text-gray-400 dark:text-slate-500 pt-4">
         Data period: {viewType === 'week' && currentSelectedWeek 
           ? `${currentSelectedWeek.start.toLocaleDateString()} to ${currentSelectedWeek.end.toLocaleDateString()}`
           : `${monthNames[selectedMonth]} ${selectedYear}`

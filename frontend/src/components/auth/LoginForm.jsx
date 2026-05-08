@@ -6,7 +6,7 @@ import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
 import { Alert, AlertDescription } from '../ui/alert';
-import { Loader2, Mail, Lock, Eye, EyeOff, KeyRound } from 'lucide-react';
+import { Loader2, Mail, Lock, Eye, EyeOff, KeyRound, ShieldCheck } from 'lucide-react';
 
 const LoginForm = () => {
   const [email, setEmail] = useState('');
@@ -117,22 +117,22 @@ const LoginForm = () => {
   };
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-5">
-      {/* Error Alert */}
+    <form onSubmit={handleSubmit} className="space-y-6">
+      {/* Error Alert - Premium Style */}
       {error && (
-        <Alert variant="destructive" className="border-red-200 bg-red-50">
+        <Alert variant="destructive" className="border-red-200 bg-red-50 rounded-xl">
           <AlertDescription className="text-red-600 text-sm">{error}</AlertDescription>
         </Alert>
       )}
 
       {/* Email Field */}
       <div className="space-y-2">
-        <Label htmlFor="email" className="text-gray-700 font-medium text-sm">
+        <Label htmlFor="email" className="text-slate-700 dark:text-slate-300 font-semibold text-sm">
           Email Address
         </Label>
         <div className="relative">
           <div className="absolute left-3 top-1/2 transform -translate-y-1/2">
-            <Mail className="h-4 w-4 text-gray-400" />
+            <Mail className="h-4 w-4 text-slate-400" />
           </div>
           <Input
             id="email"
@@ -141,37 +141,40 @@ const LoginForm = () => {
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             onBlur={() => handleFieldBlur('email')}
-            className={`pl-10 h-11 transition-all duration-200 ${
+            className={`pl-10 h-12 rounded-xl transition-all duration-200 bg-white dark:bg-slate-800 border ${
               getEmailError() && touched.email 
                 ? 'border-red-400 focus:ring-red-400' 
-                : 'border-gray-200 focus:border-blue-400 focus:ring-blue-400'
-            }`}
+                : 'border-slate-200 dark:border-slate-700 focus:border-blue-400 focus:ring-blue-400'
+            } dark:text-white placeholder:text-slate-400`}
             disabled={loading}
             autoComplete="email"
             autoFocus
           />
         </div>
         {getEmailError() && touched.email && (
-          <p className="text-xs text-red-500 mt-1">{getEmailError()}</p>
+          <p className="text-xs text-red-500 mt-1 flex items-center gap-1">
+            <AlertCircle className="h-3 w-3" />
+            {getEmailError()}
+          </p>
         )}
       </div>
 
       {/* Password Field */}
       <div className="space-y-2">
         <div className="flex justify-between items-center">
-          <Label htmlFor="password" className="text-gray-700 font-medium text-sm">
+          <Label htmlFor="password" className="text-slate-700 dark:text-slate-300 font-semibold text-sm">
             Password
           </Label>
           <a 
             href="/forgot-password" 
-            className="text-xs text-blue-600 hover:text-blue-700 hover:underline transition-colors"
+            className="text-xs text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 hover:underline transition-colors"
           >
             Forgot password?
           </a>
         </div>
         <div className="relative">
           <div className="absolute left-3 top-1/2 transform -translate-y-1/2">
-            <Lock className="h-4 w-4 text-gray-400" />
+            <Lock className="h-4 w-4 text-slate-400" />
           </div>
           <Input
             id="password"
@@ -180,18 +183,18 @@ const LoginForm = () => {
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             onBlur={() => handleFieldBlur('password')}
-            className={`pl-10 pr-10 h-11 transition-all duration-200 ${
+            className={`pl-10 pr-10 h-12 rounded-xl transition-all duration-200 bg-white dark:bg-slate-800 border ${
               getPasswordError() && touched.password 
                 ? 'border-red-400 focus:ring-red-400' 
-                : 'border-gray-200 focus:border-blue-400 focus:ring-blue-400'
-            }`}
+                : 'border-slate-200 dark:border-slate-700 focus:border-blue-400 focus:ring-blue-400'
+            } dark:text-white`}
             disabled={loading}
             autoComplete="current-password"
           />
           <button
             type="button"
             onClick={() => setShowPassword(!showPassword)}
-            className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
+            className="absolute right-3 top-1/2 transform -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors"
             tabIndex={-1}
           >
             {showPassword ? (
@@ -206,7 +209,7 @@ const LoginForm = () => {
         )}
       </div>
 
-      {/* Remember Me & Forgot Password */}
+      {/* Remember Me */}
       <div className="flex items-center justify-between">
         <label className="flex items-center space-x-2 cursor-pointer group">
           <div className="relative">
@@ -214,19 +217,19 @@ const LoginForm = () => {
               type="checkbox"
               checked={rememberMe}
               onChange={(e) => setRememberMe(e.target.checked)}
-              className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 w-4 h-4 cursor-pointer"
+              className="rounded border-slate-300 dark:border-slate-600 text-blue-600 focus:ring-blue-500 w-4 h-4 cursor-pointer"
             />
           </div>
-          <span className="text-sm text-gray-600 group-hover:text-gray-800 transition-colors select-none">
+          <span className="text-sm text-slate-600 dark:text-slate-400 group-hover:text-slate-800 dark:group-hover:text-slate-200 transition-colors select-none">
             Remember me
           </span>
         </label>
       </div>
 
-      {/* Submit Button */}
+      {/* Submit Button - Premium Gradient */}
       <Button 
         type="submit" 
-        className="w-full h-11 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white font-semibold shadow-md transition-all duration-200 transform hover:scale-[1.02] active:scale-[0.98]"
+        className="w-full h-12 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white font-bold rounded-xl shadow-md transition-all duration-200 transform hover:scale-[1.02] active:scale-[0.98] disabled:opacity-70 disabled:cursor-not-allowed"
         disabled={loading}
       >
         {loading ? (
@@ -244,7 +247,13 @@ const LoginForm = () => {
 
       {/* Security Note */}
       <div className="text-center pt-2">
-        <p className="text-[11px] text-gray-400">
+        <div className="flex items-center justify-center gap-2 mb-2">
+          <ShieldCheck className="h-3 w-3 text-emerald-500" />
+          <span className="text-[11px] text-emerald-600 dark:text-emerald-400 font-medium">
+            Secured by FCMS
+          </span>
+        </div>
+        <p className="text-[11px] text-slate-400 dark:text-slate-500">
           This system is for authorized personnel only.
           <br />
           All access attempts are logged and monitored.
@@ -253,5 +262,8 @@ const LoginForm = () => {
     </form>
   );
 };
+
+// Add AlertCircle import at the top
+import { AlertCircle } from 'lucide-react';
 
 export default LoginForm;

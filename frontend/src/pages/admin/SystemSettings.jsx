@@ -1,3 +1,4 @@
+// src/pages/admin/SystemSettings.jsx
 import React, { useState, useEffect } from 'react';
 import { settingsAPI } from '../../services/api';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -21,8 +22,12 @@ import {
   Mail,
   Phone,
   Globe,
-  Bell,        
-  DollarSign
+  Bell,
+  DollarSign,
+  Shield,
+  Truck,
+  Calendar,
+  Zap
 } from 'lucide-react';
 
 const SystemSettings = () => {
@@ -41,7 +46,7 @@ const SystemSettings = () => {
     try {
       setLoading(true);
       const response = await settingsAPI.getAll();
-      const settingsData = response.data.data || response.data;
+      const settingsData = response.data?.data || response.data || {};
       setSettings(settingsData);
     } catch (error) {
       console.error('Failed to fetch settings:', error);
@@ -62,7 +67,6 @@ const SystemSettings = () => {
   const handleSave = async () => {
     setSaving(true);
     try {
-      // Save each setting individually or use bulk update
       for (const [key, value] of Object.entries(settings)) {
         await settingsAPI.update(key, value);
       }
@@ -92,33 +96,45 @@ const SystemSettings = () => {
   if (loading) {
     return (
       <div className="flex items-center justify-center h-96">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 dark:border-blue-400"></div>
       </div>
     );
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 animate-fade-in-up">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">System Settings</h1>
-          <p className="text-gray-600 mt-1">Configure system parameters and preferences</p>
+          <h1 className="text-2xl font-bold bg-gradient-to-r from-slate-800 to-slate-600 dark:from-white dark:to-slate-300 bg-clip-text text-transparent">
+            System Settings
+          </h1>
+          <p className="text-slate-500 dark:text-slate-400 mt-1">
+            Configure system parameters and preferences
+          </p>
         </div>
         <div className="flex gap-3">
-          <Button variant="outline" onClick={handleReset} className="flex items-center gap-2">
+          <Button 
+            variant="outline" 
+            onClick={handleReset} 
+            className="flex items-center gap-2 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+          >
             <RefreshCw className="h-4 w-4" />
             Reset
           </Button>
-          <Button onClick={handleSave} disabled={saving} className="flex items-center gap-2">
+          <Button 
+            onClick={handleSave} 
+            disabled={saving} 
+            className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 shadow-md hover:shadow-lg transition-all duration-200"
+          >
             {saving ? (
               <>
                 <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                Saving...
+                <span className="ml-2">Saving...</span>
               </>
             ) : (
               <>
-                <Save className="h-4 w-4" />
+                <Save className="h-4 w-4 mr-2" />
                 Save Changes
               </>
             )}
@@ -128,37 +144,40 @@ const SystemSettings = () => {
 
       {/* Success/Error Messages */}
       {successMessage && (
-        <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-lg flex items-center gap-2">
+        <div className="bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-400 px-4 py-3 rounded-xl flex items-center gap-2 animate-fade-in">
           <CheckCircle className="h-5 w-5" />
           {successMessage}
         </div>
       )}
       {errorMessage && (
-        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg flex items-center gap-2">
+        <div className="bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-400 px-4 py-3 rounded-xl flex items-center gap-2 animate-fade-in">
           <AlertCircle className="h-5 w-5" />
           {errorMessage}
         </div>
       )}
 
       {/* Tabs */}
-      <div className="border-b border-gray-200">
+      <div className="border-b border-slate-200 dark:border-slate-700">
         <nav className="flex space-x-8">
-          {tabs.map((tab) => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className={`
-                flex items-center gap-2 py-4 px-1 border-b-2 font-medium text-sm transition-colors
-                ${activeTab === tab.id
-                  ? 'border-blue-500 text-blue-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                }
-              `}
-            >
-              <tab.icon className="h-4 w-4" />
-              {tab.label}
-            </button>
-          ))}
+          {tabs.map((tab) => {
+            const Icon = tab.icon;
+            return (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className={`
+                  flex items-center gap-2 py-4 px-1 border-b-2 font-medium text-sm transition-all duration-200
+                  ${activeTab === tab.id
+                    ? 'border-blue-500 text-blue-600 dark:text-blue-400'
+                    : 'border-transparent text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-300 hover:border-slate-300'
+                  }
+                `}
+              >
+                <Icon className="h-4 w-4" />
+                {tab.label}
+              </button>
+            );
+          })}
         </nav>
       </div>
 
@@ -166,83 +185,82 @@ const SystemSettings = () => {
       {activeTab === 'general' && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Mayor Information */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <User className="h-5 w-5 text-blue-600" />
+          <Card className="dark:bg-slate-800/80 dark:border-slate-700">
+            <CardHeader className="border-b dark:border-slate-700">
+              <CardTitle className="flex items-center gap-2 text-slate-900 dark:text-white">
+                <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl flex items-center justify-center">
+                  <User className="h-4 w-4 text-white" />
+                </div>
                 Mayor's Office Information
               </CardTitle>
             </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent className="space-y-4 pt-4">
               <div>
-                <Label htmlFor="mayor_name" className="flex items-center gap-2">
+                <Label className="text-slate-700 dark:text-slate-300 flex items-center gap-2 mb-1.5">
                   <User className="h-4 w-4" />
                   Mayor's Name
                 </Label>
                 <Input
-                  id="mayor_name"
                   value={settings.mayor_name || ''}
                   onChange={(e) => handleSettingChange('mayor_name', e.target.value)}
                   placeholder="e.g., Hon. Juan Dela Cruz"
-                  className="mt-1"
+                  className="dark:bg-slate-900 dark:border-slate-700"
                 />
-                <p className="text-xs text-gray-500 mt-1">Appears on printed gas slips</p>
+                <p className="text-xs text-slate-400 mt-1">Appears on printed gas slips</p>
               </div>
               <div>
-                <Label htmlFor="mayor_office_phone" className="flex items-center gap-2">
+                <Label className="text-slate-700 dark:text-slate-300 flex items-center gap-2 mb-1.5">
                   <Phone className="h-4 w-4" />
                   Mayor's Office Phone
                 </Label>
                 <Input
-                  id="mayor_office_phone"
                   value={settings.mayor_office_phone || ''}
                   onChange={(e) => handleSettingChange('mayor_office_phone', e.target.value)}
                   placeholder="e.g., (02) 8123-4567"
-                  className="mt-1"
+                  className="dark:bg-slate-900 dark:border-slate-700"
                 />
               </div>
               <div>
-                <Label htmlFor="mayor_office_email" className="flex items-center gap-2">
+                <Label className="text-slate-700 dark:text-slate-300 flex items-center gap-2 mb-1.5">
                   <Mail className="h-4 w-4" />
                   Mayor's Office Email
                 </Label>
                 <Input
-                  id="mayor_office_email"
                   type="email"
                   value={settings.mayor_office_email || ''}
                   onChange={(e) => handleSettingChange('mayor_office_email', e.target.value)}
                   placeholder="e.g., mayor@fcms.gov.ph"
-                  className="mt-1"
+                  className="dark:bg-slate-900 dark:border-slate-700"
                 />
               </div>
             </CardContent>
           </Card>
 
           {/* System Information */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Globe className="h-5 w-5 text-blue-600" />
+          <Card className="dark:bg-slate-800/80 dark:border-slate-700">
+            <CardHeader className="border-b dark:border-slate-700">
+              <CardTitle className="flex items-center gap-2 text-slate-900 dark:text-white">
+                <div className="w-8 h-8 bg-gradient-to-br from-purple-500 to-purple-600 rounded-xl flex items-center justify-center">
+                  <Globe className="h-4 w-4 text-white" />
+                </div>
                 System Information
               </CardTitle>
             </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent className="space-y-4 pt-4">
               <div>
-                <Label htmlFor="system_name">System Name</Label>
+                <Label className="text-slate-700 dark:text-slate-300 mb-1.5 block">System Name</Label>
                 <Input
-                  id="system_name"
                   value={settings.system_name || 'FCMS'}
                   onChange={(e) => handleSettingChange('system_name', e.target.value)}
-                  className="mt-1"
+                  className="dark:bg-slate-900 dark:border-slate-700"
                 />
               </div>
               <div>
-                <Label htmlFor="system_timezone">Timezone</Label>
+                <Label className="text-slate-700 dark:text-slate-300 mb-1.5 block">Timezone</Label>
                 <select
-                  id="system_timezone"
                   value={settings.system_timezone || 'Asia/Manila'}
                   onChange={(e) => handleSettingChange('system_timezone', e.target.value)}
-                  className="w-full mt-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-3 py-2 border rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-slate-900 dark:border-slate-700 dark:text-white"
                 >
                   <option value="Asia/Manila">Asia/Manila (GMT+8)</option>
                   <option value="UTC">UTC</option>
@@ -251,12 +269,11 @@ const SystemSettings = () => {
                 </select>
               </div>
               <div>
-                <Label htmlFor="date_format">Date Format</Label>
+                <Label className="text-slate-700 dark:text-slate-300 mb-1.5 block">Date Format</Label>
                 <select
-                  id="date_format"
                   value={settings.date_format || 'Y-m-d'}
                   onChange={(e) => handleSettingChange('date_format', e.target.value)}
-                  className="w-full mt-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-3 py-2 border rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-slate-900 dark:border-slate-700 dark:text-white"
                 >
                   <option value="Y-m-d">YYYY-MM-DD</option>
                   <option value="m/d/Y">MM/DD/YYYY</option>
@@ -268,44 +285,45 @@ const SystemSettings = () => {
           </Card>
 
           {/* GSO Information */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Building2 className="h-5 w-5 text-blue-600" />
+          <Card className="dark:bg-slate-800/80 dark:border-slate-700 lg:col-span-2">
+            <CardHeader className="border-b dark:border-slate-700">
+              <CardTitle className="flex items-center gap-2 text-slate-900 dark:text-white">
+                <div className="w-8 h-8 bg-gradient-to-br from-emerald-500 to-emerald-600 rounded-xl flex items-center justify-center">
+                  <Building2 className="h-4 w-4 text-white" />
+                </div>
                 GSO Information
               </CardTitle>
             </CardHeader>
-            <CardContent className="space-y-4">
-              <div>
-                <Label htmlFor="gso_head_name">GSO Head Name</Label>
-                <Input
-                  id="gso_head_name"
-                  value={settings.gso_head_name || ''}
-                  onChange={(e) => handleSettingChange('gso_head_name', e.target.value)}
-                  placeholder="e.g., Engr. Maria Santos"
-                  className="mt-1"
-                />
-              </div>
-              <div>
-                <Label htmlFor="gso_office_phone">GSO Office Phone</Label>
-                <Input
-                  id="gso_office_phone"
-                  value={settings.gso_office_phone || ''}
-                  onChange={(e) => handleSettingChange('gso_office_phone', e.target.value)}
-                  placeholder="e.g., (02) 8123-4567"
-                  className="mt-1"
-                />
-              </div>
-              <div>
-                <Label htmlFor="gso_office_email">GSO Office Email</Label>
-                <Input
-                  id="gso_office_email"
-                  type="email"
-                  value={settings.gso_office_email || ''}
-                  onChange={(e) => handleSettingChange('gso_office_email', e.target.value)}
-                  placeholder="e.g., gso@fcms.gov.ph"
-                  className="mt-1"
-                />
+            <CardContent className="space-y-4 pt-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <Label className="text-slate-700 dark:text-slate-300 mb-1.5 block">GSO Head Name</Label>
+                  <Input
+                    value={settings.gso_head_name || ''}
+                    onChange={(e) => handleSettingChange('gso_head_name', e.target.value)}
+                    placeholder="e.g., Engr. Maria Santos"
+                    className="dark:bg-slate-900 dark:border-slate-700"
+                  />
+                </div>
+                <div>
+                  <Label className="text-slate-700 dark:text-slate-300 mb-1.5 block">GSO Office Phone</Label>
+                  <Input
+                    value={settings.gso_office_phone || ''}
+                    onChange={(e) => handleSettingChange('gso_office_phone', e.target.value)}
+                    placeholder="e.g., (02) 8123-4567"
+                    className="dark:bg-slate-900 dark:border-slate-700"
+                  />
+                </div>
+                <div className="md:col-span-2">
+                  <Label className="text-slate-700 dark:text-slate-300 mb-1.5 block">GSO Office Email</Label>
+                  <Input
+                    type="email"
+                    value={settings.gso_office_email || ''}
+                    onChange={(e) => handleSettingChange('gso_office_email', e.target.value)}
+                    placeholder="e.g., gso@fcms.gov.ph"
+                    className="dark:bg-slate-900 dark:border-slate-700"
+                  />
+                </div>
               </div>
             </CardContent>
           </Card>
@@ -315,107 +333,105 @@ const SystemSettings = () => {
       {/* GPS Configuration Tab */}
       {activeTab === 'gps' && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <MapPin className="h-5 w-5 text-blue-600" />
+          <Card className="dark:bg-slate-800/80 dark:border-slate-700">
+            <CardHeader className="border-b dark:border-slate-700">
+              <CardTitle className="flex items-center gap-2 text-slate-900 dark:text-white">
+                <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl flex items-center justify-center">
+                  <MapPin className="h-4 w-4 text-white" />
+                </div>
                 GPS Tracking Settings
               </CardTitle>
             </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent className="space-y-4 pt-4">
               <div>
-                <Label htmlFor="gps_ping_interval_seconds" className="flex items-center gap-2">
+                <Label className="text-slate-700 dark:text-slate-300 flex items-center gap-2 mb-1.5">
                   <Clock className="h-4 w-4" />
                   GPS Ping Interval (seconds)
                 </Label>
                 <Input
-                  id="gps_ping_interval_seconds"
                   type="number"
                   value={settings.gps_ping_interval_seconds || 30}
                   onChange={(e) => handleSettingChange('gps_ping_interval_seconds', parseInt(e.target.value))}
-                  className="mt-1"
+                  className="dark:bg-slate-900 dark:border-slate-700"
                 />
-                <p className="text-xs text-gray-500 mt-1">How often the mobile app sends GPS coordinates</p>
+                <p className="text-xs text-slate-400 mt-1">How often the mobile app sends GPS coordinates</p>
               </div>
 
               <div>
-                <Label htmlFor="gps_accuracy_threshold_meters" className="flex items-center gap-2">
+                <Label className="text-slate-700 dark:text-slate-300 flex items-center gap-2 mb-1.5">
                   <Gauge className="h-4 w-4" />
                   GPS Accuracy Threshold (meters)
                 </Label>
                 <Input
-                  id="gps_accuracy_threshold_meters"
                   type="number"
                   value={settings.gps_accuracy_threshold_meters || 50}
                   onChange={(e) => handleSettingChange('gps_accuracy_threshold_meters', parseInt(e.target.value))}
-                  className="mt-1"
+                  className="dark:bg-slate-900 dark:border-slate-700"
                 />
-                <p className="text-xs text-gray-500 mt-1">Below this accuracy, pings are flagged as low accuracy</p>
+                <p className="text-xs text-slate-400 mt-1">Below this accuracy, pings are flagged as low accuracy</p>
               </div>
 
               <div>
-                <Label htmlFor="minimum_gps_pings_threshold" className="flex items-center gap-2">
+                <Label className="text-slate-700 dark:text-slate-300 flex items-center gap-2 mb-1.5">
                   <Wifi className="h-4 w-4" />
                   Minimum GPS Pings Required
                 </Label>
                 <Input
-                  id="minimum_gps_pings_threshold"
                   type="number"
                   value={settings.minimum_gps_pings_threshold || 5}
                   onChange={(e) => handleSettingChange('minimum_gps_pings_threshold', parseInt(e.target.value))}
-                  className="mt-1"
+                  className="dark:bg-slate-900 dark:border-slate-700"
                 />
-                <p className="text-xs text-gray-500 mt-1">Minimum pings required for a valid GPS distance calculation</p>
+                <p className="text-xs text-slate-400 mt-1">Minimum pings required for a valid GPS distance calculation</p>
               </div>
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <AlertTriangle className="h-5 w-5 text-blue-600" />
+          <Card className="dark:bg-slate-800/80 dark:border-slate-700">
+            <CardHeader className="border-b dark:border-slate-700">
+              <CardTitle className="flex items-center gap-2 text-slate-900 dark:text-white">
+                <div className="w-8 h-8 bg-gradient-to-br from-amber-500 to-amber-600 rounded-xl flex items-center justify-center">
+                  <AlertTriangle className="h-4 w-4 text-white" />
+                </div>
                 Anomaly Detection
               </CardTitle>
             </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent className="space-y-4 pt-4">
               <div>
-                <Label htmlFor="gps_distance_odometer_tolerance_pct" className="flex items-center gap-2">
+                <Label className="text-slate-700 dark:text-slate-300 flex items-center gap-2 mb-1.5">
                   <Gauge className="h-4 w-4" />
                   GPS vs Odometer Tolerance (%)
                 </Label>
                 <Input
-                  id="gps_distance_odometer_tolerance_pct"
                   type="number"
                   step="1"
                   value={settings.gps_distance_odometer_tolerance_pct || 20}
                   onChange={(e) => handleSettingChange('gps_distance_odometer_tolerance_pct', parseInt(e.target.value))}
-                  className="mt-1"
+                  className="dark:bg-slate-900 dark:border-slate-700"
                 />
-                <p className="text-xs text-gray-500 mt-1">Variance allowed between GPS distance and odometer reading</p>
+                <p className="text-xs text-slate-400 mt-1">Variance allowed between GPS distance and odometer reading</p>
               </div>
 
               <div>
-                <Label htmlFor="max_trip_duration_hours">Maximum Trip Duration (hours)</Label>
+                <Label className="text-slate-700 dark:text-slate-300 mb-1.5 block">Maximum Trip Duration (hours)</Label>
                 <Input
-                  id="max_trip_duration_hours"
                   type="number"
                   value={settings.max_trip_duration_hours || 24}
                   onChange={(e) => handleSettingChange('max_trip_duration_hours', parseInt(e.target.value))}
-                  className="mt-1"
+                  className="dark:bg-slate-900 dark:border-slate-700"
                 />
-                <p className="text-xs text-gray-500 mt-1">Alert if trip exceeds this duration</p>
+                <p className="text-xs text-slate-400 mt-1">Alert if trip exceeds this duration</p>
               </div>
 
               <div>
-                <Label htmlFor="max_idle_minutes">Maximum Idle Time (minutes)</Label>
+                <Label className="text-slate-700 dark:text-slate-300 mb-1.5 block">Maximum Idle Time (minutes)</Label>
                 <Input
-                  id="max_idle_minutes"
                   type="number"
                   value={settings.max_idle_minutes || 30}
                   onChange={(e) => handleSettingChange('max_idle_minutes', parseInt(e.target.value))}
-                  className="mt-1"
+                  className="dark:bg-slate-900 dark:border-slate-700"
                 />
-                <p className="text-xs text-gray-500 mt-1">Alert if vehicle idles longer than this</p>
+                <p className="text-xs text-slate-400 mt-1">Alert if vehicle idles longer than this</p>
               </div>
             </CardContent>
           </Card>
@@ -424,102 +440,116 @@ const SystemSettings = () => {
 
       {/* Fuel Stations Tab */}
       {activeTab === 'stations' && (
-        <div className="grid grid-cols-1 gap-6">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Fuel className="h-5 w-5 text-blue-600" />
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <Card className="dark:bg-slate-800/80 dark:border-slate-700">
+            <CardHeader className="border-b dark:border-slate-700">
+              <CardTitle className="flex items-center gap-2 text-slate-900 dark:text-white">
+                <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl flex items-center justify-center">
+                  <Fuel className="h-4 w-4 text-white" />
+                </div>
                 Contracted Fuel Stations
               </CardTitle>
             </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent className="space-y-4 pt-4">
               <div>
-                <Label htmlFor="contracted_station_name">Primary Contracted Station</Label>
+                <Label className="text-slate-700 dark:text-slate-300 mb-1.5 block">Primary Contracted Station</Label>
                 <Input
-                  id="contracted_station_name"
                   value={settings.contracted_station_name || ''}
                   onChange={(e) => handleSettingChange('contracted_station_name', e.target.value)}
                   placeholder="e.g., Petron - Main Branch"
-                  className="mt-1"
+                  className="dark:bg-slate-900 dark:border-slate-700"
                 />
-                <p className="text-xs text-gray-500 mt-1">Official fuel station where drivers must fuel</p>
+                <p className="text-xs text-slate-400 mt-1">Official fuel station where drivers must fuel</p>
               </div>
 
               <div>
-                <Label htmlFor="contracted_station_address">Station Address</Label>
+                <Label className="text-slate-700 dark:text-slate-300 mb-1.5 block">Station Address</Label>
                 <Input
-                  id="contracted_station_address"
                   value={settings.contracted_station_address || ''}
                   onChange={(e) => handleSettingChange('contracted_station_address', e.target.value)}
                   placeholder="Full address of the station"
-                  className="mt-1"
+                  className="dark:bg-slate-900 dark:border-slate-700"
                 />
               </div>
 
               <div>
-                <Label htmlFor="contracted_station_contact">Station Contact Number</Label>
+                <Label className="text-slate-700 dark:text-slate-300 mb-1.5 block">Station Contact Number</Label>
                 <Input
-                  id="contracted_station_contact"
                   value={settings.contracted_station_contact || ''}
                   onChange={(e) => handleSettingChange('contracted_station_contact', e.target.value)}
                   placeholder="Contact number"
-                  className="mt-1"
-                />
-              </div>
-
-              <div className="pt-4 border-t">
-                <Label htmlFor="alternate_station_name">Alternate Station (Optional)</Label>
-                <Input
-                  id="alternate_station_name"
-                  value={settings.alternate_station_name || ''}
-                  onChange={(e) => handleSettingChange('alternate_station_name', e.target.value)}
-                  placeholder="e.g., Shell - South Branch"
-                  className="mt-1"
+                  className="dark:bg-slate-900 dark:border-slate-700"
                 />
               </div>
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Fuel className="h-5 w-5 text-blue-600" />
+          <Card className="dark:bg-slate-800/80 dark:border-slate-700">
+            <CardHeader className="border-b dark:border-slate-700">
+              <CardTitle className="flex items-center gap-2 text-slate-900 dark:text-white">
+                <div className="w-8 h-8 bg-gradient-to-br from-emerald-500 to-emerald-600 rounded-xl flex items-center justify-center">
+                  <DollarSign className="h-4 w-4 text-white" />
+                </div>
                 Fuel Price Settings (Optional)
               </CardTitle>
             </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent className="space-y-4 pt-4">
               <div>
-                <Label htmlFor="diesel_price_per_liter">Diesel Price (₱/liter)</Label>
+                <Label className="text-slate-700 dark:text-slate-300 mb-1.5 block">Diesel Price (₱/liter)</Label>
                 <Input
-                  id="diesel_price_per_liter"
                   type="number"
                   step="0.01"
                   value={settings.diesel_price_per_liter || ''}
                   onChange={(e) => handleSettingChange('diesel_price_per_liter', parseFloat(e.target.value))}
-                  className="mt-1"
+                  className="dark:bg-slate-900 dark:border-slate-700"
+                  placeholder="e.g., 55.00"
                 />
               </div>
               <div>
-                <Label htmlFor="premium_price_per_liter">Premium Price (₱/liter)</Label>
+                <Label className="text-slate-700 dark:text-slate-300 mb-1.5 block">Premium Price (₱/liter)</Label>
                 <Input
-                  id="premium_price_per_liter"
                   type="number"
                   step="0.01"
                   value={settings.premium_price_per_liter || ''}
                   onChange={(e) => handleSettingChange('premium_price_per_liter', parseFloat(e.target.value))}
-                  className="mt-1"
+                  className="dark:bg-slate-900 dark:border-slate-700"
+                  placeholder="e.g., 65.00"
                 />
               </div>
               <div>
-                <Label htmlFor="regular_price_per_liter">Regular Price (₱/liter)</Label>
+                <Label className="text-slate-700 dark:text-slate-300 mb-1.5 block">Regular Price (₱/liter)</Label>
                 <Input
-                  id="regular_price_per_liter"
                   type="number"
                   step="0.01"
                   value={settings.regular_price_per_liter || ''}
                   onChange={(e) => handleSettingChange('regular_price_per_liter', parseFloat(e.target.value))}
-                  className="mt-1"
+                  className="dark:bg-slate-900 dark:border-slate-700"
+                  placeholder="e.g., 58.00"
                 />
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Alternate Station */}
+          <Card className="dark:bg-slate-800/80 dark:border-slate-700 lg:col-span-2">
+            <CardHeader className="border-b dark:border-slate-700">
+              <CardTitle className="flex items-center gap-2 text-slate-900 dark:text-white">
+                <div className="w-8 h-8 bg-gradient-to-br from-amber-500 to-amber-600 rounded-xl flex items-center justify-center">
+                  <Truck className="h-4 w-4 text-white" />
+                </div>
+                Alternate Station (Backup)
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="pt-4">
+              <div>
+                <Label className="text-slate-700 dark:text-slate-300 mb-1.5 block">Alternate Station Name</Label>
+                <Input
+                  value={settings.alternate_station_name || ''}
+                  onChange={(e) => handleSettingChange('alternate_station_name', e.target.value)}
+                  placeholder="e.g., Shell - South Branch"
+                  className="dark:bg-slate-900 dark:border-slate-700"
+                />
+                <p className="text-xs text-slate-400 mt-1">Used when primary station is unavailable</p>
               </div>
             </CardContent>
           </Card>
@@ -529,52 +559,86 @@ const SystemSettings = () => {
       {/* Notifications Tab */}
       {activeTab === 'notifications' && (
         <div className="grid grid-cols-1 gap-6">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Bell className="h-5 w-5 text-blue-600" />
+          <Card className="dark:bg-slate-800/80 dark:border-slate-700">
+            <CardHeader className="border-b dark:border-slate-700">
+              <CardTitle className="flex items-center gap-2 text-slate-900 dark:text-white">
+                <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl flex items-center justify-center">
+                  <Bell className="h-4 w-4 text-white" />
+                </div>
                 Notification Settings
               </CardTitle>
             </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+            <CardContent className="space-y-6 pt-4">
+              {/* Email Notifications Toggle */}
+              <div className="flex items-center justify-between p-4 bg-slate-50 dark:bg-slate-900/50 rounded-xl">
                 <div>
-                  <p className="font-medium">Email Notifications</p>
-                  <p className="text-sm text-gray-500">Send system notifications via email</p>
+                  <p className="font-semibold text-slate-900 dark:text-white">Email Notifications</p>
+                  <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">
+                    Send system notifications via email
+                  </p>
                 </div>
                 <button
                   type="button"
                   onClick={() => handleSettingChange('email_notifications_enabled', !settings.email_notifications_enabled)}
-                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${settings.email_notifications_enabled ? 'bg-blue-600' : 'bg-gray-300'}`}
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-all duration-200 ${
+                    settings.email_notifications_enabled 
+                      ? 'bg-emerald-600 shadow-md' 
+                      : 'bg-slate-300 dark:bg-slate-600'
+                  }`}
                 >
-                  <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${settings.email_notifications_enabled ? 'translate-x-6' : 'translate-x-1'}`} />
+                  <span
+                    className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform duration-200 ${
+                      settings.email_notifications_enabled ? 'translate-x-6' : 'translate-x-1'
+                    }`}
+                  />
                 </button>
               </div>
 
-              <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+              {/* Push Notifications Toggle */}
+              <div className="flex items-center justify-between p-4 bg-slate-50 dark:bg-slate-900/50 rounded-xl">
                 <div>
-                  <p className="font-medium">Push Notifications</p>
-                  <p className="text-sm text-gray-500">Send push notifications to mobile devices</p>
+                  <p className="font-semibold text-slate-900 dark:text-white">Push Notifications</p>
+                  <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">
+                    Send push notifications to mobile devices
+                  </p>
                 </div>
                 <button
                   type="button"
                   onClick={() => handleSettingChange('push_notifications_enabled', !settings.push_notifications_enabled)}
-                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${settings.push_notifications_enabled ? 'bg-blue-600' : 'bg-gray-300'}`}
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-all duration-200 ${
+                    settings.push_notifications_enabled 
+                      ? 'bg-emerald-600 shadow-md' 
+                      : 'bg-slate-300 dark:bg-slate-600'
+                  }`}
                 >
-                  <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${settings.push_notifications_enabled ? 'translate-x-6' : 'translate-x-1'}`} />
+                  <span
+                    className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform duration-200 ${
+                      settings.push_notifications_enabled ? 'translate-x-6' : 'translate-x-1'
+                    }`}
+                  />
                 </button>
               </div>
 
-              <div className="pt-4">
-                <Label htmlFor="notification_retention_days">Notification Retention (days)</Label>
+              {/* Notification Retention */}
+              <div className="pt-2">
+                <Label className="text-slate-700 dark:text-slate-300 mb-1.5 block">Notification Retention (days)</Label>
                 <Input
-                  id="notification_retention_days"
                   type="number"
                   value={settings.notification_retention_days || 30}
                   onChange={(e) => handleSettingChange('notification_retention_days', parseInt(e.target.value))}
-                  className="mt-1"
+                  className="dark:bg-slate-900 dark:border-slate-700"
                 />
-                <p className="text-xs text-gray-500 mt-1">Number of days to keep notification history</p>
+                <p className="text-xs text-slate-400 mt-1">Number of days to keep notification history</p>
+              </div>
+
+              {/* Info Note */}
+              <div className="bg-blue-50 dark:bg-blue-950/30 rounded-xl p-3">
+                <div className="flex items-start gap-2">
+                  <Shield className="h-4 w-4 text-blue-600 dark:text-blue-400 mt-0.5" />
+                  <p className="text-xs text-blue-700 dark:text-blue-300">
+                    <strong>Note:</strong> Email notifications require SMTP configuration. Push notifications require Firebase Cloud Messaging setup.
+                  </p>
+                </div>
               </div>
             </CardContent>
           </Card>

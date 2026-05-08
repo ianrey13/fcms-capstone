@@ -1,3 +1,4 @@
+// src/pages/department/CreateTripTicket.jsx
 import React, {
   useState,
   useEffect,
@@ -31,6 +32,8 @@ import {
   XCircle,
   RefreshCw,
   RotateCcw,
+  ChevronDown,
+  ChevronRight,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -114,40 +117,6 @@ const CreateTripTicket = () => {
   const departmentName =
     user?.department_name || user?.department?.department_name || "";
 
-  // Load edit data if in resubmit mode
-  useEffect(() => {
-    if (isEditMode && editTicketId) {
-      const savedData = sessionStorage.getItem("edit_ticket_data");
-      if (savedData) {
-        try {
-          const ticketData = JSON.parse(savedData);
-          setIsResubmitMode(true);
-          
-          setFormData({
-            driver_id: ticketData.driver_id || "",
-            vehicle_id: ticketData.vehicle_id || "",
-            trip_date: ticketData.trip_date || "",
-            destination: ticketData.destination || "",
-            purpose: ticketData.purpose || "",
-            charge_to: ticketData.charge_to || departmentName,
-            passenger_name: ticketData.passenger_name || "",
-            estimated_fuel_liters: ticketData.estimated_fuel_liters || "",
-            estimated_distance_km: ticketData.estimated_distance_km || "",
-          });
-          
-          toast.info("Editing returned ticket. Please make corrections and resubmit.", {
-            duration: 5000,
-          });
-          
-          // Clear session storage after loading
-          sessionStorage.removeItem("edit_ticket_data");
-        } catch (error) {
-          console.error("Error loading edit data:", error);
-        }
-      }
-    }
-  }, [isEditMode, editTicketId, departmentName]);
-
   // Helper functions for date validation
   const isWeekday = (date) => {
     const day = date.getDay();
@@ -182,7 +151,41 @@ const CreateTripTicket = () => {
     return tripDate < today;
   };
 
-  // Debounced search function for locations with cleanup
+  // Load edit data if in resubmit mode
+  useEffect(() => {
+    if (isEditMode && editTicketId) {
+      const savedData = sessionStorage.getItem("edit_ticket_data");
+      if (savedData) {
+        try {
+          const ticketData = JSON.parse(savedData);
+          setIsResubmitMode(true);
+
+          setFormData({
+            driver_id: ticketData.driver_id || "",
+            vehicle_id: ticketData.vehicle_id || "",
+            trip_date: ticketData.trip_date || "",
+            destination: ticketData.destination || "",
+            purpose: ticketData.purpose || "",
+            charge_to: ticketData.charge_to || departmentName,
+            passenger_name: ticketData.passenger_name || "",
+            estimated_fuel_liters: ticketData.estimated_fuel_liters || "",
+            estimated_distance_km: ticketData.estimated_distance_km || "",
+          });
+
+          toast.info(
+            "Editing returned ticket. Please make corrections and resubmit.",
+            { duration: 5000 }
+          );
+
+          sessionStorage.removeItem("edit_ticket_data");
+        } catch (error) {
+          console.error("Error loading edit data:", error);
+        }
+      }
+    }
+  }, [isEditMode, editTicketId, departmentName]);
+
+  // Debounced search function for locations
   const searchLocations = useCallback(
     debounce(async (query) => {
       if (query.length < 2) {
@@ -200,17 +203,16 @@ const CreateTripTicket = () => {
         console.error("Error searching locations:", error);
       }
     }, 500),
-    [],
+    []
   );
 
-  // Cleanup debounce on unmount
   useEffect(() => {
     return () => {
       searchLocations.cancel();
     };
   }, [searchLocations]);
 
-  // Calculate distance from LGU Building to destination
+  // Calculate distance
   const calculateDistance = async (destinationName, coordinates = null) => {
     if (!destinationName || destinationName.length < 3) return;
 
@@ -222,18 +224,12 @@ const CreateTripTicket = () => {
         fuel_price: fuelPrice || 55.0,
       };
 
-      if (
-        coordinates &&
-        Array.isArray(coordinates) &&
-        coordinates.length === 2
-      ) {
+      if (coordinates && Array.isArray(coordinates) && coordinates.length === 2) {
         params.lng = coordinates[0];
         params.lat = coordinates[1];
       }
 
       const response = await api.get("/location/distance", { params });
-      console.log("API Response:", response.data);
-
       const data = response.data?.data;
 
       if (data) {
@@ -244,12 +240,10 @@ const CreateTripTicket = () => {
             typeof data.estimated_fuel_liters === "number"
               ? data.estimated_fuel_liters
               : parseFloat(data.estimated_fuel_liters);
-
           setFormData((prev) => ({
             ...prev,
             estimated_fuel_liters: fuelLiters.toFixed(1),
           }));
-          console.log("Set fuel liters:", fuelLiters.toFixed(1));
         }
 
         let distanceValue = null;
@@ -271,19 +265,12 @@ const CreateTripTicket = () => {
             ...prev,
             estimated_distance_km: distanceNum.toFixed(1),
           }));
-          console.log("Set distance:", distanceNum.toFixed(1));
-        } else {
-          if (data.distance_km && !isNaN(data.distance_km)) {
-            const roundTrip = data.distance_km * 2;
-            setFormData((prev) => ({
-              ...prev,
-              estimated_distance_km: roundTrip.toFixed(1),
-            }));
-            console.log(
-              "Set calculated round trip distance:",
-              roundTrip.toFixed(1),
-            );
-          }
+        } else if (data.distance_km && !isNaN(data.distance_km)) {
+          const roundTrip = data.distance_km * 2;
+          setFormData((prev) => ({
+            ...prev,
+            estimated_distance_km: roundTrip.toFixed(1),
+          }));
         }
 
         if (data.calculation_method === "fallback_estimate") {
@@ -291,7 +278,7 @@ const CreateTripTicket = () => {
         } else {
           const roundTrip = data.round_trip_km || data.distance_km * 2;
           toast.success(
-            `📍 ${data.distance_text} (${roundTrip.toFixed(1)} km round trip)`,
+            `📍 ${data.distance_text} (${roundTrip.toFixed(1)} km round trip)`
           );
         }
       }
@@ -317,7 +304,6 @@ const CreateTripTicket = () => {
     }
   };
 
-  // Select suggestion from autocomplete
   const selectSuggestion = async (suggestion) => {
     setFormData((prev) => ({ ...prev, destination: suggestion.name }));
     setShowSuggestions(false);
@@ -389,16 +375,11 @@ const CreateTripTicket = () => {
   const fetchInitialData = async () => {
     setIsLoading(true);
     try {
-      const departmentId =
-        user?.department_id || user?.department?.department_id;
+      const departmentId = user?.department_id || user?.department?.department_id;
 
       const [driversRes, vehiclesRes, budgetRes] = await Promise.all([
-        departmentStaffAPI
-          .getActiveDrivers({ department_id: departmentId })
-          .catch(() => ({ data: { data: [] } })),
-        departmentStaffAPI
-          .getAvailableVehicles({ department_id: departmentId })
-          .catch(() => ({ data: { data: [] } })),
+        departmentStaffAPI.getActiveDrivers({ department_id: departmentId }).catch(() => ({ data: { data: [] } })),
+        departmentStaffAPI.getAvailableVehicles({ department_id: departmentId }).catch(() => ({ data: { data: [] } })),
         departmentStaffAPI.getDepartmentBudget().catch(() => ({ data: null })),
       ]);
 
@@ -411,11 +392,9 @@ const CreateTripTicket = () => {
       const budgetData = budgetRes.data?.data || budgetRes.data;
       if (budgetData) {
         setDepartmentBudget({
-          remaining_budget:
-            budgetData.remaining_amount || budgetData.remaining_budget || 0,
+          remaining_budget: budgetData.remaining_amount || budgetData.remaining_budget || 0,
           allocated_amount: budgetData.allocated_amount || 0,
-          spent_amount:
-            budgetData.total_spent_amount || budgetData.spent_amount || 0,
+          spent_amount: budgetData.total_spent_amount || budgetData.spent_amount || 0,
           week_start: budgetData.week_start,
           week_end: budgetData.week_end,
         });
@@ -433,7 +412,7 @@ const CreateTripTicket = () => {
       const vehicle = vehicles.find(
         (v) =>
           v.vehicle_id === parseInt(formData.vehicle_id) ||
-          v.id === parseInt(formData.vehicle_id),
+          v.id === parseInt(formData.vehicle_id)
       );
       setSelectedVehicle(vehicle);
     } else {
@@ -448,7 +427,7 @@ const CreateTripTicket = () => {
       const driver = drivers.find(
         (d) =>
           d.driver_id === parseInt(formData.driver_id) ||
-          d.id === parseInt(formData.driver_id),
+          d.id === parseInt(formData.driver_id)
       );
       setSelectedDriver(driver);
     } else {
@@ -471,22 +450,16 @@ const CreateTripTicket = () => {
     }
   };
 
-  //validation form
   const validateForm = () => {
     const newErrors = {};
 
     if (!formData.driver_id) newErrors.driver_id = "Please select a driver";
     if (!formData.vehicle_id) newErrors.vehicle_id = "Please select a vehicle";
     if (!formData.trip_date) newErrors.trip_date = "Please select trip date";
-    if (!formData.destination)
-      newErrors.destination = "Please enter destination";
+    if (!formData.destination) newErrors.destination = "Please enter destination";
     if (!formData.purpose) newErrors.purpose = "Please enter trip purpose";
 
-    if (
-      formData.trip_date &&
-      typeof formData.trip_date === "string" &&
-      formData.trip_date.trim() !== ""
-    ) {
+    if (formData.trip_date && typeof formData.trip_date === "string" && formData.trip_date.trim() !== "") {
       const tripDateObj = new Date(formData.trip_date);
       const today = new Date();
       const currentDayOfWeek = today.getDay();
@@ -511,12 +484,9 @@ const CreateTripTicket = () => {
     return Object.keys(newErrors).length === 0;
   };
 
-  //create payload
   const createPayload = () => {
     const driverId = formData.driver_id ? parseInt(formData.driver_id) : null;
-    const vehicleId = formData.vehicle_id
-      ? parseInt(formData.vehicle_id)
-      : null;
+    const vehicleId = formData.vehicle_id ? parseInt(formData.vehicle_id) : null;
 
     return {
       driver_id: driverId,
@@ -526,108 +496,95 @@ const CreateTripTicket = () => {
       purpose: formData.purpose || null,
       charge_to: formData.charge_to || null,
       passenger_name: formData.passenger_name || null,
-      estimated_fuel_liters: formData.estimated_fuel_liters
-        ? parseFloat(formData.estimated_fuel_liters)
-        : null,
-      estimated_distance_km: formData.estimated_distance_km
-        ? parseFloat(formData.estimated_distance_km)
-        : null,
+      estimated_fuel_liters: formData.estimated_fuel_liters ? parseFloat(formData.estimated_fuel_liters) : null,
+      estimated_distance_km: formData.estimated_distance_km ? parseFloat(formData.estimated_distance_km) : null,
     };
   };
 
-const handleSubmit = async () => {
-  if (!validateForm()) {
-    const firstError = document.querySelector(".error-message");
-    if (firstError)
-      firstError.scrollIntoView({ behavior: "smooth", block: "center" });
-    return;
-  }
+  const handleSubmit = async () => {
+    if (!validateForm()) {
+      const firstError = document.querySelector(".error-message");
+      if (firstError) firstError.scrollIntoView({ behavior: "smooth", block: "center" });
+      return;
+    }
 
-  setIsSubmitting(true);
-  setIsCheckingBudget(true);
+    setIsSubmitting(true);
+    setIsCheckingBudget(true);
 
-  try {
-    const payload = createPayload();
-    console.log("🚀 Submitting payload:", payload);
-
-    let submitResponse;
-    let budgetWarningData = null;
-
-    // Check budget for warning purposes only (does NOT block submission)
     try {
-      const checkResponse = await departmentStaffAPI.checkBudgetAndRequestMO(payload);
-      
-      if (!checkResponse.data.can_proceed) {
-        // Store warning data but DON'T block submission
-        budgetWarningData = {
-          budget: checkResponse.data.budget,
-          estimated_cost: checkResponse.data.estimated_cost,
-          shortage: checkResponse.data.shortage,
-          request_id: checkResponse.data.request_id,
-          message: checkResponse.data.message,
-        };
-        console.log("⚠️ Budget insufficient, but continuing with submission");
-      } else {
-        console.log("✅ Budget sufficient");
+      const payload = createPayload();
+      console.log("🚀 Submitting payload:", payload);
+
+      let submitResponse;
+      let budgetWarningData = null;
+
+      // Check budget for warning purposes only (does NOT block submission)
+      try {
+        const checkResponse = await departmentStaffAPI.checkBudgetAndRequestMO(payload);
+
+        if (!checkResponse.data.can_proceed) {
+          budgetWarningData = {
+            budget: checkResponse.data.budget,
+            estimated_cost: checkResponse.data.estimated_cost,
+            shortage: checkResponse.data.shortage,
+            request_id: checkResponse.data.request_id,
+            message: checkResponse.data.message,
+          };
+          console.log("⚠️ Budget insufficient, but continuing with submission");
+        } else {
+          console.log("✅ Budget sufficient");
+        }
+      } catch (budgetError) {
+        console.warn("Budget check failed, but continuing with submission:", budgetError);
       }
-    } catch (budgetError) {
-      console.warn("Budget check failed, but continuing with submission:", budgetError);
-      // Continue with submission even if budget check fails
-    }
 
-    // If in resubmit mode, use the resubmit endpoint
-    if (isResubmitMode && editTicketId) {
-      console.log("📤 Resubmitting ticket:", editTicketId);
-      submitResponse = await tripTicketAPI.resubmit(editTicketId, payload);
-    } else {
-      // ✅ ALWAYS submit the ticket (backend will handle insufficient budget flag)
-      submitResponse = await tripTicketAPI.submit(payload);
-    }
-
-    console.log("📥 Submit response:", submitResponse.data);
-
-    if (submitResponse.data.success) {
-      // Show appropriate success message with budget warning if applicable
-      if (budgetWarningData) {
-        // Store warning data for modal
-        setMoAssistanceData(budgetWarningData);
-        setShowMOAssistanceModal(true);
-        
-        toast.success(
-          "⚠️ Trip ticket submitted with INSUFFICIENT BUDGET warning.\n" +
-          "The ticket will still proceed through the approval workflow.\n" +
-          "Mayor's Office will be notified.",
-          { duration: 6000 }
-        );
+      // If in resubmit mode, use the resubmit endpoint
+      if (isResubmitMode && editTicketId) {
+        console.log("📤 Resubmitting ticket:", editTicketId);
+        submitResponse = await tripTicketAPI.resubmit(editTicketId, payload);
       } else {
-        toast.success(
-          isResubmitMode
-            ? "✓ Trip ticket resubmitted successfully! It has been sent to your Department Head for approval."
-            : "✓ Trip ticket submitted successfully! It has been sent to your Department Head for approval."
-        );
-        
-        // Navigate to requests page after a short delay
-        setTimeout(() => {
-          navigate("/department/requests");
-        }, 1500);
+        submitResponse = await tripTicketAPI.submit(payload);
       }
-    } else {
-      toast.error(submitResponse.data.message || "Error submitting trip ticket");
+
+      console.log("📥 Submit response:", submitResponse.data);
+
+      if (submitResponse.data.success) {
+        if (budgetWarningData) {
+          setMoAssistanceData(budgetWarningData);
+          setShowMOAssistanceModal(true);
+
+          toast.success(
+            "⚠️ Trip ticket submitted with INSUFFICIENT BUDGET warning.\n" +
+              "The ticket will still proceed through the approval workflow.\n" +
+              "Mayor's Office will be notified.",
+            { duration: 6000 }
+          );
+        } else {
+          toast.success(
+            isResubmitMode
+              ? "✓ Trip ticket resubmitted successfully! It has been sent to your Department Head for approval."
+              : "✓ Trip ticket submitted successfully! It has been sent to your Department Head for approval."
+          );
+
+          setTimeout(() => {
+            navigate("/department/requests");
+          }, 1500);
+        }
+      } else {
+        toast.error(submitResponse.data.message || "Error submitting trip ticket");
+      }
+    } catch (error) {
+      console.error("❌ Error submitting:", error);
+      const errorMessage = error.response?.data?.message ||
+        error.response?.data?.error ||
+        "Error submitting trip ticket. Please try again.";
+      toast.error(errorMessage);
+    } finally {
+      setIsSubmitting(false);
+      setIsCheckingBudget(false);
     }
-  } catch (error) {
-    console.error("❌ Error submitting:", error);
-    console.error("Error response:", error.response?.data);
-    console.error("Error status:", error.response?.status);
-    
-    const errorMessage = error.response?.data?.message || 
-                         error.response?.data?.error ||
-                         "Error submitting trip ticket. Please try again.";
-    toast.error(errorMessage);
-  } finally {
-    setIsSubmitting(false);
-    setIsCheckingBudget(false);
-  }
-};
+  };
+
   const handleSaveDraft = async () => {
     if (!formData.driver_id) {
       toast.error("Please select a driver before saving draft");
@@ -667,24 +624,19 @@ const handleSubmit = async () => {
       }
     } catch (error) {
       console.error("Error saving draft:", error);
-      toast.error(
-        error.response?.data?.message ||
-          "Error saving draft. Please try again.",
-      );
+      toast.error(error.response?.data?.message || "Error saving draft. Please try again.");
     } finally {
       setIsSavingDraft(false);
     }
   };
 
-  //Budget status calculation
   const getBudgetStatus = () => {
     if (!departmentBudget) return null;
     const remaining = departmentBudget.remaining_budget || 0;
     const allocated = departmentBudget.allocated_amount || 0;
     const used = allocated - remaining;
     const usedPercentage = allocated > 0 ? (used / allocated) * 100 : 0;
-    const remainingPercentage =
-      allocated > 0 ? (remaining / allocated) * 100 : 0;
+    const remainingPercentage = allocated > 0 ? (remaining / allocated) * 100 : 0;
 
     return {
       remaining,
@@ -698,205 +650,174 @@ const handleSubmit = async () => {
 
   const budgetStatus = getBudgetStatus();
 
-  //estimated cost
   const estimatedCost = useMemo(() => {
-    if (
-      !formData.estimated_fuel_liters ||
-      parseFloat(formData.estimated_fuel_liters) <= 0
-    )
-      return 0;
+    if (!formData.estimated_fuel_liters || parseFloat(formData.estimated_fuel_liters) <= 0) return 0;
     return parseFloat(formData.estimated_fuel_liters) * fuelPrice;
   }, [formData.estimated_fuel_liters, fuelPrice]);
 
-  //moassistance
-const MOAssistanceModal = () => {
-  const handleClose = () => {
-    setShowMOAssistanceModal(false);
-    // Navigate to requests page after closing modal
-    setTimeout(() => {
-      navigate("/department/requests");
-    }, 500);
-  };
+  const MOAssistanceModal = () => {
+    const handleClose = () => {
+      setShowMOAssistanceModal(false);
+      setTimeout(() => {
+        navigate("/department/requests");
+      }, 500);
+    };
 
-  const handleViewBudget = () => {
-    setShowMOAssistanceModal(false);
-    navigate("/department/budget-status");
-  };
+    const handleViewBudget = () => {
+      setShowMOAssistanceModal(false);
+      navigate("/department/budget-status");
+    };
 
-  const handleContinue = () => {
-    setShowMOAssistanceModal(false);
-    // Stay on page or navigate to requests
-    navigate("/department/requests");
-  };
-
-  return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full animate-in fade-in zoom-in duration-200">
-        <div className="p-6">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-3">
-              <div className="w-12 h-12 bg-yellow-100 dark:bg-yellow-900/30 rounded-full flex items-center justify-center">
-                <AlertCircle className="h-6 w-6 text-yellow-600 dark:text-yellow-400" />
+    return (
+      <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fade-in">
+        <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl max-w-md w-full animate-scale-in">
+          <div className="p-6">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 bg-yellow-100 dark:bg-yellow-900/30 rounded-full flex items-center justify-center">
+                  <AlertCircle className="h-6 w-6 text-yellow-600 dark:text-yellow-400" />
+                </div>
+                <h2 className="text-xl font-semibold text-slate-900 dark:text-white">
+                  Insufficient Budget Notice
+                </h2>
               </div>
-              <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
-                Insufficient Budget Notice
-              </h2>
-            </div>
-            <button
-              onClick={handleClose}
-              className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
-            >
-              <X className="h-5 w-5" />
-            </button>
-          </div>
-
-          <div className="space-y-4">
-            <p className="text-gray-600 dark:text-gray-300">
-              Your department does not have enough budget for this trip. However, your trip ticket has been submitted and will proceed through the normal approval workflow.
-            </p>
-
-            {/* Budget Details */}
-            <div className="bg-gray-50 dark:bg-gray-700/50 p-4 rounded-lg">
-              <div className="space-y-2">
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-500">Remaining Budget:</span>
-                  <span className="font-semibold text-red-600 dark:text-red-400">
-                    ₱{moAssistanceData?.budget?.remaining?.toLocaleString() || 0}
-                  </span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-500">Estimated Cost:</span>
-                  <span className="font-semibold">
-                    ₱{moAssistanceData?.estimated_cost?.toLocaleString() || 0}
-                  </span>
-                </div>
-                <div className="flex justify-between text-sm pt-2 border-t border-gray-200 dark:border-gray-600">
-                  <span className="text-gray-500">Shortage:</span>
-                  <span className="font-semibold text-red-600 dark:text-red-400">
-                    ₱{moAssistanceData?.shortage?.toLocaleString() || 0}
-                  </span>
-                </div>
-              </div>
+              <button
+                onClick={handleClose}
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
+              >
+                <X className="h-5 w-5" />
+              </button>
             </div>
 
-            {/* Progress Bar */}
-            {moAssistanceData?.budget?.allocated > 0 && (
-              <div className="space-y-1">
-                <div className="flex justify-between text-xs text-gray-500">
-                  <span>Budget Utilization</span>
-                  <span>
-                    {Math.round(
-                      ((moAssistanceData.budget.allocated -
-                        moAssistanceData.budget.remaining) /
-                        moAssistanceData.budget.allocated) *
-                        100
-                    )}
-                    %
-                  </span>
-                </div>
-                <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
-                  <div
-                    className="bg-red-500 h-2 rounded-full transition-all"
-                    style={{
-                      width: `${Math.min(
-                        ((moAssistanceData.budget.allocated -
-                          moAssistanceData.budget.remaining) /
-                          moAssistanceData.budget.allocated) *
-                          100,
-                        100
-                      )}%`,
-                    }}
-                  />
-                </div>
-              </div>
-            )}
-
-            {/* Updated Info Box - Key Change */}
-            <div className="bg-blue-50 dark:bg-blue-900/30 p-4 rounded-lg border border-blue-200 dark:border-blue-800">
-              <div className="flex items-start gap-3">
-                <div className="w-8 h-8 bg-blue-100 dark:bg-blue-800 rounded-full flex items-center justify-center flex-shrink-0">
-                  <Building2 className="h-4 w-4 text-blue-600 dark:text-blue-400" />
-                </div>
-                <div className="text-sm text-blue-800 dark:text-blue-300">
-                  <p className="font-medium mb-1">
-                    ⚠️ Insufficient Budget Notice
-                  </p>
-                  <p>
-                    Your trip ticket has been submitted with INSUFFICIENT BUDGET notification.
-                    The Mayor's Office will be notified and will decide which department's budget 
-                    to charge upon fund release.
-                  </p>
-                  <p className="text-xs mt-2 text-blue-600 dark:text-blue-400">
-                    ✓ Your ticket will still proceed through the normal approval workflow
-                  </p>
-                  <p className="text-xs mt-1 text-blue-500 dark:text-blue-400">
-                    Request ID: {moAssistanceData?.request_id}
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            {/* Contact Info */}
-            <div className="bg-gray-50 dark:bg-gray-700/50 p-3 rounded-lg">
-              <p className="text-xs text-gray-500 dark:text-gray-400 text-center">
-                Need assistance? Contact Mayor's Office at
-                <span className="inline-flex items-center gap-1 ml-1">
-                  <Phone className="h-3 w-3" />
-                  <span>(088) 123-4567</span>
-                </span>
+            <div className="space-y-4">
+              <p className="text-slate-600 dark:text-slate-300">
+                Your department does not have enough budget for this trip. However, your trip ticket has been submitted and will proceed through the normal approval workflow.
               </p>
-            </div>
-          </div>
 
-          <div className="flex gap-3 mt-6">
-            <Button
-              onClick={handleContinue}
-              className="flex-1 bg-blue-600 hover:bg-blue-700"
-            >
-              <CheckCircle className="h-4 w-4 mr-2" />
-              OK, Continue
-            </Button>
-            <Button
-              variant="outline"
-              onClick={handleViewBudget}
-              className="flex-1"
-            >
-              View Budget Details
-            </Button>
+              <div className="bg-slate-50 dark:bg-slate-700/50 p-4 rounded-xl">
+                <div className="space-y-2">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-slate-500">Remaining Budget:</span>
+                    <span className="font-semibold text-red-600 dark:text-red-400">
+                      ₱{moAssistanceData?.budget?.remaining?.toLocaleString() || 0}
+                    </span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-slate-500">Estimated Cost:</span>
+                    <span className="font-semibold">
+                      ₱{moAssistanceData?.estimated_cost?.toLocaleString() || 0}
+                    </span>
+                  </div>
+                  <div className="flex justify-between text-sm pt-2 border-t border-slate-200 dark:border-slate-600">
+                    <span className="text-slate-500">Shortage:</span>
+                    <span className="font-semibold text-red-600 dark:text-red-400">
+                      ₱{moAssistanceData?.shortage?.toLocaleString() || 0}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {moAssistanceData?.budget?.allocated > 0 && (
+                <div className="space-y-1">
+                  <div className="flex justify-between text-xs text-slate-500">
+                    <span>Budget Utilization</span>
+                    <span>
+                      {Math.round(((moAssistanceData.budget.allocated -
+                        moAssistanceData.budget.remaining) /
+                        moAssistanceData.budget.allocated) * 100)}%
+                    </span>
+                  </div>
+                  <div className="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-2">
+                    <div
+                      className="bg-red-500 h-2 rounded-full transition-all"
+                      style={{
+                        width: `${Math.min(((moAssistanceData.budget.allocated -
+                          moAssistanceData.budget.remaining) /
+                          moAssistanceData.budget.allocated) * 100, 100)}%`,
+                      }}
+                    />
+                  </div>
+                </div>
+              )}
+
+              <div className="bg-blue-50 dark:bg-blue-900/30 p-4 rounded-xl border border-blue-200 dark:border-blue-800">
+                <div className="flex items-start gap-3">
+                  <div className="w-8 h-8 bg-blue-100 dark:bg-blue-800 rounded-full flex items-center justify-center flex-shrink-0">
+                    <Building2 className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                  </div>
+                  <div className="text-sm text-blue-800 dark:text-blue-300">
+                    <p className="font-medium mb-1">⚠️ Insufficient Budget Notice</p>
+                    <p>
+                      Your trip ticket has been submitted with INSUFFICIENT BUDGET notification.
+                      The Mayor's Office will be notified and will decide which department's budget
+                      to charge upon fund release.
+                    </p>
+                    <p className="text-xs mt-2 text-blue-600 dark:text-blue-400">
+                      ✓ Your ticket will still proceed through the normal approval workflow
+                    </p>
+                    <p className="text-xs mt-1 text-blue-500 dark:text-blue-400">
+                      Request ID: {moAssistanceData?.request_id}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-slate-50 dark:bg-slate-700/50 p-3 rounded-xl">
+                <p className="text-xs text-slate-500 dark:text-slate-400 text-center">
+                  Need assistance? Contact Mayor's Office at
+                  <span className="inline-flex items-center gap-1 ml-1">
+                    <Phone className="h-3 w-3" />
+                    <span>(088) 123-4567</span>
+                  </span>
+                </p>
+              </div>
+            </div>
+
+            <div className="flex gap-3 mt-6">
+              <Button onClick={handleClose} className="flex-1 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800">
+                <CheckCircle className="h-4 w-4 mr-2" />
+                OK, Continue
+              </Button>
+              <Button variant="outline" onClick={handleViewBudget} className="flex-1 dark:border-slate-700 dark:text-slate-300">
+                View Budget Details
+              </Button>
+            </div>
           </div>
         </div>
       </div>
-    </div>
-  );
-};
+    );
+  };
 
   if (isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+      <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-900">
+        <div className="text-center">
+          <Loader2 className="h-8 w-8 animate-spin text-blue-600 dark:text-blue-400 mx-auto mb-3" />
+          <p className="text-slate-500 dark:text-slate-400">Loading your dashboard...</p>
+        </div>
       </div>
     );
   }
 
   return (
     <>
-      <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800 p-4 md:p-8">
-        <div className="max-w-4xl mx-auto">
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-900 dark:to-slate-800 p-4 md:p-8">
+        <div className="max-w-4xl mx-auto animate-fade-in-up">
           {/* Header */}
           <div className="mb-8">
             <div className="flex items-center gap-3 mb-2">
-              <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
+              <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-xl">
                 {isResubmitMode ? (
                   <RotateCcw className="h-6 w-6 text-amber-600 dark:text-amber-400" />
                 ) : (
                   <FileText className="h-6 w-6 text-blue-600 dark:text-blue-400" />
                 )}
               </div>
-              <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
+              <h1 className="text-3xl font-bold bg-gradient-to-r from-slate-800 to-slate-600 dark:from-white dark:to-slate-300 bg-clip-text text-transparent">
                 {isResubmitMode ? "Resubmit Trip Ticket" : "Create Trip Ticket"}
               </h1>
             </div>
-            <p className="text-gray-600 dark:text-gray-400 ml-12">
+            <p className="text-slate-500 dark:text-slate-400 ml-12">
               {isResubmitMode
                 ? "Make corrections to your returned trip ticket and resubmit for approval."
                 : "Fill out the form below to request a trip ticket for official travel"}
@@ -905,38 +826,38 @@ const MOAssistanceModal = () => {
 
           {/* Resubmit Banner */}
           {isResubmitMode && (
-            <Alert className="mb-6 bg-amber-50 border-amber-200">
-              <RotateCcw className="h-4 w-4 text-amber-600" />
-              <AlertDescription className="text-amber-800">
+            <Alert className="mb-6 bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800">
+              <RotateCcw className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+              <AlertDescription className="text-amber-800 dark:text-amber-300">
                 You are editing a returned ticket. Please review the rejection reason, make necessary corrections, and resubmit.
               </AlertDescription>
             </Alert>
           )}
 
           {/* Department Info Bar */}
-          <div className="mb-6 p-4 bg-white dark:bg-gray-800 rounded-lg shadow-sm border">
+          <div className="mb-6 p-4 bg-white dark:bg-slate-800/80 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700">
             <div className="flex items-center justify-between flex-wrap gap-4">
               <div className="flex items-center gap-2">
-                <Building2 className="h-4 w-4 text-gray-500" />
-                <span className="text-sm text-gray-600 dark:text-gray-400">
+                <Building2 className="h-4 w-4 text-slate-500" />
+                <span className="text-sm text-slate-600 dark:text-slate-400">
                   Department:{" "}
-                  <strong className="text-gray-900 dark:text-white">
+                  <strong className="text-slate-900 dark:text-white">
                     {departmentName || "N/A"}
                   </strong>
                 </span>
               </div>
               {departmentBudget && (
                 <div className="flex items-center gap-2">
-                  <DollarSign className="h-4 w-4 text-green-600" />
-                  <span className="text-sm text-gray-600 dark:text-gray-400">
+                  <DollarSign className="h-4 w-4 text-emerald-600" />
+                  <span className="text-sm text-slate-600 dark:text-slate-400">
                     Weekly Budget Remaining:{" "}
                     <strong
                       className={
                         budgetStatus?.isCritical
-                          ? "text-red-600"
+                          ? "text-red-600 dark:text-red-400"
                           : budgetStatus?.isLow
-                            ? "text-yellow-600"
-                            : "text-green-600"
+                            ? "text-amber-600 dark:text-amber-400"
+                            : "text-emerald-600 dark:text-emerald-400"
                       }
                     >
                       ₱{budgetStatus?.remaining?.toLocaleString() || 0}
@@ -950,16 +871,22 @@ const MOAssistanceModal = () => {
           {/* Budget Alert */}
           {budgetStatus && budgetStatus.isLow && !isResubmitMode && (
             <Alert
-              className={`mb-6 ${budgetStatus.isCritical ? "bg-red-50 border-red-200 dark:bg-red-900/20" : "bg-yellow-50 border-yellow-200 dark:bg-yellow-900/20"}`}
+              className={`mb-6 ${budgetStatus.isCritical
+                ? "bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-800"
+                : "bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800"
+              }`}
             >
               <AlertCircle
-                className={`h-4 w-4 ${budgetStatus.isCritical ? "text-red-600" : "text-yellow-600"}`}
+                className={`h-4 w-4 ${budgetStatus.isCritical
+                  ? "text-red-600 dark:text-red-400"
+                  : "text-amber-600 dark:text-amber-400"
+                }`}
               />
               <AlertDescription
                 className={
                   budgetStatus.isCritical
                     ? "text-red-800 dark:text-red-300"
-                    : "text-yellow-800 dark:text-yellow-300"
+                    : "text-amber-800 dark:text-amber-300"
                 }
               >
                 {budgetStatus.isCritical
@@ -971,9 +898,9 @@ const MOAssistanceModal = () => {
 
           {/* Sunday Restriction Banner */}
           {isSunday && (
-            <Alert className="mb-6 bg-red-50 border-red-200">
-              <XCircle className="h-4 w-4 text-red-600" />
-              <AlertDescription className="text-red-800">
+            <Alert className="mb-6 bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-800">
+              <XCircle className="h-4 w-4 text-red-600 dark:text-red-400" />
+              <AlertDescription className="text-red-800 dark:text-red-300">
                 ⚠️ Trip tickets cannot be created on Sundays. The system is
                 closed for maintenance and rest day. Please come back on Monday
                 to create your trip tickets.
@@ -982,12 +909,11 @@ const MOAssistanceModal = () => {
           )}
 
           {/* Main Form Card */}
-          <Card className="shadow-xl border-0">
-            <CardHeader className="bg-gradient-to-r from-gray-50 to-white dark:from-gray-800 dark:to-gray-800/50 rounded-t-xl">
-              <CardTitle>Trip Ticket Information</CardTitle>
-              <CardDescription>
-                All fields marked with <span className="text-red-500">*</span>{" "}
-                are required
+          <Card className="shadow-xl border-0 dark:bg-slate-800/80 dark:border-slate-700 overflow-hidden">
+            <CardHeader className="bg-gradient-to-r from-slate-50 to-white dark:from-slate-800 dark:to-slate-800/50 rounded-t-xl">
+              <CardTitle className="text-slate-900 dark:text-white">Trip Ticket Information</CardTitle>
+              <CardDescription className="text-slate-500 dark:text-slate-400">
+                All fields marked with <span className="text-red-500">*</span> are required
               </CardDescription>
             </CardHeader>
 
@@ -995,49 +921,39 @@ const MOAssistanceModal = () => {
               {/* Row 1: Trip Date & Destination */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <Label htmlFor="trip_date">
+                  <Label className="text-slate-700 dark:text-slate-300 font-medium">
                     Trip Date <span className="text-red-500">*</span>
                   </Label>
                   <div className="relative">
-                    <Calendar className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                    <Calendar className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-400" />
                     <Input
-                      id="trip_date"
                       name="trip_date"
                       type="date"
                       min={new Date().toISOString().split("T")[0]}
-                      className={`pl-10 ${errors.trip_date ? "border-red-500" : ""}`}
+                      className={`pl-10 dark:bg-slate-900 dark:border-slate-700 ${errors.trip_date ? "border-red-500" : ""}`}
                       value={formData.trip_date}
                       onChange={handleInputChange}
                       disabled={isSunday}
                     />
                   </div>
                   {errors.trip_date && (
-                    <p className="text-red-500 text-sm mt-1 error-message">
-                      {errors.trip_date}
-                    </p>
+                    <p className="text-red-500 text-sm mt-1 error-message">{errors.trip_date}</p>
                   )}
                 </div>
 
-                {/* Destination with Autocomplete and Refresh Button */}
                 <div>
-                  <Label htmlFor="destination">
+                  <Label className="text-slate-700 dark:text-slate-300 font-medium">
                     Destination <span className="text-red-500">*</span>
                   </Label>
                   <div className="relative flex gap-2">
                     <div className="relative flex-1">
-                      <MapPin className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                      <MapPin className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-400" />
                       <Input
-                        id="destination"
-                        name="destination"
                         placeholder="e.g., Cagayan de Oro City Hall, Provincial Capitol"
-                        className={`pl-10 ${errors.destination ? "border-red-500" : ""}`}
+                        className={`pl-10 dark:bg-slate-900 dark:border-slate-700 ${errors.destination ? "border-red-500" : ""}`}
                         value={formData.destination}
-                        onChange={(e) =>
-                          handleDestinationChange(e.target.value)
-                        }
-                        onBlur={() => {
-                          setTimeout(() => setShowSuggestions(false), 200);
-                        }}
+                        onChange={(e) => handleDestinationChange(e.target.value)}
+                        onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
                       />
                       {calculatingDistance && (
                         <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
@@ -1052,105 +968,110 @@ const MOAssistanceModal = () => {
                       size="sm"
                       onClick={() => calculateDistance(formData.destination)}
                       disabled={calculatingDistance || !formData.destination}
-                      className="px-3"
+                      className="px-3 dark:border-slate-700"
                     >
-                      <RefreshCw
-                        className={`h-4 w-4 ${calculatingDistance ? "animate-spin" : ""}`}
-                      />
+                      <RefreshCw className={`h-4 w-4 ${calculatingDistance ? "animate-spin" : ""}`} />
                     </Button>
                   </div>
                   {errors.destination && (
-                    <p className="text-red-500 text-sm mt-1 error-message">
-                      {errors.destination}
-                    </p>
+                    <p className="text-red-500 text-sm mt-1 error-message">{errors.destination}</p>
                   )}
                 </div>
               </div>
 
+              {/* Autocomplete Suggestions */}
+              {showSuggestions && locationSuggestions.length > 0 && (
+                <div className="relative z-10 -mt-2">
+                  <div className="absolute top-0 left-0 right-0 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-lg max-h-60 overflow-y-auto">
+                    {locationSuggestions.map((suggestion, idx) => (
+                      <button
+                        key={idx}
+                        type="button"
+                        onClick={() => selectSuggestion(suggestion)}
+                        className="w-full text-left px-4 py-2 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors flex items-center gap-2 border-b border-slate-100 dark:border-slate-700 last:border-0"
+                      >
+                        <MapPin className="h-4 w-4 text-slate-400" />
+                        <div>
+                          <p className="text-sm font-medium text-slate-900 dark:text-white">{suggestion.name}</p>
+                          <p className="text-xs text-slate-400">{suggestion.address}</p>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {/* Distance Info Card */}
               {distanceInfo && (
                 <div
-                  className={`rounded-lg p-4 border ${
+                  className={`rounded-xl p-4 border ${
                     distanceInfo.calculation_method === "fallback_estimate"
-                      ? "bg-yellow-50 border-yellow-200"
-                      : "bg-gradient-to-r from-blue-50 to-indigo-50 border-blue-200"
-                  }`}
+                      ? "bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800"
+                      : "bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-950/30 dark:to-indigo-950/30 border-blue-200 dark:border-blue-800"
+                  } animate-fade-in`}
                 >
                   <div className="flex items-start gap-3">
                     <div
                       className={`p-2 rounded-lg ${
                         distanceInfo.calculation_method === "fallback_estimate"
-                          ? "bg-yellow-100"
-                          : "bg-blue-100"
+                          ? "bg-amber-100 dark:bg-amber-800/50"
+                          : "bg-blue-100 dark:bg-blue-800/50"
                       }`}
                     >
                       <Route
                         className={`h-5 w-5 ${
-                          distanceInfo.calculation_method ===
-                          "fallback_estimate"
-                            ? "text-yellow-600"
-                            : "text-blue-600"
+                          distanceInfo.calculation_method === "fallback_estimate"
+                            ? "text-amber-600 dark:text-amber-400"
+                            : "text-blue-600 dark:text-blue-400"
                         }`}
                       />
                     </div>
                     <div className="flex-1">
                       <div className="flex items-center gap-2 mb-2">
-                        <h4 className="font-semibold text-gray-800">
-                          Route Information
-                        </h4>
-                        {distanceInfo.calculation_method ===
-                          "fallback_estimate" && (
-                          <Badge
-                            variant="outline"
-                            className="bg-yellow-100 text-yellow-700 border-yellow-300 text-xs"
-                          >
+                        <h4 className="font-semibold text-slate-800 dark:text-slate-200">Route Information</h4>
+                        {distanceInfo.calculation_method === "fallback_estimate" && (
+                          <Badge variant="outline" className="bg-amber-100 text-amber-700 border-amber-300 dark:bg-amber-900/30 dark:text-amber-400 text-xs">
                             ⚠️ Approximate
                           </Badge>
                         )}
                         {distanceInfo.calculation_method === "gps_route" && (
-                          <Badge
-                            variant="outline"
-                            className="bg-green-100 text-green-700 border-green-300 text-xs"
-                          >
+                          <Badge variant="outline" className="bg-emerald-100 text-emerald-700 border-emerald-300 dark:bg-emerald-900/30 dark:text-emerald-400 text-xs">
                             ✓ GPS Route
                           </Badge>
                         )}
                       </div>
                       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
                         <div>
-                          <p className="text-gray-500 text-xs">From</p>
-                          <p className="font-medium text-gray-700">
-                            LGU Building Laguindingan
+                          <p className="text-slate-500 text-xs">From</p>
+                          <p className="font-medium text-slate-700 dark:text-slate-300">
+                            {originAddress}
                           </p>
                         </div>
                         <div>
-                          <p className="text-gray-500 text-xs">To</p>
-                          <p className="font-medium text-gray-700">
+                          <p className="text-slate-500 text-xs">To</p>
+                          <p className="font-medium text-slate-700 dark:text-slate-300">
                             {distanceInfo.destination}
                           </p>
                         </div>
                         <div>
-                          <p className="text-gray-500 text-xs">Distance</p>
-                          <p className="font-semibold text-blue-600">
+                          <p className="text-slate-500 text-xs">Distance</p>
+                          <p className="font-semibold text-blue-600 dark:text-blue-400">
                             {distanceInfo.distance_text}
                           </p>
                         </div>
                         <div>
-                          <p className="text-gray-500 text-xs">Est. Fuel</p>
-                          <p className="font-semibold text-green-600">
+                          <p className="text-slate-500 text-xs">Est. Fuel</p>
+                          <p className="font-semibold text-emerald-600 dark:text-emerald-400">
                             {distanceInfo.estimated_fuel_liters} L
                           </p>
                         </div>
                       </div>
                       {distanceInfo.note && (
-                        <p className="text-xs text-gray-400 mt-2 italic">
-                          {distanceInfo.note}
-                        </p>
+                        <p className="text-xs text-slate-400 mt-2 italic">{distanceInfo.note}</p>
                       )}
                       {distanceInfo.fuel_price_used && (
-                        <p className="text-xs text-gray-400 mt-1">
-                          *Based on fuel price: ₱{distanceInfo.fuel_price_used}
-                          /L
+                        <p className="text-xs text-slate-400 mt-1">
+                          *Based on fuel price: ₱{distanceInfo.fuel_price_used}/L
                         </p>
                       )}
                     </div>
@@ -1160,53 +1081,46 @@ const MOAssistanceModal = () => {
 
               {/* Row 2: Purpose */}
               <div>
-                <Label htmlFor="purpose">
+                <Label className="text-slate-700 dark:text-slate-300 font-medium">
                   Purpose of Trip <span className="text-red-500">*</span>
                 </Label>
                 <Textarea
-                  id="purpose"
-                  name="purpose"
                   placeholder="Describe the official purpose of this trip..."
                   rows={3}
-                  className={errors.purpose ? "border-red-500" : ""}
+                  className={errors.purpose ? "border-red-500 dark:bg-slate-900 dark:border-slate-700" : "dark:bg-slate-900 dark:border-slate-700"}
                   value={formData.purpose}
                   onChange={handleInputChange}
                 />
                 {errors.purpose && (
-                  <p className="text-red-500 text-sm mt-1 error-message">
-                    {errors.purpose}
-                  </p>
+                  <p className="text-red-500 text-sm mt-1 error-message">{errors.purpose}</p>
                 )}
               </div>
 
               {/* Row 3: Charge To & Passenger */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <Label htmlFor="charge_to">
+                  <Label className="text-slate-700 dark:text-slate-300 font-medium">
                     Charge To <span className="text-red-500">*</span>
                   </Label>
                   <Input
-                    id="charge_to"
-                    name="charge_to"
                     value={departmentName || "N/A"}
                     disabled
-                    className="bg-gray-100 dark:bg-gray-700 cursor-not-allowed"
+                    className="bg-slate-100 dark:bg-slate-700 cursor-not-allowed"
                   />
-                  <p className="text-xs text-gray-500 mt-1">
+                  <p className="text-xs text-slate-500 mt-1">
                     This trip will be charged to your department
                   </p>
                 </div>
 
                 <div>
-                  <Label htmlFor="passenger_name">
+                  <Label className="text-slate-700 dark:text-slate-300 font-medium">
                     Passenger Name (Optional)
                   </Label>
                   <Input
-                    id="passenger_name"
-                    name="passenger_name"
                     placeholder="Name of passenger if applicable"
                     value={formData.passenger_name}
                     onChange={handleInputChange}
+                    className="dark:bg-slate-900 dark:border-slate-700"
                   />
                 </div>
               </div>
@@ -1214,19 +1128,15 @@ const MOAssistanceModal = () => {
               {/* Row 4: Vehicle & Driver */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <Label htmlFor="vehicle_id">
+                  <Label className="text-slate-700 dark:text-slate-300 font-medium">
                     Select Vehicle <span className="text-red-500">*</span>
                   </Label>
                   <Select
                     value={formData.vehicle_id?.toString()}
-                    onValueChange={(value) =>
-                      handleSelectChange("vehicle_id", value)
-                    }
+                    onValueChange={(value) => handleSelectChange("vehicle_id", value)}
                     disabled={isSunday}
                   >
-                    <SelectTrigger
-                      className={errors.vehicle_id ? "border-red-500" : ""}
-                    >
+                    <SelectTrigger className={errors.vehicle_id ? "border-red-500 dark:bg-slate-900 dark:border-slate-700" : "dark:bg-slate-900 dark:border-slate-700"}>
                       <SelectValue placeholder="Choose a vehicle" />
                     </SelectTrigger>
                     <SelectContent>
@@ -1244,26 +1154,20 @@ const MOAssistanceModal = () => {
                     </SelectContent>
                   </Select>
                   {errors.vehicle_id && (
-                    <p className="text-red-500 text-sm mt-1 error-message">
-                      {errors.vehicle_id}
-                    </p>
+                    <p className="text-red-500 text-sm mt-1 error-message">{errors.vehicle_id}</p>
                   )}
                 </div>
 
                 <div>
-                  <Label htmlFor="driver_id">
+                  <Label className="text-slate-700 dark:text-slate-300 font-medium">
                     Select Driver <span className="text-red-500">*</span>
                   </Label>
                   <Select
                     value={formData.driver_id?.toString()}
-                    onValueChange={(value) =>
-                      handleSelectChange("driver_id", value)
-                    }
+                    onValueChange={(value) => handleSelectChange("driver_id", value)}
                     disabled={isSunday}
                   >
-                    <SelectTrigger
-                      className={errors.driver_id ? "border-red-500" : ""}
-                    >
+                    <SelectTrigger className={errors.driver_id ? "border-red-500 dark:bg-slate-900 dark:border-slate-700" : "dark:bg-slate-900 dark:border-slate-700"}>
                       <SelectValue placeholder="Choose a driver" />
                     </SelectTrigger>
                     <SelectContent>
@@ -1281,44 +1185,34 @@ const MOAssistanceModal = () => {
                     </SelectContent>
                   </Select>
                   {errors.driver_id && (
-                    <p className="text-red-500 text-sm mt-1 error-message">
-                      {errors.driver_id}
-                    </p>
+                    <p className="text-red-500 text-sm mt-1 error-message">{errors.driver_id}</p>
                   )}
                 </div>
               </div>
 
               {/* Selected Vehicle Details */}
               {selectedVehicle && (
-                <div className="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
+                <div className="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-xl border border-blue-200 dark:border-blue-800 animate-fade-in">
                   <div className="flex items-center justify-between mb-3">
                     <h4 className="font-semibold flex items-center gap-2 text-blue-800 dark:text-blue-300">
                       <Truck className="h-4 w-4" />
                       Selected Vehicle Details
                     </h4>
-                    <Badge
-                      className={`${selectedVehicle.status === "active" ? "bg-green-500" : "bg-yellow-500"}`}
-                    >
-                      {selectedVehicle.status === "active"
-                        ? "Available"
-                        : "Inactive"}
+                    <Badge className={selectedVehicle.status === "active" ? "bg-emerald-500" : "bg-amber-500"}>
+                      {selectedVehicle.status === "active" ? "Available" : "Inactive"}
                     </Badge>
                   </div>
                   <div className="grid grid-cols-2 md:grid-cols-3 gap-3 text-sm">
                     <div>
-                      <p className="text-gray-500">Plate Number</p>
-                      <p className="font-medium">
-                        {selectedVehicle.plate_number}
-                      </p>
+                      <p className="text-slate-500">Plate Number</p>
+                      <p className="font-medium text-slate-700 dark:text-slate-300">{selectedVehicle.plate_number}</p>
                     </div>
                     <div>
-                      <p className="text-gray-500">Model</p>
-                      <p className="font-medium">
-                        {selectedVehicle.vehicle_model}
-                      </p>
+                      <p className="text-slate-500">Model</p>
+                      <p className="font-medium text-slate-700 dark:text-slate-300">{selectedVehicle.vehicle_model}</p>
                     </div>
                     <div>
-                      <p className="text-gray-500">Fuel Type</p>
+                      <p className="text-slate-500">Fuel Type</p>
                       <Badge variant="outline" className="mt-1">
                         {selectedVehicle.fuel_type?.toUpperCase()}
                       </Badge>
@@ -1329,8 +1223,7 @@ const MOAssistanceModal = () => {
                       <div className="flex items-center gap-1 text-xs text-blue-600 dark:text-blue-400">
                         <Info className="h-3 w-3" />
                         <span>
-                          Current {selectedVehicle.fuel_type} price: ₱
-                          {fuelPrice.toFixed(2)}/L
+                          Current {selectedVehicle.fuel_type} price: ₱{fuelPrice.toFixed(2)}/L
                         </span>
                       </div>
                     </div>
@@ -1340,28 +1233,27 @@ const MOAssistanceModal = () => {
 
               {/* Selected Driver Details */}
               {selectedDriver && (
-                <div className="p-4 bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-200 dark:border-green-800">
-                  <h4 className="font-semibold mb-3 flex items-center gap-2 text-green-800 dark:text-green-300">
+                <div className="p-4 bg-emerald-50 dark:bg-emerald-900/20 rounded-xl border border-emerald-200 dark:border-emerald-800 animate-fade-in">
+                  <h4 className="font-semibold mb-3 flex items-center gap-2 text-emerald-800 dark:text-emerald-300">
                     <User className="h-4 w-4" />
                     Selected Driver Details
                   </h4>
                   <div className="grid grid-cols-2 md:grid-cols-3 gap-3 text-sm">
                     <div>
-                      <p className="text-gray-500">Full Name</p>
-                      <p className="font-medium">
-                        {selectedDriver.user?.full_name ||
-                          selectedDriver.full_name}
+                      <p className="text-slate-500">Full Name</p>
+                      <p className="font-medium text-slate-700 dark:text-slate-300">
+                        {selectedDriver.user?.full_name || selectedDriver.full_name}
                       </p>
                     </div>
                     <div>
-                      <p className="text-gray-500">Email</p>
-                      <p className="font-medium">
+                      <p className="text-slate-500">Email</p>
+                      <p className="font-medium text-slate-700 dark:text-slate-300">
                         {selectedDriver.user?.email || "N/A"}
                       </p>
                     </div>
                     <div>
-                      <p className="text-gray-500">Status</p>
-                      <Badge className="mt-1 bg-green-500">Active</Badge>
+                      <p className="text-slate-500">Status</p>
+                      <Badge className="mt-1 bg-emerald-500">Active</Badge>
                     </div>
                   </div>
                 </div>
@@ -1370,45 +1262,43 @@ const MOAssistanceModal = () => {
               {/* Row 5: Estimates */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <Label htmlFor="estimated_fuel_liters">
+                  <Label className="text-slate-700 dark:text-slate-300 font-medium">
                     Estimated Fuel (Liters) - Optional
                   </Label>
                   <div className="relative">
-                    <Fuel className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                    <Fuel className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-400" />
                     <Input
-                      id="estimated_fuel_liters"
-                      name="estimated_fuel_liters"
                       type="number"
                       step="0.01"
                       placeholder="e.g., 50.00"
-                      className="pl-10"
+                      className="pl-10 dark:bg-slate-900 dark:border-slate-700"
+                      name="estimated_fuel_liters"
                       value={formData.estimated_fuel_liters}
                       onChange={handleInputChange}
                     />
                   </div>
-                  <p className="text-xs text-gray-500 mt-1">
+                  <p className="text-xs text-slate-500 mt-1">
                     Optional but recommended for budget planning
                   </p>
                 </div>
 
                 <div>
-                  <Label htmlFor="estimated_distance_km">
+                  <Label className="text-slate-700 dark:text-slate-300 font-medium">
                     Estimated Distance (KM) - Optional
                   </Label>
                   <div className="relative">
-                    <Route className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                    <Route className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-400" />
                     <Input
-                      id="estimated_distance_km"
-                      name="estimated_distance_km"
                       type="number"
                       step="0.01"
                       placeholder="e.g., 150.00"
-                      className="pl-10"
+                      className="pl-10 dark:bg-slate-900 dark:border-slate-700"
+                      name="estimated_distance_km"
                       value={formData.estimated_distance_km}
                       onChange={handleInputChange}
                     />
                   </div>
-                  <p className="text-xs text-gray-500 mt-1">
+                  <p className="text-xs text-slate-500 mt-1">
                     Estimated total distance for this trip
                   </p>
                 </div>
@@ -1419,30 +1309,25 @@ const MOAssistanceModal = () => {
                 formData.estimated_fuel_liters &&
                 parseFloat(formData.estimated_fuel_liters) > 0 &&
                 fuelPrice > 0 && (
-                  <div className="p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
-                    <h4 className="font-semibold mb-2">Estimated Fuel Cost</h4>
+                  <div className="p-4 bg-slate-50 dark:bg-slate-800 rounded-xl">
+                    <h4 className="font-semibold mb-2 text-slate-800 dark:text-slate-200">Estimated Fuel Cost</h4>
                     <div className="grid grid-cols-2 gap-4 text-sm">
                       <div>
-                        <p className="text-gray-500">Estimated Liters</p>
-                        <p className="font-medium">
-                          {parseFloat(formData.estimated_fuel_liters).toFixed(
-                            2,
-                          )}{" "}
-                          L
+                        <p className="text-slate-500">Estimated Liters</p>
+                        <p className="font-medium text-slate-700 dark:text-slate-300">
+                          {parseFloat(formData.estimated_fuel_liters).toFixed(2)} L
                         </p>
                       </div>
                       <div>
-                        <p className="text-gray-500">Estimated Cost</p>
-                        <p className="font-medium text-blue-600">
-                          ₱
-                          {estimatedCost.toLocaleString(undefined, {
+                        <p className="text-slate-500">Estimated Cost</p>
+                        <p className="font-medium text-blue-600 dark:text-blue-400">
+                          ₱{estimatedCost.toLocaleString(undefined, {
                             minimumFractionDigits: 2,
                             maximumFractionDigits: 2,
                           })}
                         </p>
-                        <p className="text-xs text-gray-400 mt-1">
-                          *Based on {selectedVehicle.fuel_type} fuel at ₱
-                          {fuelPrice.toFixed(2)}/L
+                        <p className="text-xs text-slate-400 mt-1">
+                          *Based on {selectedVehicle.fuel_type} fuel at ₱{fuelPrice.toFixed(2)}/L
                         </p>
                       </div>
                     </div>
@@ -1450,14 +1335,12 @@ const MOAssistanceModal = () => {
                 )}
             </CardContent>
 
-            <CardFooter className="flex justify-end gap-4 border-t pt-6 bg-gray-50 dark:bg-gray-800/50 rounded-b-xl">
+            <CardFooter className="flex justify-end gap-4 border-t pt-6 bg-slate-50 dark:bg-slate-800/50 rounded-b-xl">
               <Button
                 variant="outline"
                 onClick={handleSaveDraft}
-                disabled={
-                  isSavingDraft || isSubmitting || isCheckingBudget || isSunday
-                }
-                className="gap-2"
+                disabled={isSavingDraft || isSubmitting || isCheckingBudget || isSunday}
+                className="gap-2 dark:border-slate-700 dark:text-slate-300"
               >
                 {isSavingDraft ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
@@ -1468,14 +1351,12 @@ const MOAssistanceModal = () => {
               </Button>
               <Button
                 onClick={handleSubmit}
-                disabled={
-                  isSavingDraft || isSubmitting || isCheckingBudget || isSunday
-                }
+                disabled={isSavingDraft || isSubmitting || isCheckingBudget || isSunday}
                 className={`gap-2 ${
                   isResubmitMode
-                    ? "bg-amber-600 hover:bg-amber-700"
+                    ? "bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-700 hover:to-amber-800"
                     : "bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800"
-                }`}
+                } shadow-md hover:shadow-lg transition-all duration-200`}
               >
                 {isSunday ? (
                   <>
@@ -1505,56 +1386,34 @@ const MOAssistanceModal = () => {
           </Card>
 
           {/* Process Info */}
-          <div className="mt-6 p-4 bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 rounded-lg border border-blue-100 dark:border-blue-800">
+          <div className="mt-6 p-4 bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-950/30 dark:to-indigo-950/30 rounded-xl border border-blue-100 dark:border-blue-800">
             <h3 className="font-semibold mb-3 flex items-center gap-2 text-blue-800 dark:text-blue-300">
               <CheckCircle className="h-4 w-4" />
               What happens next?
             </h3>
             <div className="grid grid-cols-2 md:grid-cols-6 gap-4 text-sm">
-              <div className="text-center">
-                <div className="w-8 h-8 bg-blue-100 dark:bg-blue-900/50 rounded-full flex items-center justify-center mx-auto mb-2">
-                  <span className="text-blue-600 font-bold">1</span>
+              {["Submit to Head", "Head Approval", "GSO Review", "Mayor's Office", "Fund Release", "Trip Execution"].map((step, idx) => (
+                <div key={idx} className="text-center">
+                  <div className={`w-8 h-8 ${
+                    idx === 0 ? "bg-blue-100 dark:bg-blue-900/50" :
+                    idx === 1 ? "bg-purple-100 dark:bg-purple-900/50" :
+                    idx === 2 ? "bg-amber-100 dark:bg-amber-900/50" :
+                    idx === 3 ? "bg-emerald-100 dark:bg-emerald-900/50" :
+                    idx === 4 ? "bg-orange-100 dark:bg-orange-900/50" :
+                    "bg-indigo-100 dark:bg-indigo-900/50"
+                  } rounded-full flex items-center justify-center mx-auto mb-2`}>
+                    <span className={`font-bold ${
+                      idx === 0 ? "text-blue-600" :
+                      idx === 1 ? "text-purple-600" :
+                      idx === 2 ? "text-amber-600" :
+                      idx === 3 ? "text-emerald-600" :
+                      idx === 4 ? "text-orange-600" :
+                      "text-indigo-600"
+                    }`}>{idx + 1}</span>
+                  </div>
+                  <p className="text-slate-600 dark:text-slate-400 text-xs">{step}</p>
                 </div>
-                <p className="text-gray-600 dark:text-gray-400">
-                  Submit to Head
-                </p>
-              </div>
-              <div className="text-center">
-                <div className="w-8 h-8 bg-purple-100 dark:bg-purple-900/50 rounded-full flex items-center justify-center mx-auto mb-2">
-                  <span className="text-purple-600 font-bold">2</span>
-                </div>
-                <p className="text-gray-600 dark:text-gray-400">
-                  Head Approval
-                </p>
-              </div>
-              <div className="text-center">
-                <div className="w-8 h-8 bg-yellow-100 dark:bg-yellow-900/50 rounded-full flex items-center justify-center mx-auto mb-2">
-                  <span className="text-yellow-600 font-bold">3</span>
-                </div>
-                <p className="text-gray-600 dark:text-gray-400">GSO Review</p>
-              </div>
-              <div className="text-center">
-                <div className="w-8 h-8 bg-green-100 dark:bg-green-900/50 rounded-full flex items-center justify-center mx-auto mb-2">
-                  <span className="text-green-600 font-bold">4</span>
-                </div>
-                <p className="text-gray-600 dark:text-gray-400">
-                  Mayor's Office
-                </p>
-              </div>
-              <div className="text-center">
-                <div className="w-8 h-8 bg-orange-100 dark:bg-orange-900/50 rounded-full flex items-center justify-center mx-auto mb-2">
-                  <span className="text-orange-600 font-bold">5</span>
-                </div>
-                <p className="text-gray-600 dark:text-gray-400">Fund Release</p>
-              </div>
-              <div className="text-center">
-                <div className="w-8 h-8 bg-indigo-100 dark:bg-indigo-900/50 rounded-full flex items-center justify-center mx-auto mb-2">
-                  <span className="text-indigo-600 font-bold">6</span>
-                </div>
-                <p className="text-gray-600 dark:text-gray-400">
-                  Trip Execution
-                </p>
-              </div>
+              ))}
             </div>
           </div>
         </div>

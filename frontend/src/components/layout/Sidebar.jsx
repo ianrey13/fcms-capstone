@@ -1,5 +1,4 @@
 // src/components/layout/Sidebar.jsx
-
 import React, { useState, useEffect } from "react";
 import { NavLink, useLocation } from "react-router-dom";
 import { useAuth } from "../../contexts/AuthContext";
@@ -25,6 +24,8 @@ import {
   ChevronLeft,
   ChevronRight,
   FileBarChart,
+  CreditCard,
+  HandCoins,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -79,28 +80,30 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
         { name: "Vehicles", href: "/admin/vehicles", icon: Car },
         { name: "Budget Policies", href: "/admin/budget-policies", icon: DollarSign },
         { name: "System Settings", href: "/admin/settings", icon: Settings },
-        // { name: "Reports", href: "/admin/reports", icon: FileBarChart }, // DISABLED - Can be enabled later
       ],
       gso_staff: [
         { name: "Dashboard", href: "/gso/dashboard", icon: LayoutDashboard },
         { name: "Pending Review", href: "/gso/pending", icon: Clock },
         { name: "Verified Tickets", href: "/gso/verified", icon: CheckCircle },
+//{ name: "Forwarded Tickets", href: "/gso/forwarded", icon: ClipboardList },
         { name: "Returned Tickets", href: "/gso/returned", icon: AlertCircle },
         { name: "Forward to MO", href: "/gso/forward", icon: ClipboardList },
-        // { name: "Reports", href: "/gso/reports", icon: FileBarChart }, // DISABLED - Can be enabled later
+        { name: "Reports", href: "/gso/reports", icon: FileBarChart },
       ],
       mayors_office: [
         { name: "Dashboard", href: "/mo/dashboard", icon: LayoutDashboard },
         { name: "Pending Fund Release", href: "/mo/pending", icon: Clock },
         { name: "Funds Released", href: "/mo/approved", icon: CheckCircle },
-        { name: "Reconciliation", href: "/mo/reconciliation", icon: ClipboardList },
+        { name: "Fund Issuance", href: "/mo/fund-issuance", icon: CreditCard },
+        //{ name: "Budget Assistance", href: "/mo/budget-assistance", icon: HandCoins },
+       // { name: "Reconciliation", href: "/mo/reconciliation", icon: ClipboardList },
+        //{ name: "Budget Monitoring", href: "/mo/budget", icon: BarChart3 },
         { name: "Reports", href: "/mo/reports", icon: FileBarChart },
       ],
       dept_office: [
         { name: "Dashboard", href: "/department/dashboard", icon: LayoutDashboard },
         { name: "My Requests", href: "/department/requests", icon: FileText },
         { name: "Create Trip", href: "/department/create", icon: FileText },
-        // { name: "Reports", href: "/department/reports", icon: FileBarChart }, // DISABLED - Can be enabled later
       ],
       head_of_office: [
         { name: "Dashboard", href: "/head/dashboard", icon: LayoutDashboard },
@@ -141,7 +144,7 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
         variant="default"
         size="icon"
         onClick={toggleSidebar}
-        className="fixed top-4 left-4 z-50 shadow-lg md:hidden"
+        className="fixed top-4 left-4 z-50 shadow-lg md:hidden bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800"
       >
         <Menu className="h-5 w-5" />
       </Button>
@@ -149,10 +152,10 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
       {/* Desktop Toggle Button */}
       {!isOpen && !isMobile && (
         <Button
-          variant="default"
+          variant="outline"
           size="icon"
           onClick={toggleSidebar}
-          className="fixed top-20 left-4 z-50 shadow-lg rounded-full"
+          className="fixed top-20 left-4 z-50 shadow-lg rounded-full bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700"
         >
           <ChevronRight className="h-4 w-4" />
         </Button>
@@ -161,7 +164,7 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
       {/* Overlay for mobile */}
       {isOpen && isMobile && (
         <div
-          className="fixed inset-0 bg-black/50 z-40 transition-opacity duration-300"
+          className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40 transition-opacity duration-300"
           onClick={() => setIsOpen(false)}
         />
       )}
@@ -169,7 +172,7 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
       {/* Sidebar */}
       <aside
         className={cn(
-          "fixed top-0 left-0 h-full bg-background border-r z-40",
+          "fixed top-0 left-0 h-full bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-700 z-40",
           "transition-all duration-300 ease-in-out shadow-xl",
           "flex flex-col",
           isOpen ? "w-64" : "w-16",
@@ -182,7 +185,7 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
             variant="outline"
             size="icon"
             onClick={toggleSidebar}
-            className="absolute -right-3 top-20 rounded-full shadow-md z-50 bg-background hover:bg-accent"
+            className="absolute -right-3 top-20 rounded-full shadow-md z-50 bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700"
           >
             <ChevronLeft className="h-4 w-4" />
           </Button>
@@ -191,41 +194,42 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
         {/* Logo Section */}
         <div
           className={cn(
-            "flex items-center h-16 border-b",
+            "flex items-center h-16 border-b border-slate-200 dark:border-slate-700",
             isOpen ? "justify-start px-4" : "justify-center",
           )}
         >
           <div className="flex items-center space-x-2">
-            <div className="bg-gradient-to-r from-primary to-primary/70 p-2 rounded-lg">
-              <Fuel className="h-6 w-6 text-primary-foreground" />
+            <div className="bg-gradient-to-r from-blue-600 to-blue-700 p-2 rounded-xl shadow-md">
+              <Fuel className="h-6 w-6 text-white" />
             </div>
             {isOpen && (
               <div className="text-left">
-                <span className="text-lg font-bold bg-gradient-to-r from-primary to-primary/70 bg-clip-text text-transparent">
+                <span className="text-lg font-bold bg-gradient-to-r from-slate-800 to-slate-600 dark:from-white dark:to-slate-300 bg-clip-text text-transparent">
                   FCMS
                 </span>
+                <p className="text-[10px] text-slate-400 dark:text-slate-500 -mt-1">Laguindingan</p>
               </div>
             )}
           </div>
         </div>
 
         {/* User Info Section */}
-        <div className={cn("p-3 border-b", !isOpen && "flex justify-center")}>
+        <div className={cn("p-3 border-b border-slate-200 dark:border-slate-700", !isOpen && "flex justify-center")}>
           <div className={cn("flex items-center", isOpen ? "space-x-3" : "flex-col")}>
             <div className="relative">
-              <Avatar className="h-10 w-10 border-2 border-primary/20">
-                <AvatarFallback className="bg-primary text-primary-foreground">
+              <Avatar className="h-10 w-10 border-2 border-blue-500/30">
+                <AvatarFallback className="bg-gradient-to-r from-blue-500 to-blue-600 text-white font-bold">
                   {getUserInitials()}
                 </AvatarFallback>
               </Avatar>
-              <div className="absolute bottom-0 right-0 h-3 w-3 rounded-full bg-green-500 border-2 border-background" />
+              <div className="absolute bottom-0 right-0 h-3 w-3 rounded-full bg-green-500 border-2 border-white dark:border-slate-900" />
             </div>
             {isOpen && (
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-semibold truncate">
+                <p className="text-sm font-semibold truncate text-slate-800 dark:text-slate-200">
                   {user?.full_name || user?.first_name || user?.email}
                 </p>
-                <p className="text-xs text-muted-foreground truncate">
+                <p className="text-xs text-slate-500 dark:text-slate-400 truncate">
                   {user?.role_label}
                 </p>
               </div>
@@ -245,24 +249,31 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
                   onClick={() => isMobile && setIsOpen(false)}
                   className={({ isActive }) =>
                     cn(
-                      "group flex items-center rounded-lg transition-all duration-200",
-                      "hover:bg-accent hover:text-accent-foreground",
+                      "group flex items-center rounded-xl transition-all duration-200",
+                      "hover:bg-slate-100 dark:hover:bg-slate-800",
                       isActive
-                        ? "bg-primary text-primary-foreground hover:bg-primary/90"
-                        : "text-muted-foreground",
+                        ? "bg-gradient-to-r from-blue-50 to-blue-100 dark:from-blue-950/50 dark:to-blue-900/30 text-blue-700 dark:text-blue-400"
+                        : "text-slate-600 dark:text-slate-400",
                       isOpen ? "px-3 py-2 space-x-3" : "justify-center p-2",
                     )
                   }
                 >
-                  <Icon className={cn("h-5 w-5 flex-shrink-0", !isOpen && "mx-auto")} />
-                  {isOpen && <span className="text-sm font-medium">{item.name}</span>}
+                  <Icon
+                    className={cn(
+                      "h-5 w-5 flex-shrink-0 transition-all",
+                      !isOpen && "mx-auto",
+                    )}
+                  />
+                  {isOpen && (
+                    <span className="text-sm font-medium">{item.name}</span>
+                  )}
                 </NavLink>
               );
             })}
           </div>
         </ScrollArea>
 
-        <Separator />
+        <Separator className="bg-slate-200 dark:bg-slate-700" />
 
         {/* Footer - Logout */}
         <div className={cn("p-3", !isOpen && "flex justify-center")}>
@@ -270,7 +281,7 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
             variant="ghost"
             onClick={handleLogout}
             className={cn(
-              "group w-full text-destructive hover:text-destructive hover:bg-destructive/10",
+              "group w-full text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/30 rounded-xl transition-all",
               isOpen ? "justify-start px-3" : "justify-center p-2",
             )}
           >
