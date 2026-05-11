@@ -6,7 +6,10 @@ use App\Http\Controllers\Controller;
 use App\Models\TripTicket;
 use App\Models\GsoVerification;
 use App\Models\GasSlip;
+use App\Models\Notification as ModelsNotification;
 use App\Models\Notification;
+
+
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -311,9 +314,9 @@ class GsoController extends Controller
             GsoVerification::create([
                 'trip_ticket_id' => $id,
                 'review_cycle' => $reviewCycle,
-                'gso_verified_by' => $user->user_id,
+                'verified_by' => $user->user_id,
                 'decision' => 'approved',
-                'gso_note' => $request->gso_note,
+                'verification_note' => $request->gso_note,
                 'verified_at' => now(),
             ]);
 
@@ -346,86 +349,84 @@ class GsoController extends Controller
     /**
      * GSO rejects a ticket
      */
-    public function rejectTicket(Request $request, $id)
-    {
-        // ... keep existing method ...
-        $validator = Validator::make($request->all(), [
-            'gso_note' => 'required|string|min:5'
-        ]);
+        public function rejectTicket(Request $request, $id)
+        {
+            $validator = Validator::make($request->all(), [
+                'verification_note' => 'required|string|min:5'
+            ]);
 
-        if ($validator->fails()) {
-            return response()->json(['errors' => $validator->errors()], 422);
-        }
-
-        try {
-            $user = $request->user();
-
-            if (!$user->isGsoStaff() && !$user->isSuperAdmin()) {
-                return response()->json(['message' => 'Unauthorized'], 403);
+            if ($validator->fails()) {
+                return response()->json(['errors' => $validator->errors()], 422);
             }
 
-            $tripTicket = TripTicket::where('trip_ticket_id', $id)
-                ->where('status', TripTicket::STATUS_PENDING_GSO_REVIEW)
-                ->first();
+            try {
+                $user = $request->user();
 
-            if (!$tripTicket) {
-                return response()->json(['message' => 'Ticket not found'], 404);
+                if (!$user->isGsoStaff() && !$user->isSuperAdmin()) {
+                    return response()->json(['message' => 'Unauthorized'], 403);
+                }
+
+                $tripTicket = TripTicket::where('trip_ticket_id', $id)
+                    ->where('status', TripTicket::STATUS_PENDING_GSO_REVIEW)
+                    ->first();
+
+                if (!$tripTicket) {
+                    return response()->json(['message' => 'Ticket not found'], 404);
+                }
+
+                DB::beginTransaction();
+
+                $lastCycle = GsoVerification::where('trip_ticket_id', $id)->max('review_cycle') ?? 0;
+                $reviewCycle = $lastCycle + 1;
+
+                GsoVerification::create([
+                    'trip_ticket_id' => $id,
+                    'review_cycle' => $reviewCycle,
+                    'verified_by' => $user->user_id,
+                    'decision' => 'rejected',
+                    'verification_note' => $request->verification_note,
+                    'verified_at' => now(),
+                ]);
+
+                $tripTicket->status = TripTicket::STATUS_RETURNED_FOR_REVISION;
+                $tripTicket->save();
+
+                DB::table('trip_ticket_return')->insert([
+                    'trip_ticket_id' => $id,
+                    'return_type' => 'rejected_by_gso',
+                    'return_note' => $request->verification_note,
+                    'actioned_by' => $user->user_id,
+                    'actioned_at' => now(),
+                ]);
+
+                DB::commit();
+
+                $this->sendRejectionNotification($tripTicket, $request->verification_note);
+
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Ticket rejected and returned to department',
+                    'data' => [
+                        'id' => $tripTicket->trip_ticket_id,
+                        'number' => $tripTicket->trip_ticket_number,
+                        'status' => $tripTicket->status,
+                    ]
+                ]);
+            } catch (\Exception $e) {
+                DB::rollBack();
+                Log::error('GSO reject error: ' . $e->getMessage());
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Failed to reject ticket: ' . $e->getMessage()
+                ], 500);
             }
-
-            DB::beginTransaction();
-
-            $lastCycle = GsoVerification::where('trip_ticket_id', $id)->max('review_cycle') ?? 0;
-            $reviewCycle = $lastCycle + 1;
-
-            GsoVerification::create([
-                'trip_ticket_id' => $id,
-                'review_cycle' => $reviewCycle,
-                'gso_verified_by' => $user->user_id,
-                'decision' => 'rejected',
-                'gso_note' => $request->gso_note,
-                'verified_at' => now(),
-            ]);
-
-            $tripTicket->status = TripTicket::STATUS_RETURNED_FOR_REVISION;
-            $tripTicket->save();
-
-            DB::table('trip_ticket_return')->insert([
-                'trip_ticket_id' => $id,
-                'return_type' => 'rejected_by_gso',
-                'return_note' => $request->gso_note,
-                'actioned_by' => $user->user_id,
-                'actioned_at' => now(),
-            ]);
-
-            DB::commit();
-
-            $this->sendRejectionNotification($tripTicket, $request->gso_note);
-
-            return response()->json([
-                'success' => true,
-                'message' => 'Ticket rejected and returned to department',
-                'data' => [
-                    'id' => $tripTicket->trip_ticket_id,
-                    'number' => $tripTicket->trip_ticket_number,
-                    'status' => $tripTicket->status,
-                ]
-            ]);
-        } catch (\Exception $e) {
-            DB::rollBack();
-            Log::error('GSO reject error: ' . $e->getMessage());
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to reject ticket: ' . $e->getMessage()
-            ], 500);
         }
-    }
 
     /**
      * Forward tickets to Mayor's Office
      */
     public function forwardToMO(Request $request)
     {
-        // ... keep existing method ...
         $validator = Validator::make($request->all(), [
             'trip_ticket_ids' => 'required|array',
             'trip_ticket_ids.*' => 'exists:trip_ticket,trip_ticket_id'
@@ -453,7 +454,7 @@ class GsoController extends Controller
                     ->first();
 
                 if ($ticket) {
-                    $ticket->status = TripTicket::STATUS_WITH_MAYORS_OFFICE;
+                    $ticket->status = TripTicket::STATUS_PENDING_MAYORS_OFFICE;
                     $ticket->save();
 
                     $forwardedCount++;
@@ -485,146 +486,140 @@ class GsoController extends Controller
         }
     }
 
-    /**
-     * Get single ticket details for GSO
-     * ✅ UPDATED: Added budget warning fields
-     */
-    public function show(Request $request, $id)
-    {
-        try {
-            $user = $request->user();
+ /**
+ * Get single ticket details for GSO
+ */
+public function show(Request $request, $id)
+{
+    try {
+        $user = $request->user();
 
-            if (!$user->isGsoStaff() && !$user->isSuperAdmin()) {
-                return response()->json(['message' => 'Unauthorized'], 403);
-            }
-
-            $ticket = TripTicket::with([
-                'vehicle',
-                'driver.user',
-                'department',
-                'submittedBy',
-                'latestHeadApproval.approvedBy',
-                'latestGsoVerification.verifiedBy',
-                'latestMoReview.reviewedBy',
-                'gasSlip',
-                'vehicleSnapshot'
-            ])->findOrFail($id);
-
-            Log::info('Ticket found:', ['id' => $id, 'status' => $ticket->status]);
-            
-            if ($ticket->latestHeadApproval) {
-                Log::info('Head approval found:', [
-                    'decision' => $ticket->latestHeadApproval->decision,
-                    'approved_by_id' => $ticket->latestHeadApproval->approved_by,
-                ]);
-            }
-
-            return response()->json([
-                'success' => true,
-                'data' => [
-                    'trip_ticket_id' => $ticket->trip_ticket_id,
-                    'trip_ticket_number' => $ticket->trip_ticket_number,
-                    'ticket_number' => $ticket->trip_ticket_number,
-                    'trip_date' => $ticket->trip_date,
-                    'destination' => $ticket->destination,
-                    'purpose' => $ticket->purpose,
-                    'charge_to' => $ticket->charge_to,
-                    'passenger_name' => $ticket->passenger_name,
-                    'status' => $ticket->status,
-                    'submitted_at' => $ticket->submitted_at,
-                    'submitted_by_head' => $ticket->submitted_by_head,
-                    // ✅ NEW: Budget warning fields
-                    'has_insufficient_budget' => $ticket->has_insufficient_budget ?? false,
-                    'budget_shortage' => $ticket->budget_shortage ?? 0,
-                    'estimated_distance_km' => $ticket->estimated_distance_km,
-                    'estimated_fuel_liters' => $ticket->estimated_fuel_liters,
-                    
-                    'vehicle' => $ticket->vehicle ? [
-                        'vehicle_id' => $ticket->vehicle->vehicle_id,
-                        'plate_number' => $ticket->vehicle->plate_number,
-                        'vehicle_model' => $ticket->vehicle->vehicle_model,
-                        'fuel_type' => $ticket->vehicle->fuel_type,
-                    ] : null,
-                    
-                    'driver' => $ticket->driver && $ticket->driver->user ? [
-                        'driver_id' => $ticket->driver->driver_id,
-                        'full_name' => $ticket->driver->user->full_name,
-                        'first_name' => $ticket->driver->user->first_name,
-                        'last_name' => $ticket->driver->user->last_name,
-                        'user' => $ticket->driver->user,
-                    ] : null,
-                    'driver_name' => $ticket->driver && $ticket->driver->user ? 
-                        $ticket->driver->user->full_name : null,
-                    
-                    'department' => $ticket->department ? [
-                        'department_id' => $ticket->department->department_id,
-                        'department_name' => $ticket->department->department_name,
-                        'department_code' => $ticket->department->department_code,
-                    ] : null,
-                    'department_name' => $ticket->department ? 
-                        $ticket->department->department_name : null,
-                    
-                    'head_approval' => $ticket->latestHeadApproval ? [
-                        'approval_id' => $ticket->latestHeadApproval->approval_id,
-                        'decision' => $ticket->latestHeadApproval->decision,
-                        'review_note' => $ticket->latestHeadApproval->review_note,
-                        'reviewed_at' => $ticket->latestHeadApproval->reviewed_at,
-                        'is_oic_action' => $ticket->latestHeadApproval->is_oic_action ?? false,
-                        'approved_by' => $ticket->latestHeadApproval->approvedBy ? [
-                            'user_id' => $ticket->latestHeadApproval->approvedBy->user_id,
-                            'full_name' => $ticket->latestHeadApproval->approvedBy->full_name,
-                            'first_name' => $ticket->latestHeadApproval->approvedBy->first_name,
-                            'last_name' => $ticket->latestHeadApproval->approvedBy->last_name,
-                            'email' => $ticket->latestHeadApproval->approvedBy->email,
-                        ] : null,
-                    ] : null,
-                    
-                    'gso_verification' => $ticket->latestGsoVerification ? [
-                        'verification_id' => $ticket->latestGsoVerification->verification_id,
-                        'decision' => $ticket->latestGsoVerification->decision,
-                        'gso_note' => $ticket->latestGsoVerification->gso_note,
-                        'verified_at' => $ticket->latestGsoVerification->verified_at,
-                        'verified_by' => $ticket->latestGsoVerification->verifiedBy ? [
-                            'full_name' => $ticket->latestGsoVerification->verifiedBy->full_name,
-                        ] : null,
-                    ] : null,
-                    
-                    'mo_review' => $ticket->latestMoReview ? [
-                        'review_id' => $ticket->latestMoReview->review_id,
-                        'decision' => $ticket->latestMoReview->decision,
-                        'review_note' => $ticket->latestMoReview->review_note,
-                        'reviewed_at' => $ticket->latestMoReview->reviewed_at,
-                    ] : null,
-                    
-                    'gas_slip' => $ticket->gasSlip ? [
-                        'gas_slip_id' => $ticket->gasSlip->gas_slip_id,
-                        'amount_released' => $ticket->gasSlip->amount_released,
-                        'reconciliation_status' => $ticket->gasSlip->reconciliation_status,
-                    ] : null,
-                    'amount_released' => $ticket->gasSlip ? $ticket->gasSlip->amount_released : 0,
-                    
-                    'vehicle_snapshot' => $ticket->vehicleSnapshot ? [
-                        'vehicle_status' => $ticket->vehicleSnapshot->vehicle_status,
-                        'odometer_status' => $ticket->vehicleSnapshot->odometer_status,
-                        'fuel_type' => $ticket->vehicleSnapshot->fuel_type,
-                    ] : null,
-                    
-                    'requester' => $ticket->submittedBy ? [
-                        'user_id' => $ticket->submittedBy->user_id,
-                        'full_name' => $ticket->submittedBy->full_name,
-                    ] : null,
-                ]
-            ]);
-            
-        } catch (\Exception $e) {
-            Log::error('Show ticket error: ' . $e->getMessage());
-            return response()->json([
-                'success' => false,
-                'message' => 'Ticket not found: ' . $e->getMessage()
-            ], 404);
+        if (!$user->isGsoStaff() && !$user->isSuperAdmin()) {
+            return response()->json(['message' => 'Unauthorized'], 403);
         }
+
+        // ✅ FIXED: Removed latestMoReview
+        $ticket = TripTicket::with([
+            'vehicle',
+            'driver.user',
+            'department',
+            'submittedBy',
+            'latestHeadApproval.approvedBy',
+            'latestGsoVerification.verifiedBy',
+            // ❌ REMOVED: 'latestMoReview.reviewedBy',
+            'gasSlip',
+            'vehicleSnapshot'
+        ])->findOrFail($id);
+
+        Log::info('Ticket found:', ['id' => $id, 'status' => $ticket->status]);
+        
+        if ($ticket->latestHeadApproval) {
+            Log::info('Head approval found:', [
+                'decision' => $ticket->latestHeadApproval->decision,
+                'approved_by_id' => $ticket->latestHeadApproval->approved_by,
+            ]);
+        }
+
+        return response()->json([
+            'success' => true,
+            'data' => [
+                'trip_ticket_id' => $ticket->trip_ticket_id,
+                'trip_ticket_number' => $ticket->trip_ticket_number,
+                'ticket_number' => $ticket->trip_ticket_number,
+                'trip_date' => $ticket->trip_date,
+                'destination' => $ticket->destination,
+                'purpose' => $ticket->purpose,
+                'charge_to' => $ticket->charge_to,
+                'passenger_name' => $ticket->passenger_name,
+                'status' => $ticket->status,
+                'submitted_at' => $ticket->submitted_at,
+                'submitted_by_head' => $ticket->submitted_by_head,
+                // ✅ Budget warning fields
+                'has_insufficient_budget' => $ticket->has_insufficient_budget ?? false,
+                'budget_shortage' => $ticket->budget_shortage ?? 0,
+                'estimated_distance_km' => $ticket->estimated_distance_km,
+                'estimated_fuel_liters' => $ticket->estimated_fuel_liters,
+                
+                'vehicle' => $ticket->vehicle ? [
+                    'vehicle_id' => $ticket->vehicle->vehicle_id,
+                    'plate_number' => $ticket->vehicle->plate_number,
+                    'vehicle_model' => $ticket->vehicle->vehicle_model,
+                    'fuel_type' => $ticket->vehicle->fuel_type,
+                ] : null,
+                
+                'driver' => $ticket->driver && $ticket->driver->user ? [
+                    'driver_id' => $ticket->driver->driver_id,
+                    'full_name' => $ticket->driver->user->full_name,
+                    'first_name' => $ticket->driver->user->first_name,
+                    'last_name' => $ticket->driver->user->last_name,
+                    'user' => $ticket->driver->user,
+                ] : null,
+                'driver_name' => $ticket->driver && $ticket->driver->user ? 
+                    $ticket->driver->user->full_name : null,
+                
+                'department' => $ticket->department ? [
+                    'department_id' => $ticket->department->department_id,
+                    'department_name' => $ticket->department->department_name,
+                    'department_code' => $ticket->department->department_code,
+                ] : null,
+                'department_name' => $ticket->department ? 
+                    $ticket->department->department_name : null,
+                
+                'head_approval' => $ticket->latestHeadApproval ? [
+                    'approval_id' => $ticket->latestHeadApproval->approval_id,
+                    'decision' => $ticket->latestHeadApproval->decision,
+                    'review_note' => $ticket->latestHeadApproval->review_note,
+                    'reviewed_at' => $ticket->latestHeadApproval->reviewed_at,
+                    'is_oic_action' => $ticket->latestHeadApproval->is_oic_action ?? false,
+                    'approved_by' => $ticket->latestHeadApproval->approvedBy ? [
+                        'user_id' => $ticket->latestHeadApproval->approvedBy->user_id,
+                        'full_name' => $ticket->latestHeadApproval->approvedBy->full_name,
+                        'first_name' => $ticket->latestHeadApproval->approvedBy->first_name,
+                        'last_name' => $ticket->latestHeadApproval->approvedBy->last_name,
+                        'email' => $ticket->latestHeadApproval->approvedBy->email,
+                    ] : null,
+                ] : null,
+                
+                'gso_verification' => $ticket->latestGsoVerification ? [
+                    'verification_id' => $ticket->latestGsoVerification->verification_id,
+                    'decision' => $ticket->latestGsoVerification->decision,
+                    'gso_note' => $ticket->latestGsoVerification->gso_note,
+                    'verified_at' => $ticket->latestGsoVerification->verified_at,
+                    'verified_by' => $ticket->latestGsoVerification->verifiedBy ? [
+                        'full_name' => $ticket->latestGsoVerification->verifiedBy->full_name,
+                    ] : null,
+                ] : null,
+                
+                // ❌ REMOVED mo_review section
+                
+                'gas_slip' => $ticket->gasSlip ? [
+                    'gas_slip_id' => $ticket->gasSlip->gas_slip_id,
+                    'amount_released' => $ticket->gasSlip->amount_released,
+                    'reconciliation_status' => $ticket->gasSlip->reconciliation_status,
+                ] : null,
+                'amount_released' => $ticket->gasSlip ? $ticket->gasSlip->amount_released : 0,
+                
+                'vehicle_snapshot' => $ticket->vehicleSnapshot ? [
+                    'vehicle_status' => $ticket->vehicleSnapshot->vehicle_status,
+                    'odometer_status' => $ticket->vehicleSnapshot->odometer_status,
+                    'fuel_type' => $ticket->vehicleSnapshot->fuel_type,
+                ] : null,
+                
+                'requester' => $ticket->submittedBy ? [
+                    'user_id' => $ticket->submittedBy->user_id,
+                    'full_name' => $ticket->submittedBy->full_name,
+                ] : null,
+            ]
+        ]);
+        
+    } catch (\Exception $e) {
+        Log::error('Show ticket error: ' . $e->getMessage());
+        return response()->json([
+            'success' => false,
+            'message' => 'Ticket not found: ' . $e->getMessage()
+        ], 404);
     }
-    
+}
     /**
      * Get GSO reports
      */

@@ -109,13 +109,13 @@ export default function LoginScreen() {
                 <View className="bg-white/20 p-6 rounded-full mb-4 border border-white/30">
                   <MaterialCommunityIcons name="gas-station" size={50} color="white" />
                 </View>
-                <Text className="text-3xl font-bold text-white tracking-wide">FCMS Driver</Text>
+                <Text className="text-3xl font-bold text-white tracking-wide">FCMS</Text>
                 <Text className="text-white/80 text-center mt-2 text-sm">
                   Fuel Consumption Monitoring System
                 </Text>
                 <View className="flex-row items-center mt-3">
                   <View className="w-2 h-2 bg-green-400 rounded-full mr-2" />
-                  <Text className="text-white/60 text-xs">GSO Laguindingan</Text>
+                  <Text className="text-white/60 text-xs">General Service Office - Laguindingan</Text>
                 </View>
               </View>
 
@@ -204,7 +204,7 @@ export default function LoginScreen() {
 
               {/* Version Footer */}
               <Text className="text-white/40 text-xs mt-8">
-                FCMS v1.0.0 | Fuel Consumption Monitoring System
+            © 2026 General Services Office - Laguindingan • All rights reserved
               </Text>
             </View>
           </LinearGradient>

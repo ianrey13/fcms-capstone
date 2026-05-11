@@ -87,7 +87,6 @@ const CreateTripTicket = () => {
   const [isSavingDraft, setIsSavingDraft] = useState(false);
   const [isCheckingBudget, setIsCheckingBudget] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
-  const [isSunday, setIsSunday] = useState(false);
   const [drivers, setDrivers] = useState([]);
   const [vehicles, setVehicles] = useState([]);
   const [departmentBudget, setDepartmentBudget] = useState(null);
@@ -118,11 +117,6 @@ const CreateTripTicket = () => {
     user?.department_name || user?.department?.department_name || "";
 
   // Helper functions for date validation
-  const isWeekday = (date) => {
-    const day = date.getDay();
-    return day !== 0 && day !== 6;
-  };
-
   const isWithinCurrentWeek = (date) => {
     const today = new Date();
     const currentDate = new Date(today);
@@ -315,15 +309,6 @@ const CreateTripTicket = () => {
   useEffect(() => {
     fetchInitialData();
     fetchFuelPrices();
-
-    const checkIfSunday = () => {
-      const today = new Date();
-      setIsSunday(today.getDay() === 0);
-    };
-
-    checkIfSunday();
-    const interval = setInterval(checkIfSunday, 3600000);
-    return () => clearInterval(interval);
   }, []);
 
   // Update charge_to when user loads
@@ -459,24 +444,17 @@ const CreateTripTicket = () => {
     if (!formData.destination) newErrors.destination = "Please enter destination";
     if (!formData.purpose) newErrors.purpose = "Please enter trip purpose";
 
+    // ✅ Updated date validation - no weekday restriction, only check past dates and within current week
     if (formData.trip_date && typeof formData.trip_date === "string" && formData.trip_date.trim() !== "") {
       const tripDateObj = new Date(formData.trip_date);
-      const today = new Date();
-      const currentDayOfWeek = today.getDay();
 
       if (isNaN(tripDateObj.getTime())) {
         newErrors.trip_date = "Invalid date format";
-      } else if (currentDayOfWeek === 0) {
-        newErrors.trip_date =
-          "Trip tickets cannot be created on Sundays. Please try again tomorrow (Monday).";
       } else if (isPastDate(formData.trip_date)) {
         newErrors.trip_date = "Trip date cannot be in the past";
       } else if (!isWithinCurrentWeek(formData.trip_date)) {
         newErrors.trip_date =
           "Trip tickets can only be created for dates within the current week (Monday to Sunday).";
-      } else if (!isWeekday(tripDateObj)) {
-        newErrors.trip_date =
-          "Trips can only be scheduled on weekdays (Monday to Friday). Weekend trips are not allowed.";
       }
     }
 
@@ -896,18 +874,6 @@ const CreateTripTicket = () => {
             </Alert>
           )}
 
-          {/* Sunday Restriction Banner */}
-          {isSunday && (
-            <Alert className="mb-6 bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-800">
-              <XCircle className="h-4 w-4 text-red-600 dark:text-red-400" />
-              <AlertDescription className="text-red-800 dark:text-red-300">
-                ⚠️ Trip tickets cannot be created on Sundays. The system is
-                closed for maintenance and rest day. Please come back on Monday
-                to create your trip tickets.
-              </AlertDescription>
-            </Alert>
-          )}
-
           {/* Main Form Card */}
           <Card className="shadow-xl border-0 dark:bg-slate-800/80 dark:border-slate-700 overflow-hidden">
             <CardHeader className="bg-gradient-to-r from-slate-50 to-white dark:from-slate-800 dark:to-slate-800/50 rounded-t-xl">
@@ -933,7 +899,6 @@ const CreateTripTicket = () => {
                       className={`pl-10 dark:bg-slate-900 dark:border-slate-700 ${errors.trip_date ? "border-red-500" : ""}`}
                       value={formData.trip_date}
                       onChange={handleInputChange}
-                      disabled={isSunday}
                     />
                   </div>
                   {errors.trip_date && (
@@ -1085,6 +1050,7 @@ const CreateTripTicket = () => {
                   Purpose of Trip <span className="text-red-500">*</span>
                 </Label>
                 <Textarea
+                  name='purpose'
                   placeholder="Describe the official purpose of this trip..."
                   rows={3}
                   className={errors.purpose ? "border-red-500 dark:bg-slate-900 dark:border-slate-700" : "dark:bg-slate-900 dark:border-slate-700"}
@@ -1134,7 +1100,6 @@ const CreateTripTicket = () => {
                   <Select
                     value={formData.vehicle_id?.toString()}
                     onValueChange={(value) => handleSelectChange("vehicle_id", value)}
-                    disabled={isSunday}
                   >
                     <SelectTrigger className={errors.vehicle_id ? "border-red-500 dark:bg-slate-900 dark:border-slate-700" : "dark:bg-slate-900 dark:border-slate-700"}>
                       <SelectValue placeholder="Choose a vehicle" />
@@ -1165,7 +1130,6 @@ const CreateTripTicket = () => {
                   <Select
                     value={formData.driver_id?.toString()}
                     onValueChange={(value) => handleSelectChange("driver_id", value)}
-                    disabled={isSunday}
                   >
                     <SelectTrigger className={errors.driver_id ? "border-red-500 dark:bg-slate-900 dark:border-slate-700" : "dark:bg-slate-900 dark:border-slate-700"}>
                       <SelectValue placeholder="Choose a driver" />
@@ -1339,7 +1303,7 @@ const CreateTripTicket = () => {
               <Button
                 variant="outline"
                 onClick={handleSaveDraft}
-                disabled={isSavingDraft || isSubmitting || isCheckingBudget || isSunday}
+                disabled={isSavingDraft || isSubmitting || isCheckingBudget}
                 className="gap-2 dark:border-slate-700 dark:text-slate-300"
               >
                 {isSavingDraft ? (
@@ -1351,19 +1315,14 @@ const CreateTripTicket = () => {
               </Button>
               <Button
                 onClick={handleSubmit}
-                disabled={isSavingDraft || isSubmitting || isCheckingBudget || isSunday}
+                disabled={isSavingDraft || isSubmitting || isCheckingBudget}
                 className={`gap-2 ${
                   isResubmitMode
                     ? "bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-700 hover:to-amber-800"
                     : "bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800"
                 } shadow-md hover:shadow-lg transition-all duration-200`}
               >
-                {isSunday ? (
-                  <>
-                    <XCircle className="h-4 w-4 mr-2" />
-                    Not Available on Sundays
-                  </>
-                ) : isCheckingBudget ? (
+                {isCheckingBudget ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
                 ) : isSubmitting ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
@@ -1372,15 +1331,13 @@ const CreateTripTicket = () => {
                 ) : (
                   <Send className="h-4 w-4" />
                 )}
-                {isSunday
-                  ? "Closed on Sundays"
-                  : isCheckingBudget
-                    ? "Checking Budget..."
-                    : isSubmitting
-                      ? "Submitting..."
-                      : isResubmitMode
-                        ? "Resubmit Ticket"
-                        : "Submit to Department Head"}
+                {isCheckingBudget
+                  ? "Checking Budget..."
+                  : isSubmitting
+                    ? "Submitting..."
+                    : isResubmitMode
+                      ? "Resubmit Ticket"
+                      : "Submit to Department Head"}
               </Button>
             </CardFooter>
           </Card>

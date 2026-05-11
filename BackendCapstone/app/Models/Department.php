@@ -3,11 +3,9 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Department extends Model
 {
-    use SoftDeletes;
     
     protected $table = 'departments';
     protected $primaryKey = 'department_id';
@@ -19,7 +17,6 @@ class Department extends Model
     protected $casts = [
         'created_at' => 'datetime',
         'updated_at' => 'datetime',
-        'deleted_at' => 'datetime'
     ];
     
     // Relationships
@@ -63,10 +60,10 @@ class Department extends Model
         return $this->hasMany(OicDesignation::class, 'department_id', 'department_id');
     }
     
-    public function oicDelegationLogs()
-    {
-        return $this->hasMany(OicDelegationLog::class, 'department_id', 'department_id');
-    }
+    // public function oicDelegationLogs()
+    // {
+    //     return $this->hasMany(OicDelegationLog::class, 'department_id', 'department_id');
+    // }
     
     // Helper methods
     public function getCurrentBudgetPeriod()

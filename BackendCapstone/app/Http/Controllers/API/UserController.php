@@ -11,12 +11,8 @@ use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
-use App\Models\UserEsignature;
 use Illuminate\Support\Facades\Storage;
-
-
 use Illuminate\Support\Str;
-
 
 class UserController extends Controller
 {
@@ -53,9 +49,9 @@ class UserController extends Controller
             $users = $query->orderBy('created_at', 'desc')->get();
 
             $formattedUsers = $users->map(function($user) {
-                 $activeSignature = \App\Models\UserEsignature::where('user_id', $user->user_id)
-                ->where('is_active', true)
-                ->first();
+                // ✅ Check signature directly from users table
+                $hasSignature = !empty($user->esignature_path) && $user->esignature_path !== null;
+                
                 return [
                     'user_id' => $user->user_id,
                     'email' => $user->email,
@@ -71,8 +67,8 @@ class UserController extends Controller
                     'head_active_status' => $user->head_active_status,
                     'last_login_at' => $user->last_login_at,
                     'created_at' => $user->created_at,
-                     'has_signature' => !is_null($activeSignature),
-                'signature_url' => $activeSignature ? \Storage::url($activeSignature->signature_image) : null,
+                    'has_signature' => $hasSignature,
+                    'signature_url' => $hasSignature ? Storage::url($user->esignature_path) : null,
                 ];
             });
 
@@ -139,12 +135,12 @@ class UserController extends Controller
                 ]);
             }
 
-            // Save initial password to history
-            DB::table('password_history')->insert([
-                'user_id' => $user->user_id,
-                'password_hash' => $user->password_hash,
-                'created_at' => now(),
-            ]);
+            // // Save initial password to history
+            // DB::table('password_history')->insert([
+            //     'user_id' => $user->user_id,
+            //     'password_hash' => $user->password_hash,
+            //     'created_at' => now(),
+            // ]);
 
             DB::commit();
 
@@ -177,10 +173,9 @@ class UserController extends Controller
     {
         try {
             $user = User::with('department')->findOrFail($id);
-
-             $activeSignature = UserEsignature::where('user_id', $user->user_id)
-            ->where('is_active', true)
-            ->first();
+            
+            // ✅ Check signature from users table
+            $hasSignature = !empty($user->esignature_path) && $user->esignature_path !== null;
 
             return response()->json([
                 'success' => true,
@@ -201,11 +196,10 @@ class UserController extends Controller
                     'created_at' => $user->created_at,
                     'password_expires_at' => $user->password_expires_at,
                     'account_locked_until' => $user->account_locked_until,
-                    'has_signature' => !is_null($activeSignature),
-                'signature_url' => $activeSignature ? \Storage::url($activeSignature->signature_image) : null,
+                    'has_signature' => $hasSignature,
+                    'signature_url' => $hasSignature ? Storage::url($user->esignature_path) : null,
                 ]
             ]);
-
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
@@ -300,12 +294,12 @@ class UserController extends Controller
                 $user->password_hash = Hash::make($request->password);
                 $user->password_changed_at = now();
                 
-                // Save to password history
-                DB::table('password_history')->insert([
-                    'user_id' => $user->user_id,
-                    'password_hash' => $oldHash,
-                    'created_at' => now()
-                ]);
+                // // Save to password history
+                // DB::table('password_history')->insert([
+                //     'user_id' => $user->user_id,
+                //     'password_hash' => $oldHash,
+                //     'created_at' => now()
+                // ]);
             }
 
             $user->save();
@@ -439,23 +433,20 @@ class UserController extends Controller
             $user->password_changed_at = now();
             $user->save();
             
-            // Save to password history
-            DB::table('password_history')->insert([
-                'user_id' => $user->user_id,
-                'password_hash' => $oldHash,
-                'created_at' => now()
-            ]);
+            // // Save to password history
+            // DB::table('password_history')->insert([
+            //     'user_id' => $user->user_id,
+            //     'password_hash' => $oldHash,
+            //     'created_at' => now()
+            // ]);
             
             // Force logout from all devices
             $user->tokens()->delete();
             
-            // TODO: Send email with temporary password
-            // Mail::to($user->email)->send(new PasswordResetMail($tempPassword, $user));
-            
             return response()->json([
                 'success' => true,
                 'message' => 'Password reset successfully',
-                'temporary_password' => $tempPassword // Remove in production
+                'temporary_password' => $tempPassword
             ]);
             
         } catch (\Exception $e) {
@@ -505,45 +496,45 @@ class UserController extends Controller
         }
     }
 
-   /**
- * Get active drivers for department staff
- */
-public function getActiveDrivers(Request $request)
-{
-    try {
-        $user = auth()->user();
-        $departmentId = $request->get('department_id', $user->department_id);
-        
-        $drivers = User::where('role', User::ROLE_DRIVER)
-            ->where('department_id', $departmentId)
-            ->where('status', 'active')
-            ->with('driver')
-            ->orderBy('first_name')
-            ->get()
-            ->map(function($user) {
-                return [
-                    'driver_id' => $user->driver->driver_id ?? null,
-                    'user_id' => $user->user_id,
-                    'full_name' => $user->full_name,
-                    'email' => $user->email,
-                    'first_name' => $user->first_name,
-                    'last_name' => $user->last_name,
-                    'status' => $user->status,
-                ];
-            });
-        
-        return response()->json([
-            'success' => true,
-            'data' => $drivers
-        ]);
-    } catch (\Exception $e) {
-        Log::error('Get active drivers error: ' . $e->getMessage());
-        return response()->json([
-            'success' => false,
-            'message' => 'Failed to fetch drivers: ' . $e->getMessage()
-        ], 500);
+    /**
+     * Get active drivers for department staff
+     */
+    public function getActiveDrivers(Request $request)
+    {
+        try {
+            $user = auth()->user();
+            $departmentId = $request->get('department_id', $user->department_id);
+            
+            $drivers = User::where('role', User::ROLE_DRIVER)
+                ->where('department_id', $departmentId)
+                ->where('status', 'active')
+                ->with('driver')
+                ->orderBy('first_name')
+                ->get()
+                ->map(function($user) {
+                    return [
+                        'driver_id' => $user->driver->driver_id ?? null,
+                        'user_id' => $user->user_id,
+                        'full_name' => $user->full_name,
+                        'email' => $user->email,
+                        'first_name' => $user->first_name,
+                        'last_name' => $user->last_name,
+                        'status' => $user->status,
+                    ];
+                });
+            
+            return response()->json([
+                'success' => true,
+                'data' => $drivers
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Get active drivers error: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to fetch drivers: ' . $e->getMessage()
+            ], 500);
+        }
     }
-}
 
     /**
      * Get role label
@@ -562,7 +553,6 @@ public function getActiveDrivers(Request $request)
         return $labels[$role] ?? ucfirst($role);
     }
 
-    
     /**
      * Upload e-signature for a user
      */
@@ -571,7 +561,6 @@ public function getActiveDrivers(Request $request)
         try {
             $user = $request->user();
             
-            // Check if user is superadmin
             if (!$user->isSuperAdmin()) {
                 return response()->json(['message' => 'Unauthorized'], 403);
             }
@@ -591,33 +580,15 @@ public function getActiveDrivers(Request $request)
             $filename = 'signature_' . $id . '_' . time() . '.' . $file->getClientOriginalExtension();
             $path = $file->storeAs('signatures', $filename, 'public');
             
-            // Check if user already has an active signature
-            $existingSignature = UserEsignature::where('user_id', $id)
-                ->where('is_active', true)
-                ->first();
-            
-            if ($existingSignature) {
-                // Deactivate old signature
-                $existingSignature->is_active = false;
-                $existingSignature->superseded_at = now();
-                $existingSignature->save();
-            }
-            
-            // Create new signature record
-            $signature = UserEsignature::create([
-                'user_id' => $id,
-                'signature_image' => $path,
-                'signature_hash' => hash('sha256', file_get_contents($file->getRealPath())),
-                'is_active' => true,
-                'enrolled_at' => now(),
-                'enrolled_ip' => $request->ip(),
-            ]);
+            // ✅ Update users table directly
+            $targetUser->esignature_path = $path;
+            $targetUser->esignature_hash = hash('sha256', file_get_contents($file->getRealPath()));
+            $targetUser->save();
             
             return response()->json([
                 'success' => true,
                 'message' => 'Signature uploaded successfully',
                 'data' => [
-                    'signature_id' => $signature->esig_id,
                     'signature_url' => Storage::url($path),
                 ]
             ]);
@@ -638,11 +609,8 @@ public function getActiveDrivers(Request $request)
     {
         try {
             $user = User::findOrFail($id);
-            $signature = UserEsignature::where('user_id', $id)
-                ->where('is_active', true)
-                ->first();
             
-            if (!$signature) {
+            if (empty($user->esignature_path)) {
                 return response()->json([
                     'success' => false,
                     'message' => 'No signature found for this user'
@@ -652,9 +620,7 @@ public function getActiveDrivers(Request $request)
             return response()->json([
                 'success' => true,
                 'data' => [
-                    'signature_id' => $signature->esig_id,
-                    'signature_url' => Storage::url($signature->signature_image),
-                    'uploaded_at' => $signature->enrolled_at,
+                    'signature_url' => Storage::url($user->esignature_path),
                 ]
             ]);
             
@@ -679,15 +645,11 @@ public function getActiveDrivers(Request $request)
                 return response()->json(['message' => 'Unauthorized'], 403);
             }
             
-            $signature = UserEsignature::where('user_id', $id)
-                ->where('is_active', true)
-                ->first();
+            $targetUser = User::findOrFail($id);
             
-            if ($signature) {
-                $signature->is_active = false;
-                $signature->superseded_at = now();
-                $signature->save();
-            }
+            $targetUser->esignature_path = null;
+            $targetUser->esignature_hash = null;
+            $targetUser->save();
             
             return response()->json([
                 'success' => true,
@@ -704,48 +666,43 @@ public function getActiveDrivers(Request $request)
     }
 
     /**
- * Get user's active signature for GSO (public access for approved trips)
- */
-public function getSignatureForGso($id)
-{
-    try {
-        $user = auth()->user();
-        
-        // Allow GSO staff and Super Admin
-        if (!$user->isGsoStaff() && !$user->isSuperAdmin()) {
+     * Get user's active signature for GSO (public access for approved trips)
+     */
+    public function getSignatureForGso($id)
+    {
+        try {
+            $user = auth()->user();
+            
+            // Allow GSO staff and Super Admin
+            if (!$user->isGsoStaff() && !$user->isSuperAdmin()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Unauthorized'
+                ], 403);
+            }
+            
+            $targetUser = User::findOrFail($id);
+            
+            if (empty($targetUser->esignature_path)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'No signature found for this user'
+                ], 404);
+            }
+            
+            return response()->json([
+                'success' => true,
+                'data' => [
+                    'signature_url' => Storage::url($targetUser->esignature_path),
+                ]
+            ]);
+            
+        } catch (\Exception $e) {
+            Log::error('Get signature for GSO error: ' . $e->getMessage());
             return response()->json([
                 'success' => false,
-                'message' => 'Unauthorized'
-            ], 403);
+                'message' => 'Failed to get signature'
+            ], 500);
         }
-        
-        $signature = UserEsignature::where('user_id', $id)
-            ->where('is_active', true)
-            ->first();
-        
-        if (!$signature) {
-            return response()->json([
-                'success' => false,
-                'message' => 'No signature found'
-            ], 404);
-        }
-        
-        return response()->json([
-            'success' => true,
-            'data' => [
-                'signature_id' => $signature->esig_id,
-                'signature_url' => Storage::url($signature->signature_image),
-                'uploaded_at' => $signature->enrolled_at,
-            ]
-        ]);
-        
-    } catch (\Exception $e) {
-        Log::error('Get signature for GSO error: ' . $e->getMessage());
-        return response()->json([
-            'success' => false,
-            'message' => 'Failed to get signature'
-        ], 500);
     }
-}
-
 }

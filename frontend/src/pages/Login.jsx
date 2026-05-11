@@ -90,11 +90,11 @@ const Login = () => {
           {/* Divider with municipality name */}
           <div className="flex items-center justify-center gap-3 mt-3">
             <div className="h-px w-10 bg-gradient-to-r from-transparent to-slate-300 dark:to-slate-700" />
-            <span className="text-xs text-slate-400 dark:text-slate-500">General Service Office Laguindingan</span>
+            <span className="text-xs text-slate-400 dark:text-slate-500">General Service Office - Laguindingan</span>
             <div className="h-px w-10 bg-gradient-to-l from-transparent to-slate-300 dark:to-slate-700" />
           </div>
           
-          {/* Feature badges */}
+          {/* Feature badges
           <div className="flex items-center justify-center gap-3 mt-2">
             <div className="flex items-center gap-1">
               <CheckCircle className="h-3 w-3 text-emerald-500" />
@@ -105,7 +105,7 @@ const Login = () => {
               <Lock className="h-3 w-3 text-blue-500" />
               <span className="text-[10px] text-slate-500">Secure Access</span>
             </div>
-          </div>
+          </div> */}
         </CardHeader>
         
         <CardContent className="pb-8 px-6">
@@ -115,7 +115,7 @@ const Login = () => {
         {/* Premium Footer */}
         <div className="border-t border-slate-100 dark:border-slate-800 px-6 py-4 bg-gradient-to-r from-slate-50 to-white dark:from-slate-800/50 dark:to-slate-900/50">
           <div className="flex items-center justify-center gap-4 text-xs text-slate-400 dark:text-slate-500">
-            <div className="flex items-center gap-1.5">
+            {/* <div className="flex items-center gap-1.5">
               <Clock className="h-3 w-3" />
               <span>24/7 Support</span>
             </div>
@@ -128,14 +128,14 @@ const Login = () => {
             <div className="flex items-center gap-1.5">
               <Sparkles className="h-3 w-3" />
               <span>Real-time Tracking</span>
-            </div>
+            </div> */}
           </div>
           <p className="text-center text-[10px] text-slate-400 dark:text-slate-500 mt-3">
             © 2026 General Services Office - Laguindingan • All rights reserved
           </p>
-          <p className="text-center text-[9px] text-slate-300 dark:text-slate-600 mt-1">
+          {/* <p className="text-center text-[9px] text-slate-300 dark:text-slate-600 mt-1">
             Version 1.0.0 • Build 2024.1
-          </p>
+          </p> */}
         </div>
       </Card>
     </div>

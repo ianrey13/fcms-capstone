@@ -6,7 +6,7 @@ use Illuminate\Database\Eloquent\Model;
 
 class Notification extends Model
 {
-    protected $table = 'notification';
+    protected $table = 'notifications';
     protected $primaryKey = 'notification_id';
     public $timestamps = false;
     
@@ -196,12 +196,7 @@ class Notification extends Model
                 return TripTicket::find($this->entity_id);
             case 'gas_slip':
                 return GasSlip::find($this->entity_id);
-            case 'fund_issuance':
-                return FundIssuance::find($this->entity_id);
-            case 'department_request':
-                return DepartmentRequest::find($this->entity_id);
-            case 'dept_crud_request':
-                return DeptCrudRequest::find($this->entity_id);
+            
             case 'oic_designation':
                 return OicDesignation::find($this->entity_id);
             case 'mo_request':

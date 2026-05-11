@@ -138,7 +138,7 @@ const handleAcknowledge = async (tripId: number, tripNumber: string) => {
           `Confirm acknowledgment for trip #${tripNumber}?`,
           [
             { text: 'Cancel', onPress: () => resolve(false) },
-            { text: 'Acknowledge', onPress: () => resolve(true) },
+            { text: 'Receive Amount', onPress: () => resolve(true) },
           ]
         );
       });
@@ -184,7 +184,7 @@ const handleAcknowledge = async (tripId: number, tripNumber: string) => {
     const configs: Record<string, StatusConfig> = {
       funds_issued: {
         bg: '#fef3c7', bgLight: '#fffbeb', text: '#d97706', label: 'Awaiting Acknowledgment',
-        icon: 'document-text-outline', actionLabel: 'Acknowledge', actionGradient: ['#059669', '#047857'], borderColor: '#fbbf24',
+        icon: 'document-text-outline', actionLabel: 'Receive Amount', actionGradient: ['#059669', '#047857'], borderColor: '#fbbf24',
       },
       acknowledged: {
         bg: '#dbeafe', bgLight: '#eff6ff', text: '#2563eb', label: 'Ready to Start',
@@ -509,15 +509,15 @@ const handleAcknowledge = async (tripId: number, tripNumber: string) => {
           )}
         </Animated.View>
 
-        <View style={styles.footer}>
+        {/* <View style={styles.footer}>
           <View style={styles.footerDivider}>
             <View style={styles.footerLine} />
-            <Text style={styles.footerDividerText}>FCMS MOBILE</Text>
+            <Text style={styles.footerDividerText}>FCMS</Text>
             <View style={styles.footerLine} />
           </View>
           <Text style={styles.footerVersion}>Version 1.0.0</Text>
           <Text style={styles.footerCopyright}>© GSO Laguindingan</Text>
-        </View>
+        </View> */}
       </ScrollView>
 
       <GasSlipModal

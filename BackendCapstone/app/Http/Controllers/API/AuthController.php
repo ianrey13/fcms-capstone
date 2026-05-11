@@ -111,7 +111,9 @@ class AuthController extends Controller
                     'role' => $user->role,
                     'role_label' => $roleLabel,
                     'department_id' => $user->department_id,
-                    'department_name' => $user->department?->department_name,
+'department_name' => $user->department ? $user->department->department_name : null,
+'department_code' => $user->department?->department_code,
+
                     'status' => $user->status,
                     'head_active_status' => $user->head_active_status,
                     'last_login_at' => $user->last_login_at,
@@ -127,7 +129,7 @@ class AuthController extends Controller
      */
     public function me(Request $request)
     {
-        $user = $request->user();
+        $user = $request->user() ;
         
         return response()->json([
             'success' => true,
@@ -141,7 +143,9 @@ class AuthController extends Controller
                 'role' => $user->role,
                 'role_label' => $this->getRoleLabel($user->role),
                 'department_id' => $user->department_id,
-                'department_name' => $user->department?->department_name,
+            'department_name' => $user->department ? $user->department->department_name : null,
+            'department_code' => $user->department?->department_code,
+
                 'status' => $user->status,
                 'head_active_status' => $user->head_active_status,
                 'last_login_at' => $user->last_login_at,

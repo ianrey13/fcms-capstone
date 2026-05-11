@@ -41,13 +41,22 @@ const safeAmount = (amount) => {
 const GasSlipView = ({ ticket, onClose }) => {
   if (!ticket) return null;
 
+  const driverName = 
+    ticket.driver?.full_name || 
+    ticket.driver?.user?.first_name + " " + ticket.driver?.user?.last_name ||
+    ticket.driver_name || 
+    ticket.driver?.user?.full_name ||
+    "N/A";
+    
+
   const fuelType = (ticket.vehicle?.fuel_type || "Diesel").toUpperCase();
   const amount = safeAmount(ticket.amount_released);
   const liters = amount > 0 ? (amount / 58).toFixed(2) : "0.00";
 
+
   const gasSlipData = {
     control_number: ticket.ticket_number || ticket.trip_ticket_number || "2025-01-0074",
-    driver_name: ticket.driver?.full_name || ticket.driver_name || "N/A",
+    driver_name: driverName, 
     vehicle_plate: ticket.vehicle?.plate_number || ticket.vehicle_plate || "N/A",
     vehicle_model: ticket.vehicle?.vehicle_model || "",
     date: new Date(ticket.created_at || ticket.trip_date || Date.now()).toLocaleDateString("en-US", {
@@ -341,6 +350,7 @@ const MayorApproved = () => {
   const getStatusBadge = (status) => {
     const config = {
       funds_issued: { color: "bg-emerald-500", label: "Funds Issued" },
+              acknowledged: { color: "bg-blue-500", label: "Acknowledged" },
       in_transit: { color: "bg-blue-500", label: "In Transit" },
       closed: { color: "bg-slate-500", label: "Closed" },
       pending_reconciliation: { color: "bg-amber-500", label: "Pending Reconciliation" },

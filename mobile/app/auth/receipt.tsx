@@ -408,7 +408,7 @@ export default function ReceiptScreen() {
                 </View>
 
                 {/* Tips Card */}
-                <View style={styles.tipsCard}>
+                {/* <View style={styles.tipsCard}>
                   <View style={styles.tipsHeader}>
                     <Ionicons name="bulb-outline" size={16} color="#f59e0b" />
                     <Text style={styles.tipsTitle}>Tips for Best Results</Text>
@@ -425,7 +425,7 @@ export default function ReceiptScreen() {
                       </View>
                     ))}
                   </View>
-                </View>
+                </View> */}
               </Animated.View>
             ) : (
               <Animated.View style={{ opacity: fadeAnim }}>

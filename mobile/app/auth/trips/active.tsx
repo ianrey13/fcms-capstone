@@ -418,7 +418,7 @@ export default function ActiveTripScreen() {
           </View>
 
           {/* Workflow Steps */}
-          <View style={styles.workflowCard}>
+          {/* <View style={styles.workflowCard}>
             <Text style={styles.workflowTitle}>Trip Workflow</Text>
             <View style={styles.stepsContainer}>
               {[
@@ -447,11 +447,11 @@ export default function ActiveTripScreen() {
                 </View>
               ))}
             </View>
-          </View>
+          </View> */}
         </ScrollView>
 
         {/* Help Modal */}
-        <Modal visible={showHelpModal} transparent={true} animationType="fade" onRequestClose={() => setShowHelpModal(false)}>
+        {/* <Modal visible={showHelpModal} transparent={true} animationType="fade" onRequestClose={() => setShowHelpModal(false)}>
           <View style={styles.modalOverlay}>
             <View style={styles.modalContainer}>
               <LinearGradient colors={['#2563eb', '#1e40af']} style={styles.modalHeader}>
@@ -507,7 +507,7 @@ export default function ActiveTripScreen() {
               </TouchableOpacity>
             </View>
           </View>
-        </Modal>
+        </Modal> */}
       </View>
     </>
   );

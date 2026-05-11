@@ -6,7 +6,8 @@ use App\Http\Controllers\Controller;
 use App\Models\DeptBudgetPolicy;
 use App\Models\DeptBudgetPeriod;
 use App\Models\Department;
-use App\Models\FundIssuance;
+use App\Models\GasSlip;
+// ❌ REMOVED: use App\Models\FundIssuance;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
@@ -102,7 +103,9 @@ class BudgetController extends Controller
                 ], 404);
             }
             
-            $spentAmount = FundIssuance::where('period_id', $currentPeriod->period_id)
+            // ✅ FIXED: Use GasSlip instead of FundIssuance
+            $spentAmount = GasSlip::where('period_id', $currentPeriod->period_id)
+                ->whereNotNull('acknowledged_at')
                 ->sum('amount_released');
             
             $remainingAmount = $currentPeriod->allocated_amount - $spentAmount;
@@ -131,50 +134,14 @@ class BudgetController extends Controller
     
     /**
      * Get current department budget for authenticated user
+     * ✅ FIXED: Use GasSlip instead of FundIssuance
      */
-
-
-public function getCurrentDepartmentBudget(Request $request)
-{
-    try {
-        $user = $request->user();
-        
-        if (!$user->department_id) {
-            return response()->json([
-                'success' => true,
-                'data' => [
-                    'weekly_allocation' => 0,
-                    'used_this_week' => 0,
-                    'remaining_budget' => 0,
-                    'remaining_amount' => 0,
-                    'allocated_amount' => 0,
-                    'spent_amount' => 0,
-                    'week_start' => null,
-                    'week_end' => null,
-                    'utilization_percentage' => 0
-                ]
-            ]);
-        }
-        
-        // Get current active budget period
-        $currentPeriod = DeptBudgetPeriod::where('department_id', $user->department_id)
-            ->where('status', 'active')
-            ->first();  // ✅ Remove date range check
-        
-        if (!$currentPeriod) {
-            // Try to create a period from policy
-            $policy = DeptBudgetPolicy::where('department_id', $user->department_id)->first();
+    public function getCurrentDepartmentBudget(Request $request)
+    {
+        try {
+            $user = $request->user();
             
-            if ($policy) {
-                $currentPeriod = DeptBudgetPeriod::create([
-                    'department_id' => $user->department_id,
-                    'week_start' => now()->startOfWeek(),
-                    'week_end' => now()->endOfWeek(),
-                    'allocated_amount' => $policy->default_weekly_allocation,
-                    'status' => 'active',
-                    'created_at' => now(),
-                ]);
-            } else {
+            if (!$user->department_id) {
                 return response()->json([
                     'success' => true,
                     'data' => [
@@ -190,43 +157,79 @@ public function getCurrentDepartmentBudget(Request $request)
                     ]
                 ]);
             }
+            
+            // Get current active budget period
+            $currentPeriod = DeptBudgetPeriod::where('department_id', $user->department_id)
+                ->where('status', 'active')
+                ->first();
+            
+            if (!$currentPeriod) {
+                // Try to create a period from policy
+                $policy = DeptBudgetPolicy::where('department_id', $user->department_id)->first();
+                
+                if ($policy) {
+                    $currentPeriod = DeptBudgetPeriod::create([
+                        'department_id' => $user->department_id,
+                        'week_start' => now()->startOfWeek(),
+                        'week_end' => now()->endOfWeek(),
+                        'allocated_amount' => $policy->default_weekly_allocation,
+                        'status' => 'active',
+                        'created_at' => now(),
+                    ]);
+                } else {
+                    return response()->json([
+                        'success' => true,
+                        'data' => [
+                            'weekly_allocation' => 0,
+                            'used_this_week' => 0,
+                            'remaining_budget' => 0,
+                            'remaining_amount' => 0,
+                            'allocated_amount' => 0,
+                            'spent_amount' => 0,
+                            'week_start' => null,
+                            'week_end' => null,
+                            'utilization_percentage' => 0
+                        ]
+                    ]);
+                }
+            }
+            
+            // ✅ FIXED: Use GasSlip instead of FundIssuance
+            $usedBudget = GasSlip::where('period_id', $currentPeriod->period_id)
+                ->whereNotNull('acknowledged_at')
+                ->sum('amount_released');
+            
+            $remaining = $currentPeriod->allocated_amount - $usedBudget;
+            $utilization = $currentPeriod->allocated_amount > 0 
+                ? round(($usedBudget / $currentPeriod->allocated_amount) * 100, 2) 
+                : 0;
+            
+            return response()->json([
+                'success' => true,
+                'data' => [
+                    'weekly_allocation' => (float) $currentPeriod->allocated_amount,
+                    'used_this_week' => (float) $usedBudget,
+                    'remaining_budget' => (float) max(0, $remaining),
+                    'remaining_amount' => (float) max(0, $remaining),
+                    'allocated_amount' => (float) $currentPeriod->allocated_amount,
+                    'spent_amount' => (float) $usedBudget,
+                    'week_start' => $currentPeriod->week_start,
+                    'week_end' => $currentPeriod->week_end,
+                    'utilization_percentage' => $utilization,
+                    'period_start' => $currentPeriod->week_start,
+                    'period_end' => $currentPeriod->week_end,
+                    'status' => $currentPeriod->status,
+                ]
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Get current department budget error: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to fetch budget: ' . $e->getMessage()
+            ], 500);
         }
-        
-        // Calculate used budget
-        $usedBudget = FundIssuance::where('period_id', $currentPeriod->period_id)
-            ->sum('amount_released');
-        
-        $remaining = $currentPeriod->allocated_amount - $usedBudget;
-        $utilization = $currentPeriod->allocated_amount > 0 
-            ? round(($usedBudget / $currentPeriod->allocated_amount) * 100, 2) 
-            : 0;
-        
-        return response()->json([
-            'success' => true,
-            'data' => [
-                'weekly_allocation' => (float) $currentPeriod->allocated_amount,
-                'used_this_week' => (float) $usedBudget,
-                'remaining_budget' => (float) max(0, $remaining),
-                'remaining_amount' => (float) max(0, $remaining),
-                'allocated_amount' => (float) $currentPeriod->allocated_amount,
-                'spent_amount' => (float) $usedBudget,
-                'week_start' => $currentPeriod->week_start,
-                'week_end' => $currentPeriod->week_end,
-                'utilization_percentage' => $utilization,
-                'period_start' => $currentPeriod->week_start,
-                'period_end' => $currentPeriod->week_end,
-                'status' => $currentPeriod->status,
-            ]
-        ]);
-        
-    } catch (\Exception $e) {
-        Log::error('Get current department budget error: ' . $e->getMessage());
-        return response()->json([
-            'success' => false,
-            'message' => 'Failed to fetch budget: ' . $e->getMessage()
-        ], 500);
     }
-}    
+    
     /**
      * Get budget policy for a department
      */
@@ -258,7 +261,6 @@ public function getCurrentDepartmentBudget(Request $request)
                 'success' => true,
                 'data' => $policy
             ]);
-            
         } catch (\Exception $e) {
             Log::error('Get budget policy error: ' . $e->getMessage());
             return response()->json([
@@ -298,7 +300,6 @@ public function getCurrentDepartmentBudget(Request $request)
                 'message' => 'Budget policy updated successfully',
                 'data' => $policy
             ]);
-            
         } catch (\Exception $e) {
             Log::error('Update budget policy error: ' . $e->getMessage());
             return response()->json([
@@ -326,7 +327,6 @@ public function getCurrentDepartmentBudget(Request $request)
                 'success' => true,
                 'data' => $policies
             ]);
-            
         } catch (\Exception $e) {
             Log::error('Get all budget policies error: ' . $e->getMessage());
             return response()->json([
@@ -381,7 +381,6 @@ public function getCurrentDepartmentBudget(Request $request)
                 'message' => 'Budget period activated successfully',
                 'data' => $period
             ]);
-            
         } catch (\Exception $e) {
             DB::rollBack();
             Log::error('Force activate error: ' . $e->getMessage());
@@ -466,7 +465,6 @@ public function getCurrentDepartmentBudget(Request $request)
                     'periods_created' => $createdCount
                 ]);
             }
-            
         } catch (\Exception $e) {
             Log::error('Run weekly reset error: ' . $e->getMessage());
             return response()->json([
@@ -478,6 +476,7 @@ public function getCurrentDepartmentBudget(Request $request)
     
     /**
      * Get budget summary for all departments (superadmin only)
+     * ✅ FIXED: Use GasSlip instead of FundIssuance
      */
     public function getBudgetSummary(Request $request)
     {
@@ -497,7 +496,9 @@ public function getCurrentDepartmentBudget(Request $request)
                     ->first();
                 
                 if ($currentPeriod) {
-                    $spent = FundIssuance::where('period_id', $currentPeriod->period_id)
+                    // ✅ FIXED: Use GasSlip instead of FundIssuance
+                    $spent = GasSlip::where('period_id', $currentPeriod->period_id)
+                        ->whereNotNull('acknowledged_at')
                         ->sum('amount_released');
                     
                     $summary[] = [
@@ -532,7 +533,6 @@ public function getCurrentDepartmentBudget(Request $request)
                 'success' => true,
                 'data' => $summary
             ]);
-            
         } catch (\Exception $e) {
             Log::error('Get budget summary error: ' . $e->getMessage());
             return response()->json([
@@ -544,6 +544,7 @@ public function getCurrentDepartmentBudget(Request $request)
     
     /**
      * Get remaining amount for a budget period
+     * ✅ FIXED: Use GasSlip instead of FundIssuance
      */
     private function getRemainingAmount($periodId)
     {
@@ -552,7 +553,9 @@ public function getCurrentDepartmentBudget(Request $request)
             return 0;
         }
         
-        $spent = FundIssuance::where('period_id', $periodId)->sum('amount_released');
+        $spent = GasSlip::where('period_id', $periodId)
+            ->whereNotNull('acknowledged_at')
+            ->sum('amount_released');
         return $period->allocated_amount - $spent;
     }
 }

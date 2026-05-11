@@ -159,7 +159,7 @@ export const gsoAPI = {
   approveTicket: (id, note) =>
     api.post(`/gso/tickets/${id}/approve`, { gso_note: note }),
   rejectTicket: (id, note) =>
-    api.post(`/gso/tickets/${id}/reject`, { gso_note: note }),
+    api.post(`/gso/tickets/${id}/reject`, { verification_note: note }),
 
   // Forward to Mayor's Office
   forwardToMO: (ticketIds) =>

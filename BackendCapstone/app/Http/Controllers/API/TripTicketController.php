@@ -7,9 +7,7 @@ use App\Http\Controllers\Controller;
 use App\Models\TripTicket;
 use App\Models\HeadApproval;
 use App\Models\GsoVerification;
-use App\Models\MoReview;
 use App\Models\GasSlip;
-use App\Models\FundIssuance;
 use App\Models\Notification;
 use App\Models\Driver;
 use App\Models\Vehicle;
@@ -114,7 +112,6 @@ class TripTicketController extends Controller
                 'vehicle',
                 'latestHeadApproval.approvedBy',
                 'latestGsoVerification.verifiedBy',
-                'latestMoReview.reviewedBy',
                 'gasSlip',
                 'gasSlip.fuelLog',
                 'vehicleSnapshot',
@@ -162,11 +159,7 @@ class TripTicketController extends Controller
                     'gso_note' => $tripTicket->latestGsoVerification->gso_note,
                     'verified_at' => $tripTicket->latestGsoVerification->verified_at,
                 ] : null,
-                'mo_review' => $tripTicket->latestMoReview ? [
-                    'decision' => $tripTicket->latestMoReview->decision,
-                    'review_note' => $tripTicket->latestMoReview->review_note,
-                    'reviewed_at' => $tripTicket->latestMoReview->reviewed_at,
-                ] : null,
+
                 'gas_slip' => $tripTicket->gasSlip ? [
                     'amount_released' => $tripTicket->gasSlip->amount_released,
                     'reconciliation_status' => $tripTicket->gasSlip->reconciliation_status,
@@ -816,7 +809,9 @@ class TripTicketController extends Controller
             ];
         }
 
-        $totalSpent = FundIssuance::where('period_id', $currentPeriod->period_id)->sum('amount_released');
+        $totalSpent = GasSlip::where('period_id', $currentPeriod->period_id)
+            ->whereNotNull('acknowledged_at')
+            ->sum('amount_released');
 
         return [
             'allocated' => round((float) $currentPeriod->allocated_amount, 2),

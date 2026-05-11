@@ -12,17 +12,23 @@ class Vehicle extends Model
     protected $fillable = [
         'department_id', 'vehicle_model', 'plate_number', 'fuel_type',
         'status', 'odometer_status', 'maintenance_flag',
-        'deactivated_by', 'deactivation_reason'
+        'deactivated_by', 'deactivation_reason', 
+        'odometer_broken_since',
+        'odometer_repair_requested',
+        'odometer_repair_completed_at',
     ];
     
     protected $casts = [
         'created_at' => 'datetime',
         'updated_at' => 'datetime',
         'deactivated_at' => 'datetime',
-        'maintenance_flag' => 'boolean'
+        'maintenance_flag' => 'boolean',
+        'odometer_broken_since' => 'date',
+        'odometer_repair_requested' => 'boolean',
+        'odometer_repair_completed_at' => 'datetime',
     ];
     
-    // Relationships
+    // Relationships (keep all your existing relationships)
     public function department()
     {
         return $this->belongsTo(Department::class, 'department_id', 'department_id');

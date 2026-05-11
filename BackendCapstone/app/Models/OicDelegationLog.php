@@ -4,22 +4,30 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 
-class OicDelegationLog extends Model
+class OicDesignation extends Model
 {
-    protected $table = 'oic_delegation_log';
-    protected $primaryKey = 'log_id';
+    protected $table = 'oic_designation';
+    protected $primaryKey = 'designation_id';
     public $timestamps = false;
     
     protected $fillable = [
-        'department_id', 'head_of_office_id', 'oic_user_id', 'reason',
-        'reason_details', 'estimated_return', 'delegated_at', 'revoked_at', 'tickets_handled'
+        'department_id', 
+        'head_of_office_id', 
+        'oic_user_id', 
+        'is_active',
+        'designated_at', 
+        'revoked_at',
+        // ✅ ADD THESE FIELDS (merged from delegation log)
+        'reason',
+        'reason_details',
+        'expected_return_date',
     ];
     
     protected $casts = [
-        'delegated_at' => 'datetime',
+        'designated_at' => 'datetime',
         'revoked_at' => 'datetime',
-        'estimated_return' => 'date',
-        'tickets_handled' => 'integer'
+        'expected_return_date' => 'date',
+        'is_active' => 'boolean',
     ];
     
     public function department()

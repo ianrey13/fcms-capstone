@@ -6,7 +6,7 @@ use Illuminate\Database\Eloquent\Model;
 
 class TripTicketVehicleSnapshot extends Model
 {
-    protected $table = 'trip_ticket_vehicle_snapshot';
+    protected $table = 'trip_vehicle_snapshot';
     protected $primaryKey = 'trip_ticket_id';
     public $incrementing = false;
     public $timestamps = false;

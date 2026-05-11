@@ -6,7 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\TripTicket;
 use App\Models\FuelLog;
 use App\Models\GasSlip;
-use App\Models\FundIssuance;
+// ❌ REMOVED: use App\Models\FundIssuance;
 use App\Models\Department;
 use App\Models\Vehicle;
 use App\Models\DeptBudgetPeriod;
@@ -25,17 +25,14 @@ class ReportsController extends Controller
             $user = $request->user();
             $query = TripTicket::with(['department', 'vehicle', 'driver.user', 'gasSlip']);
             
-            // Apply date filters
             if ($request->has('start_date') && $request->has('end_date')) {
                 $query->whereBetween('trip_date', [$request->start_date, $request->end_date]);
             }
             
-            // Apply department filter
             if ($request->has('department_id')) {
                 $query->where('department_id', $request->department_id);
             }
             
-            // Apply status filter
             if ($request->has('status')) {
                 $query->where('status', $request->status);
             }
@@ -73,7 +70,6 @@ class ReportsController extends Controller
                     'end_date' => $request->end_date,
                 ]
             ]);
-            
         } catch (\Exception $e) {
             Log::error('Get trip report error: ' . $e->getMessage());
             return response()->json([
@@ -92,7 +88,6 @@ class ReportsController extends Controller
             $user = $request->user();
             $query = FuelLog::with(['gasSlip.tripTicket.department', 'gasSlip.tripTicket.vehicle']);
             
-            // Apply date filters
             if ($request->has('start_date') && $request->has('end_date')) {
                 $query->whereBetween('created_at', [$request->start_date . ' 00:00:00', $request->end_date . ' 23:59:59']);
             }
@@ -116,7 +111,6 @@ class ReportsController extends Controller
                 ];
             });
             
-            // Calculate summary
             $totalLiters = $fuelLogs->sum('liters_availed');
             $totalAmount = $fuelLogs->sum('amount_on_receipt');
             
@@ -134,7 +128,6 @@ class ReportsController extends Controller
                     'end_date' => $request->end_date,
                 ]
             ]);
-            
         } catch (\Exception $e) {
             Log::error('Get fuel report error: ' . $e->getMessage());
             return response()->json([
@@ -146,6 +139,7 @@ class ReportsController extends Controller
     
     /**
      * Get budget report data
+     * ✅ FIXED: Use GasSlip instead of FundIssuance
      */
     public function getBudgetReport(Request $request)
     {
@@ -164,7 +158,10 @@ class ReportsController extends Controller
             $periods = $query->orderBy('week_start', 'desc')->get();
             
             $data = $periods->map(function($period) {
-                $spent = FundIssuance::where('period_id', $period->period_id)->sum('amount_released');
+                // ✅ FIXED: Use GasSlip instead of FundIssuance
+                $spent = GasSlip::where('period_id', $period->period_id)
+                    ->whereNotNull('acknowledged_at')
+                    ->sum('amount_released');
                 return [
                     'department_id' => $period->department_id,
                     'department_name' => $period->department ? $period->department->department_name : null,
@@ -184,7 +181,6 @@ class ReportsController extends Controller
                 'success' => true,
                 'data' => $data
             ]);
-            
         } catch (\Exception $e) {
             Log::error('Get budget report error: ' . $e->getMessage());
             return response()->json([
@@ -204,7 +200,6 @@ class ReportsController extends Controller
             $vehicles = Vehicle::with('department')->get();
             
             $data = $vehicles->map(function($vehicle) {
-                // Count trips for this vehicle
                 $trips = TripTicket::where('vehicle_id', $vehicle->vehicle_id)->get();
                 $totalFuelUsed = 0;
                 $totalDistance = 0;
@@ -236,7 +231,6 @@ class ReportsController extends Controller
                 'success' => true,
                 'data' => $data
             ]);
-            
         } catch (\Exception $e) {
             Log::error('Get vehicle report error: ' . $e->getMessage());
             return response()->json([
@@ -248,13 +242,13 @@ class ReportsController extends Controller
     
     /**
      * Get report summary dashboard data
+     * ✅ FIXED: Use GasSlip instead of FundIssuance
      */
     public function getReportSummary(Request $request)
     {
         try {
             $user = $request->user();
             
-            // Date range filter
             $startDate = $request->start_date ?? now()->subDays(30);
             $endDate = $request->end_date ?? now();
             
@@ -268,9 +262,9 @@ class ReportsController extends Controller
             $completedTrips = TripTicket::where('status', TripTicket::STATUS_CLOSED)->count();
             $cancelledTrips = TripTicket::where('status', TripTicket::STATUS_CANCELLED)->count();
             
-            // Budget statistics
+            // Budget statistics - ✅ FIXED: Use GasSlip
             $totalBudgetAllocated = DeptBudgetPeriod::where('status', 'active')->sum('allocated_amount');
-            $totalBudgetSpent = FundIssuance::sum('amount_released');
+            $totalBudgetSpent = GasSlip::sum('amount_released');
             $budgetUtilization = $totalBudgetAllocated > 0 
                 ? round(($totalBudgetSpent / $totalBudgetAllocated) * 100, 2) 
                 : 0;
@@ -280,13 +274,13 @@ class ReportsController extends Controller
             $totalFuelCost = FuelLog::sum('amount_on_receipt');
             $averageFuelPrice = $totalFuelUsed > 0 ? $totalFuelCost / $totalFuelUsed : 0;
             
-            // Department breakdown
+            // Department breakdown - ✅ FIXED: Use GasSlip
             $departmentStats = Department::withCount('tripTickets')->get()->map(function($dept) {
                 $trips = TripTicket::where('department_id', $dept->department_id)->get();
                 $budgetPeriod = DeptBudgetPeriod::where('department_id', $dept->department_id)
                     ->where('status', 'active')
                     ->first();
-                $spent = FundIssuance::whereHas('gasSlip.tripTicket', function($q) use ($dept) {
+                $spent = GasSlip::whereHas('tripTicket', function($q) use ($dept) {
                     $q->where('department_id', $dept->department_id);
                 })->sum('amount_released');
                 
@@ -323,7 +317,6 @@ class ReportsController extends Controller
                     'departments' => $departmentStats,
                 ]
             ]);
-            
         } catch (\Exception $e) {
             Log::error('Get report summary error: ' . $e->getMessage());
             return response()->json([
@@ -334,7 +327,7 @@ class ReportsController extends Controller
     }
     
     /**
-     * Export trip report to CSV (without PDF)
+     * Export trip report to CSV
      */
     public function exportTripReport(Request $request, $format)
     {
@@ -352,13 +345,9 @@ class ReportsController extends Controller
             $filename = 'trip-report-' . now()->format('Y-m-d') . '.csv';
             $handle = fopen('php://temp', 'w');
             
-            // Add UTF-8 BOM for Excel compatibility
             fputs($handle, "\xEF\xBB\xBF");
-            
-            // Add headers
             fputcsv($handle, ['Ticket #', 'Trip Date', 'Destination', 'Department', 'Vehicle', 'Driver', 'Amount', 'Status']);
             
-            // Add data
             foreach ($trips as $trip) {
                 fputcsv($handle, [
                     $trip->trip_ticket_number,
@@ -381,7 +370,6 @@ class ReportsController extends Controller
                     'Content-Type' => 'text/csv; charset=UTF-8',
                     'Content-Disposition' => 'attachment; filename="' . $filename . '"',
                 ]);
-            
         } catch (\Exception $e) {
             Log::error('Export trip report error: ' . $e->getMessage());
             return response()->json([
@@ -409,9 +397,7 @@ class ReportsController extends Controller
             $filename = 'fuel-report-' . now()->format('Y-m-d') . '.csv';
             $handle = fopen('php://temp', 'w');
             
-            // Add UTF-8 BOM for Excel compatibility
             fputs($handle, "\xEF\xBB\xBF");
-            
             fputcsv($handle, ['Ticket #', 'Destination', 'Liters', 'Amount', 'Date', 'Odometer Out', 'Odometer In']);
             
             foreach ($fuelLogs as $log) {
@@ -436,7 +422,6 @@ class ReportsController extends Controller
                     'Content-Type' => 'text/csv; charset=UTF-8',
                     'Content-Disposition' => 'attachment; filename="' . $filename . '"',
                 ]);
-            
         } catch (\Exception $e) {
             Log::error('Export fuel report error: ' . $e->getMessage());
             return response()->json([
@@ -448,6 +433,7 @@ class ReportsController extends Controller
     
     /**
      * Export budget report to CSV
+     * ✅ FIXED: Use GasSlip instead of FundIssuance
      */
     public function exportBudgetReport(Request $request, $format)
     {
@@ -464,13 +450,14 @@ class ReportsController extends Controller
             $filename = 'budget-report-' . now()->format('Y-m-d') . '.csv';
             $handle = fopen('php://temp', 'w');
             
-            // Add UTF-8 BOM for Excel compatibility
             fputs($handle, "\xEF\xBB\xBF");
-            
             fputcsv($handle, ['Department', 'Week Start', 'Week End', 'Allocated', 'Spent', 'Remaining', 'Utilization', 'Status']);
             
             foreach ($periods as $period) {
-                $spent = FundIssuance::where('period_id', $period->period_id)->sum('amount_released');
+                // ✅ FIXED: Use GasSlip instead of FundIssuance
+                $spent = GasSlip::where('period_id', $period->period_id)
+                    ->whereNotNull('acknowledged_at')
+                    ->sum('amount_released');
                 fputcsv($handle, [
                     $period->department->department_name ?? 'N/A',
                     $period->week_start,
@@ -492,7 +479,6 @@ class ReportsController extends Controller
                     'Content-Type' => 'text/csv; charset=UTF-8',
                     'Content-Disposition' => 'attachment; filename="' . $filename . '"',
                 ]);
-            
         } catch (\Exception $e) {
             Log::error('Export budget report error: ' . $e->getMessage());
             return response()->json([

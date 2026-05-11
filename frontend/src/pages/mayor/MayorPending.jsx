@@ -458,56 +458,63 @@ const MayorPending = () => {
     setShowApproveDialog(true);
   };
 
-  const handleApprove = async () => {
+const handleApprove = async () => {
     if (!selectedTicket) {
-      toast.error("No ticket selected");
-      return;
+        toast.error("No ticket selected");
+        return;
     }
 
     if (!amountReleased || parseFloat(amountReleased) <= 0) {
-      toast.error("Please enter a valid amount to release");
-      return;
+        toast.error("Please enter a valid amount to release");
+        return;
     }
 
-    const requestingDeptId = selectedTicket.department_id?.toString() || 
-                             selectedTicket.department?.id?.toString();
-    
+    // Determine which department to charge
     let finalChargeDeptId = chargeToDepartmentId;
-    if (!finalChargeDeptId && requestingDeptId) {
-      finalChargeDeptId = requestingDeptId;
-      setChargeToDepartmentId(finalChargeDeptId);
+    if (!finalChargeDeptId && selectedTicket?.department_id) {
+        finalChargeDeptId = selectedTicket.department_id;
     }
 
     if (!finalChargeDeptId) {
-      toast.error("Please select which department to charge");
-      return;
+        toast.error("Please select which department to charge");
+        return;
     }
 
     setSubmitting(true);
     try {
-      const response = await mayorsOfficeAPI.approveTicket(
-        selectedTicket.id || selectedTicket.trip_ticket_id,
-        parseFloat(amountReleased),
-        null
-      );
-      console.log("API Response:", response.data);
+        const response = await mayorsOfficeAPI.approveTicket(
+            selectedTicket.id || selectedTicket.trip_ticket_id,
+            {
+                amount_released: parseFloat(amountReleased),
+                charge_to_department_id: finalChargeDeptId,
+                review_note: null
+            }
+        );
+        
+        console.log("API Response:", response.data);
 
-      if (response.data.success) {
-        toast.success(response.data.message || "Funds released successfully!");
-        setShowApproveDialog(false);
-        setSelectedTicket(null);
-        setAmountReleased("");
-        setChargeToDepartmentId("");
-        fetchTickets();
-      }
+        if (response.data.success) {
+            toast.success(response.data.message || "Funds released successfully!");
+            setShowApproveDialog(false);
+            setSelectedTicket(null);
+            setAmountReleased("");
+            setChargeToDepartmentId("");
+            fetchTickets();
+        }
     } catch (error) {
-      console.error("API Error:", error);
-      toast.error(error.response?.data?.message || "Failed to release funds");
+        console.error("API Error:", error);
+        const errorMessage = error.response?.data?.message || "Failed to release funds";
+        toast.error(errorMessage);
+        
+        // Show detailed error if available
+        if (error.response?.data?.budget_info) {
+            const budgetInfo = error.response.data.budget_info;
+            toast.error(`Budget insufficient: ₱${budgetInfo.remaining?.toLocaleString()} remaining, ₱${budgetInfo.requested?.toLocaleString()} requested`);
+        }
     } finally {
-      setSubmitting(false);
+        setSubmitting(false);
     }
-  };
-
+};
   const handleReject = async () => {
     if (!selectedTicket) return;
     if (!rejectionNote.trim()) {

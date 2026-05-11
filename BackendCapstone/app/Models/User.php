@@ -7,7 +7,6 @@ use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Laravel\Sanctum\HasApiTokens;
 
-
 class User extends Authenticatable
 {
     use HasApiTokens, HasFactory, Notifiable;
@@ -33,7 +32,8 @@ class User extends Authenticatable
         'department_id', 'first_name', 'middle_name', 'last_name', 'email',
         'password_hash', 'role', 'head_active_status', 'status',
         'deactivated_by', 'deactivation_reason', 'password_changed_at',
-        'failed_login_attempts', 'locked_until'
+        'failed_login_attempts', 'locked_until', 'account_locked_until',
+        'esignature_path', 'esignature_hash',
     ];
     
     protected $hidden = [
@@ -134,7 +134,7 @@ class User extends Authenticatable
         return null;
     }
     
-    // ============ RELATIONSHIPS ============
+    // ============ RELATIONSHIPS (KEPT - Tables exist) ============
     public function department()
     {
         return $this->belongsTo(Department::class, 'department_id', 'department_id');
@@ -165,10 +165,7 @@ class User extends Authenticatable
         return $this->hasMany(GsoVerification::class, 'gso_verified_by', 'user_id');
     }
     
-    public function moReviews()
-    {
-        return $this->hasMany(MoReview::class, 'reviewed_by', 'user_id');
-    }
+    // ❌ REMOVED: moReviews() - table doesn't exist
     
     public function gasSlipsCreated()
     {
@@ -185,16 +182,6 @@ class User extends Authenticatable
         return $this->hasMany(GasSlip::class, 'receipt_acknowledged_by', 'user_id');
     }
     
-    public function fundIssuances()
-    {
-        return $this->hasMany(FundIssuance::class, 'issued_by', 'user_id');
-    }
-    
-    public function fundIssuancesAcknowledged()
-    {
-        return $this->hasMany(FundIssuance::class, 'acknowledged_by', 'user_id');
-    }
-    
     public function notifications()
     {
         return $this->hasMany(Notification::class, 'recipient_user_id', 'user_id');
@@ -205,25 +192,6 @@ class User extends Authenticatable
         return $this->hasMany(AuditLog::class, 'user_id', 'user_id');
     }
     
-    public function departmentRequestsSubmitted()
-    {
-        return $this->hasMany(DepartmentRequest::class, 'submitted_by', 'user_id');
-    }
-    
-    public function departmentRequestsReviewed()
-    {
-        return $this->hasMany(DepartmentRequest::class, 'reviewed_by', 'user_id');
-    }
-    
-    public function deptCrudRequestsSubmitted()
-    {
-        return $this->hasMany(DeptCrudRequest::class, 'submitted_by', 'user_id');
-    }
-    
-    public function deptCrudRequestsReviewed()
-    {
-        return $this->hasMany(DeptCrudRequest::class, 'reviewed_by', 'user_id');
-    }
     
     public function oicDesignationsAsHead()
     {
@@ -235,15 +203,7 @@ class User extends Authenticatable
         return $this->hasMany(OicDesignation::class, 'oic_user_id', 'user_id');
     }
     
-    public function oicDelegationLogsAsHead()
-    {
-        return $this->hasMany(OicDelegationLog::class, 'head_of_office_id', 'user_id');
-    }
-    
-    public function oicDelegationLogsAsOic()
-    {
-        return $this->hasMany(OicDelegationLog::class, 'oic_user_id', 'user_id');
-    }
+   
     
     public function tripTicketReturns()
     {
@@ -309,6 +269,4 @@ class User extends Authenticatable
     {
         return $this->hasMany(Vehicle::class, 'deactivated_by', 'user_id');
     }
-
-    
 }

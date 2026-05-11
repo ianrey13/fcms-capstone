@@ -12,7 +12,8 @@ class HeadApproval extends Model
     
     protected $fillable = [
         'trip_ticket_id', 'review_cycle', 'approved_by', 'is_oic_action',
-        'decision', 'review_note', 'reviewed_at'
+        'decision', 'review_note', 'reviewed_at', 'esignature_path',
+    'esignature_hash',
     ];
     
     protected $casts = [

@@ -18,7 +18,7 @@ const getApiUrl = () => {
   // To find your IP: 
   //   Windows: ipconfig | findstr "IPv4"
   //   Mac/Linux: ifconfig | grep "inet "
-  return 'http://192.168.1.8:8000/api';
+  return 'http://192.168.1.16:8000/api';
 };
 
 const API_URL = getApiUrl();

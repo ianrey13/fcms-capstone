@@ -11,8 +11,9 @@ class GsoVerification extends Model
     public $timestamps = false;
     
     protected $fillable = [
-        'trip_ticket_id', 'review_cycle', 'gso_verified_by',
-        'verified_at', 'decision', 'gso_note'
+        'trip_ticket_id', 'review_cycle', 'verified_by',
+        'verified_at', 'decision', 'verification_note',    'assigned_number',
+
     ];
     
     protected $casts = [

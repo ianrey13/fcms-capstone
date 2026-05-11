@@ -182,9 +182,7 @@ class HeadOfOfficeController extends Controller
         ]);
     }
     
-    // ... (keep all your other methods - approveTicket, rejectTicket, toggleHeadStatus, etc.)
-    // They remain unchanged as they are correct
-    
+ 
     /**
      * Approve a trip ticket
      */
@@ -345,79 +343,75 @@ class HeadOfOfficeController extends Controller
         }
     }
     
-    // ... (keep all your other existing methods: toggleHeadStatus, getOicStatus, getActiveTrips, getFuelConsumption, getAvailableVehicles, getActiveDrivers)
     
-    /**
-     * Toggle Head status (Active/Inactive) - for OIC activation
-     */
-    public function toggleHeadStatus(Request $request)
-    {
-        // Keep your existing implementation
-        $validator = Validator::make($request->all(), [
-            'status' => 'required|in:active,inactive',
-            'reason' => 'required_if:status,inactive|string|nullable'
-        ]);
-        
-        if ($validator->fails()) {
-            return response()->json(['errors' => $validator->errors()], 422);
-        }
-        
-        $user = $request->user();
-        
-        if (!$user->isDeptHead()) {
-            return response()->json(['message' => 'Only Department Head can toggle status'], 403);
-        }
-        
-        $designation = OicDesignation::where('head_of_office_id', $user->user_id)
-            ->where('is_active', true)
-            ->first();
-        
-        if (!$designation) {
-            return response()->json(['message' => 'No department assigned as Head of Office'], 404);
-        }
-        
-        DB::beginTransaction();
-        
-        $user->head_active_status = $request->status;
-        $user->save();
-        
-        DB::table('oic_delegation_log')->insert([
-            'department_id' => $designation->department_id,
-            'head_of_office_id' => $user->user_id,
-            'oic_user_id' => $designation->oic_user_id,
+   /**
+ * Toggle Head status (Active/Inactive) - for OIC activation
+ */
+public function toggleHeadStatus(Request $request)
+{
+    $validator = Validator::make($request->all(), [
+        'status' => 'required|in:active,inactive',
+        'reason' => 'required_if:status,inactive|string|nullable'
+    ]);
+
+    if ($validator->fails()) {
+        return response()->json(['errors' => $validator->errors()], 422);
+    }
+
+    $user = $request->user();
+
+    if (!$user->isDeptHead()) {
+        return response()->json(['message' => 'Only Department Head can toggle status'], 403);
+    }
+
+    $designation = OicDesignation::where('head_of_office_id', $user->user_id)
+        ->where('is_active', true)
+        ->first();
+
+    if (!$designation) {
+        return response()->json(['message' => 'No department assigned as Head of Office'], 404);
+    }
+
+    DB::beginTransaction();
+
+    $user->head_active_status = $request->status;
+    $user->save();
+
+    // ✅ FIXED: Update oic_designation instead of oic_delegation_log
+    DB::table('oic_designation')
+        ->where('designation_id', $designation->designation_id)
+        ->update([
             'reason' => $request->status === 'inactive' ? 'head_inactive' : 'head_active',
             'reason_details' => $request->reason,
-            'delegated_at' => now(),
-            'created_at' => now(),
         ]);
-        
-        if ($request->status === 'inactive' && $designation->head_of_office_id != $designation->oic_user_id) {
-            $oicUser = User::find($designation->oic_user_id);
-            if ($oicUser) {
-                DB::table('notification')->insert([
-                    'recipient_user_id' => $oicUser->user_id,
-                    'notification_type' => 'oic_activated',
-                    'entity_type' => 'oic_designation',
-                    'entity_id' => $designation->designation_id,
-                    'message' => 'You have been activated as Officer-in-Charge',
-                    'channel' => 'in_app',
-                    'created_at' => now(),
-                ]);
-            }
+
+    if ($request->status === 'inactive' && $designation->head_of_office_id != $designation->oic_user_id) {
+        $oicUser = User::find($designation->oic_user_id);
+        if ($oicUser) {
+            Notification::create([
+                'recipient_user_id' => $oicUser->user_id,
+                'notification_type' => 'oic_activated',
+                'entity_type' => 'oic_designation',
+                'entity_id' => $designation->designation_id,
+                'message' => 'You have been activated as Officer-in-Charge',
+                'channel' => 'in_app',
+                'created_at' => now(),
+            ]);
         }
-        
-        DB::commit();
-        
-        return response()->json([
-            'success' => true,
-            'message' => $request->status === 'active' 
-                ? 'You are now active. OIC privileges have been revoked.'
-                : 'You are now inactive. OIC can now approve tickets.',
-            'head_status' => $request->status,
-            'oic_user_id' => $designation->oic_user_id,
-            'has_oic' => $designation->head_of_office_id != $designation->oic_user_id,
-        ]);
     }
+
+    DB::commit();
+
+    return response()->json([
+        'success' => true,
+        'message' => $request->status === 'active' 
+            ? 'You are now active. OIC privileges have been revoked.'
+            : 'You are now inactive. OIC can now approve tickets.',
+        'head_status' => $request->status,
+        'oic_user_id' => $designation->oic_user_id,
+        'has_oic' => $designation->head_of_office_id != $designation->oic_user_id,
+    ]);
+}
     
     /**
      * Get OIC status and information

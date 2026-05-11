@@ -63,8 +63,7 @@ const DepartmentDashboard = () => {
       const approvedStatuses = ['funds_issued'];
       const inTransitStatuses = ['in_transit'];
       const completedStatuses = ['closed'];
-      const returnedStatuses = ['returned_for_revision', 'rejected'];
-      
+const returnedStatuses = ["returned_for_revision", "rejected", "cancelled", "returned"];
       setStats({
         total: tickets.length,
         pending: tickets.filter(t => pendingStatuses.includes(t.status)).length,

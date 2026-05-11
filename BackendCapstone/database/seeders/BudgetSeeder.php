@@ -12,9 +12,9 @@ class BudgetSeeder extends Seeder
         // Budget Policies
         if (DB::table('dept_budget_policy')->count() === 0) {
             DB::table('dept_budget_policy')->insert([
-                ['policy_id' => 1, 'department_id' => 3, 'default_weekly_allocation' => 10000],
-                ['policy_id' => 2, 'department_id' => 4, 'default_weekly_allocation' => 5000],
-                ['policy_id' => 3, 'department_id' => 5, 'default_weekly_allocation' => 5000],
+  ['department_id' => 3, 'default_weekly_allocation' => 10000],
+    ['department_id' => 4, 'default_weekly_allocation' => 5000],
+    ['department_id' => 5, 'default_weekly_allocation' => 5000],
             ]);
         }
 

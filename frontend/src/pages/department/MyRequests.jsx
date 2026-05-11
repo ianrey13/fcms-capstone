@@ -101,7 +101,9 @@ const MyRequests = () => {
       draft: { color: "bg-slate-500", icon: Clock, label: "Draft" },
       pending_head_approval: { color: "bg-purple-500", icon: Clock, label: "Pending Head" },
       pending_gso_review: { color: "bg-amber-500", icon: Clock, label: "Pending GSO" },
-      returned_for_revision: { color: "bg-red-500", icon: AlertCircle, label: "Returned" },
+    returned_for_revision: { color: "bg-red-500", icon: AlertCircle, label: "Returned for Revision" },
+        rejected: { color: "bg-red-600", icon: XCircle, label: "Rejected" },
+ 
       with_mayors_office: { color: "bg-purple-500", icon: Clock, label: "With Mayor" },
       pending_mayors_office: { color: "bg-purple-500", icon: Clock, label: "Pending Mayor" },
       funds_issued: { color: "bg-emerald-500", icon: CheckCircle, label: "Funds Issued" },

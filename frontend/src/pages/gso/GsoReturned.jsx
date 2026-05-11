@@ -307,7 +307,7 @@ const GsoReturned = () => {
                 </CardContent>
             </Card>
 
-            {/* Info Card */}
+            {/* Info Card
             <Card className="bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800">
                 <CardContent className="pt-4 pb-3">
                     <div className="flex items-start gap-3">
@@ -323,7 +323,7 @@ const GsoReturned = () => {
                         </div>
                     </div>
                 </CardContent>
-            </Card>
+            </Card> */}
         </div>
     );
 };

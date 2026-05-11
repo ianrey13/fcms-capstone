@@ -10,14 +10,13 @@ class DeptBudgetPeriod extends Model
     protected $primaryKey = 'period_id';
     
     protected $fillable = [
-        'department_id', 'week_start', 'week_end', 'allocated_amount', 'status', 'closed_at'
+        'department_id', 'week_start', 'allocated_amount', 'status', 'closed_at'
     ];
     
     protected $casts = [
         'created_at' => 'datetime',
         'closed_at' => 'datetime',
         'week_start' => 'date',
-        'week_end' => 'date',
         'allocated_amount' => 'decimal:2'
     ];
     
@@ -26,14 +25,16 @@ class DeptBudgetPeriod extends Model
         return $this->belongsTo(Department::class, 'department_id', 'department_id');
     }
     
-    public function fundIssuances()
+
+     public function gasSlips()
     {
-        return $this->hasMany(FundIssuance::class, 'period_id', 'period_id');
+        return $this->hasMany(GasSlip::class, 'period_id', 'period_id');
     }
+    
     
     public function getRemainingAmount()
     {
-        $spent = $this->fundIssuances()->sum('amount_released');
+        $spent = $this->gasSlips()->sum('amount_released');
         return $this->allocated_amount - $spent;
     }
     

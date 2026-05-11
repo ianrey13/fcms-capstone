@@ -532,10 +532,10 @@ const handleLogout = () => {
           )}
         </TouchableOpacity>
 
-        <View style={styles.versionContainer}>
+        {/* <View style={styles.versionContainer}>
           <Text style={styles.versionText}>FCMS Driver App v1.0.0</Text>
           <Text style={styles.copyrightText}>© GSO Laguindingan</Text>
-        </View>
+        </View> */}
       </ScrollView>
 
       {/* Change Password Modal */}

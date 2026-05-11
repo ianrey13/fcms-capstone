@@ -248,16 +248,16 @@ const LoginForm = () => {
       {/* Security Note */}
       <div className="text-center pt-2">
         <div className="flex items-center justify-center gap-2 mb-2">
-          <ShieldCheck className="h-3 w-3 text-emerald-500" />
-          <span className="text-[11px] text-emerald-600 dark:text-emerald-400 font-medium">
+          {/* <ShieldCheck className="h-3 w-3 text-emerald-500" /> */}
+         {/* <span className="text-[11px] text-emerald-600 dark:text-emerald-400 font-medium">
             Secured by FCMS
-          </span>
+          </ span> */}
         </div>
-        <p className="text-[11px] text-slate-400 dark:text-slate-500">
+        {/* <p className="text-[11px] text-slate-400 dark:text-slate-500">
           This system is for authorized personnel only.
           <br />
           All access attempts are logged and monitored.
-        </p>
+        </p> */}
       </div>
     </form>
   );

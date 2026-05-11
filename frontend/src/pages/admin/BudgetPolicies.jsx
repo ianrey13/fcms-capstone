@@ -615,7 +615,7 @@ const BudgetPolicies = () => {
         </CardContent>
       </Card>
 
-      {/* Weekly Reset Information */}
+      {/* Weekly Reset Information
       <Card className="dark:bg-slate-800/80 dark:border-slate-700">
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-slate-900 dark:text-white">
@@ -648,7 +648,7 @@ const BudgetPolicies = () => {
             </div>
           </div>
         </CardContent>
-      </Card>
+      </Card> */}
 
       {/* Reset Confirmation Modal */}
       <Dialog open={showResetConfirm} onOpenChange={setShowResetConfirm}>

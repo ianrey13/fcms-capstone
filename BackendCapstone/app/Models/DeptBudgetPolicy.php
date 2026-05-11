@@ -7,10 +7,14 @@ use Illuminate\Database\Eloquent\Model;
 class DeptBudgetPolicy extends Model
 {
     protected $table = 'dept_budget_policy';
-    protected $primaryKey = 'policy_id';
+    
+    protected $primaryKey = 'department_id';
+    public $incrementing = false;  
+    protected $keyType = 'int';     
     
     protected $fillable = [
-        'department_id', 'default_weekly_allocation'
+        'department_id', 
+        'default_weekly_allocation'
     ];
     
     protected $casts = [

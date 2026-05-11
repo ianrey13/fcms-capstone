@@ -228,6 +228,10 @@ const GsoDashboard = () => {
   };
 
   const handleReject = async () => {
+
+        console.log("selectedTicket:", selectedTicket);  // ← Add this
+    console.log("rejectionNote:", rejectionNote);     // ← Add this
+
     if (!selectedTicket) return;
     if (!rejectionNote.trim()) {
       toast.error('Please provide a reason for rejection');
@@ -236,7 +240,7 @@ const GsoDashboard = () => {
     
     setSubmitting(true);
     try {
-      await gsoAPI.rejectTicket(selectedTicket.trip_ticket_id || selectedTicket.id, { gso_note: rejectionNote });
+      await gsoAPI.rejectTicket(selectedTicket.trip_ticket_id || selectedTicket.id, rejectionNote);
       setShowRejectDialog(false);
       setSelectedTicket(null);
       setRejectionNote('');
