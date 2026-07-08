@@ -4,7 +4,9 @@ namespace App\Http\Controllers\API;
 
 use App\Http\Controllers\Controller;
 use App\Models\Notification;
+use App\Events\NewNotification;  // ✅ Add this
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 
 class NotificationController extends Controller
 {
@@ -27,12 +29,16 @@ class NotificationController extends Controller
                     'current_page' => $notifications->currentPage(),
                     'last_page' => $notifications->lastPage(),
                     'total' => $notifications->total(),
+                    'unread_count' => Notification::where('recipient_user_id', $user->user_id)
+                        ->where('is_read', false)
+                        ->count(),
                 ]
             ]);
         } catch (\Exception $e) {
+            Log::error('Get notifications error: ' . $e->getMessage());
             return response()->json([
                 'success' => false,
-                'message' => $e->getMessage()
+                'message' => 'Failed to fetch notifications'
             ], 500);
         }
     }
@@ -54,6 +60,7 @@ class NotificationController extends Controller
                 'unread_count' => $count
             ]);
         } catch (\Exception $e) {
+            Log::error('Unread count error: ' . $e->getMessage());
             return response()->json([
                 'success' => false,
                 'unread_count' => 0
@@ -83,9 +90,10 @@ class NotificationController extends Controller
                 'message' => 'Notification marked as read'
             ]);
         } catch (\Exception $e) {
+            Log::error('Mark as read error: ' . $e->getMessage());
             return response()->json([
                 'success' => false,
-                'message' => $e->getMessage()
+                'message' => 'Failed to mark as read'
             ], 500);
         }
     }
@@ -107,9 +115,10 @@ class NotificationController extends Controller
                 'message' => "{$count} notifications marked as read"
             ]);
         } catch (\Exception $e) {
+            Log::error('Mark all as read error: ' . $e->getMessage());
             return response()->json([
                 'success' => false,
-                'message' => $e->getMessage()
+                'message' => 'Failed to mark all as read'
             ], 500);
         }
     }

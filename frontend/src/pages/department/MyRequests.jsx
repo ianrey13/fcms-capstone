@@ -1,9 +1,14 @@
-// src/pages/department/MyRequests.jsx
-import React, { useState, useEffect } from "react";
+// src/pages/department/MyRequests.jsx - TanStack Query Version
+import React, { useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../contexts/AuthContext";
-import { tripTicketAPI } from "../../services/api";
-import { toast } from "react-hot-toast";
+import { 
+  useMyRequests, 
+  useRefreshRequests,
+  canEditTicket,
+  getStatusConfig,
+  getStatusCategories
+} from "../../hooks/useMyRequests";
 import {
   FileText,
   Eye,
@@ -20,13 +25,11 @@ import {
   Search,
   Car,
   User,
-  DollarSign,
   Edit,
-  RotateCcw,
   Filter,
   ChevronDown,
   ChevronUp,
-  TrendingUp,
+  X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -42,41 +45,92 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
 
+// Import icons dynamically for status badges
+const iconMap = {
+  Clock: Clock,
+  AlertCircle: AlertCircle,
+  XCircle: XCircle,
+  CheckCircle: CheckCircle,
+  Truck: Truck,
+};
+
 const MyRequests = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
-  const [tickets, setTickets] = useState([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
+  
+  // ✅ TanStack Query hooks
+  const { 
+    data: tickets = [], 
+    isLoading,
+    isFetching,
+    refetch
+  } = useMyRequests();
+  
+  const refreshRequests = useRefreshRequests();
+  
+  // Local UI state
   const [activeTab, setActiveTab] = useState("all");
   const [searchTerm, setSearchTerm] = useState("");
   const [showFilters, setShowFilters] = useState(false);
-
-  useEffect(() => {
-    fetchTickets();
-  }, []);
-
-  const fetchTickets = async () => {
-    setIsLoading(true);
-    try {
-      const response = await tripTicketAPI.getMyRequests();
-      let ticketsData = response.data?.data || response.data || [];
-      setTickets(Array.isArray(ticketsData) ? ticketsData : []);
-    } catch (error) {
-      console.error("Error fetching tickets:", error);
-      toast.error("Failed to load trip tickets");
-    } finally {
-      setIsLoading(false);
-      setRefreshing(false);
+  
+  // Get status categories
+  const {
+    pendingStatuses,
+    approvedStatuses,
+    inTransitStatuses,
+    completedStatuses,
+    draftStatuses,
+    returnedStatuses,
+  } = getStatusCategories();
+  
+  // Calculate stats from tickets data
+  const stats = useMemo(() => ({
+    total: tickets.length,
+    pending: tickets.filter((t) => pendingStatuses.includes(t.status)).length,
+    drafts: tickets.filter((t) => draftStatuses.includes(t.status)).length,
+    approved: tickets.filter((t) => approvedStatuses.includes(t.status)).length,
+    inTransit: tickets.filter((t) => inTransitStatuses.includes(t.status)).length,
+    completed: tickets.filter((t) => completedStatuses.includes(t.status)).length,
+    returned: tickets.filter((t) => returnedStatuses.includes(t.status)).length,
+  }), [tickets, pendingStatuses, draftStatuses, approvedStatuses, inTransitStatuses, completedStatuses, returnedStatuses]);
+  
+  // Filter tickets based on active tab and search term
+  const filteredTickets = useMemo(() => {
+    let filtered = [...tickets];
+    
+    // Filter by tab
+    if (activeTab === "pending") {
+      filtered = filtered.filter((t) => pendingStatuses.includes(t.status));
+    } else if (activeTab === "drafts") {
+      filtered = filtered.filter((t) => draftStatuses.includes(t.status));
+    } else if (activeTab === "approved") {
+      filtered = filtered.filter((t) => approvedStatuses.includes(t.status));
+    } else if (activeTab === "in_transit") {
+      filtered = filtered.filter((t) => inTransitStatuses.includes(t.status));
+    } else if (activeTab === "completed") {
+      filtered = filtered.filter((t) => completedStatuses.includes(t.status));
+    } else if (activeTab === "returned") {
+      filtered = filtered.filter((t) => returnedStatuses.includes(t.status));
     }
-  };
-
+    
+    // Filter by search term
+    if (searchTerm) {
+      const searchLower = searchTerm.toLowerCase();
+      filtered = filtered.filter((ticket) => (
+        (ticket.trip_ticket_number?.toLowerCase().includes(searchLower)) ||
+        (ticket.destination?.toLowerCase().includes(searchLower)) ||
+        (ticket.vehicle?.plate_number?.toLowerCase().includes(searchLower)) ||
+        (ticket.driver?.user?.full_name?.toLowerCase().includes(searchLower))
+      ));
+    }
+    
+    return filtered;
+  }, [tickets, activeTab, searchTerm, pendingStatuses, draftStatuses, approvedStatuses, inTransitStatuses, completedStatuses, returnedStatuses]);
+  
   const handleRefresh = () => {
-    setRefreshing(true);
-    fetchTickets();
-    toast.success("Tickets refreshed");
+    refreshRequests.mutate();
   };
-
+  
   const handleEditAndResubmit = (ticket) => {
     sessionStorage.setItem("edit_ticket_data", JSON.stringify({
       id: ticket.id || ticket.trip_ticket_id,
@@ -95,91 +149,27 @@ const MyRequests = () => {
     
     navigate("/department/create?mode=edit&id=" + (ticket.id || ticket.trip_ticket_id));
   };
-
+  
   const getStatusBadge = (status) => {
-    const statusConfig = {
-      draft: { color: "bg-slate-500", icon: Clock, label: "Draft" },
-      pending_head_approval: { color: "bg-purple-500", icon: Clock, label: "Pending Head" },
-      pending_gso_review: { color: "bg-amber-500", icon: Clock, label: "Pending GSO" },
-    returned_for_revision: { color: "bg-red-500", icon: AlertCircle, label: "Returned for Revision" },
-        rejected: { color: "bg-red-600", icon: XCircle, label: "Rejected" },
- 
-      with_mayors_office: { color: "bg-purple-500", icon: Clock, label: "With Mayor" },
-      pending_mayors_office: { color: "bg-purple-500", icon: Clock, label: "Pending Mayor" },
-      funds_issued: { color: "bg-emerald-500", icon: CheckCircle, label: "Funds Issued" },
-      acknowledged: { color: "bg-blue-500", icon: CheckCircle, label: "Acknowledged" },
-      in_transit: { color: "bg-indigo-500", icon: Truck, label: "In Transit" },
-      pending_reconciliation: { color: "bg-orange-500", icon: Clock, label: "Reconciling" },
-      closed: { color: "bg-emerald-600", icon: CheckCircle, label: "Closed" },
-      cancelled: { color: "bg-red-700", icon: XCircle, label: "Cancelled" },
-      rejected: { color: "bg-red-600", icon: XCircle, label: "Rejected" },
-    };
-
-    const config = statusConfig[status] || {
-      color: "bg-slate-500",
-      icon: Clock,
-      label: status.replace(/_/g, " "),
-    };
-    const Icon = config.icon;
-
+    const config = getStatusConfig(status);
+    const IconComponent = iconMap[config.icon] || Clock;
+    
     return (
       <Badge className={`${config.color} text-white flex items-center gap-1 w-fit px-2 py-1 rounded-lg`}>
-        <Icon className="h-3 w-3" />
+        <IconComponent className="h-3 w-3" />
         <span className="text-xs font-medium">{config.label}</span>
       </Badge>
     );
   };
-
-  const canEdit = (status) => {
-    return ["returned_for_revision", "rejected", "draft"].includes(status);
-  };
-
-  const pendingStatuses = [
-    "pending_head_approval", "pending_gso_review", "pending_mayors_office",
-    "with_mayors_office", "pending_reconciliation",
-  ];
-  const approvedStatuses = ["funds_issued", "acknowledged"];
-  const inTransitStatuses = ["in_transit"];
-  const completedStatuses = ["closed"];
-  const draftStatuses = ["draft"];
-  const returnedStatuses = ["returned_for_revision", "rejected", "cancelled"];
-
+  
+  const canEdit = (status) => canEditTicket(status);
+  
   const hasActiveFilters = searchTerm !== "";
-
+  
   const clearFilters = () => {
     setSearchTerm("");
   };
-
-  const filteredTickets = tickets.filter((ticket) => {
-    if (activeTab === "pending" && !pendingStatuses.includes(ticket.status)) return false;
-    if (activeTab === "drafts" && !draftStatuses.includes(ticket.status)) return false;
-    if (activeTab === "approved" && !approvedStatuses.includes(ticket.status)) return false;
-    if (activeTab === "in_transit" && !inTransitStatuses.includes(ticket.status)) return false;
-    if (activeTab === "completed" && !completedStatuses.includes(ticket.status)) return false;
-    if (activeTab === "returned" && !returnedStatuses.includes(ticket.status)) return false;
-
-    if (searchTerm) {
-      const searchLower = searchTerm.toLowerCase();
-      return (
-        (ticket.trip_ticket_number?.toLowerCase().includes(searchLower)) ||
-        (ticket.destination?.toLowerCase().includes(searchLower)) ||
-        (ticket.vehicle?.plate_number?.toLowerCase().includes(searchLower)) ||
-        (ticket.driver?.user?.full_name?.toLowerCase().includes(searchLower))
-      );
-    }
-    return true;
-  });
-
-  const stats = {
-    total: tickets.length,
-    pending: tickets.filter((t) => pendingStatuses.includes(t.status)).length,
-    drafts: tickets.filter((t) => draftStatuses.includes(t.status)).length,
-    approved: tickets.filter((t) => approvedStatuses.includes(t.status)).length,
-    inTransit: tickets.filter((t) => inTransitStatuses.includes(t.status)).length,
-    completed: tickets.filter((t) => completedStatuses.includes(t.status)).length,
-    returned: tickets.filter((t) => returnedStatuses.includes(t.status)).length,
-  };
-
+  
   const formatCurrency = (amount) => {
     if (!amount) return "₱0.00";
     return new Intl.NumberFormat("en-PH", {
@@ -188,8 +178,9 @@ const MyRequests = () => {
       minimumFractionDigits: 2,
     }).format(amount);
   };
-
-  if (isLoading && !refreshing) {
+  
+  // Loading state
+  if (isLoading && !isFetching) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-900">
         <div className="text-center">
@@ -199,7 +190,7 @@ const MyRequests = () => {
       </div>
     );
   }
-
+  
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-900 dark:to-slate-800 p-4 md:p-8 animate-fade-in-up">
       <div className="max-w-7xl mx-auto">
@@ -208,7 +199,7 @@ const MyRequests = () => {
           <div className="absolute top-0 right-0 w-64 h-64 bg-blue-500/20 rounded-full blur-3xl" />
           <div className="absolute bottom-0 left-0 w-64 h-64 bg-purple-500/20 rounded-full blur-3xl" />
           <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-blue-400/10 rounded-full blur-3xl" />
-
+          
           <div className="relative z-10 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div>
               <div className="flex items-center gap-2 mb-2">
@@ -232,9 +223,9 @@ const MyRequests = () => {
                 onClick={handleRefresh}
                 variant="outline"
                 className="bg-white/10 border-white/20 text-white hover:bg-white/20 rounded-xl"
-                disabled={refreshing}
+                disabled={refreshRequests.isPending}
               >
-                {refreshing ? (
+                {refreshRequests.isPending ? (
                   <Loader2 className="h-4 w-4 animate-spin mr-2" />
                 ) : (
                   <RefreshCw className="h-4 w-4 mr-2" />
@@ -251,7 +242,7 @@ const MyRequests = () => {
             </div>
           </div>
         </div>
-
+        
         {/* Stats Cards */}
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-4 mb-8">
           <Card className="hover:shadow-lg transition-all duration-300 hover:-translate-y-1 dark:bg-slate-800/80 dark:border-slate-700">
@@ -263,7 +254,7 @@ const MyRequests = () => {
               <p className="text-xs text-slate-500 dark:text-slate-400">Total</p>
             </CardContent>
           </Card>
-
+          
           <Card className="hover:shadow-lg transition-all duration-300 hover:-translate-y-1 dark:bg-slate-800/80 dark:border-slate-700">
             <CardContent className="p-4">
               <div className="flex items-center justify-between mb-2">
@@ -273,7 +264,7 @@ const MyRequests = () => {
               <p className="text-xs text-slate-500 dark:text-slate-400">Pending</p>
             </CardContent>
           </Card>
-
+          
           <Card className="hover:shadow-lg transition-all duration-300 hover:-translate-y-1 dark:bg-slate-800/80 dark:border-slate-700">
             <CardContent className="p-4">
               <div className="flex items-center justify-between mb-2">
@@ -283,7 +274,7 @@ const MyRequests = () => {
               <p className="text-xs text-slate-500 dark:text-slate-400">Drafts</p>
             </CardContent>
           </Card>
-
+          
           <Card className="hover:shadow-lg transition-all duration-300 hover:-translate-y-1 dark:bg-slate-800/80 dark:border-slate-700">
             <CardContent className="p-4">
               <div className="flex items-center justify-between mb-2">
@@ -293,7 +284,7 @@ const MyRequests = () => {
               <p className="text-xs text-slate-500 dark:text-slate-400">Approved</p>
             </CardContent>
           </Card>
-
+          
           <Card className="hover:shadow-lg transition-all duration-300 hover:-translate-y-1 dark:bg-slate-800/80 dark:border-slate-700">
             <CardContent className="p-4">
               <div className="flex items-center justify-between mb-2">
@@ -303,7 +294,7 @@ const MyRequests = () => {
               <p className="text-xs text-slate-500 dark:text-slate-400">In Transit</p>
             </CardContent>
           </Card>
-
+          
           <Card className="hover:shadow-lg transition-all duration-300 hover:-translate-y-1 dark:bg-slate-800/80 dark:border-slate-700">
             <CardContent className="p-4">
               <div className="flex items-center justify-between mb-2">
@@ -313,7 +304,7 @@ const MyRequests = () => {
               <p className="text-xs text-slate-500 dark:text-slate-400">Completed</p>
             </CardContent>
           </Card>
-
+          
           <Card className="hover:shadow-lg transition-all duration-300 hover:-translate-y-1 dark:bg-slate-800/80 dark:border-slate-700">
             <CardContent className="p-4">
               <div className="flex items-center justify-between mb-2">
@@ -324,7 +315,7 @@ const MyRequests = () => {
             </CardContent>
           </Card>
         </div>
-
+        
         {/* Filters Card */}
         <Card className="dark:bg-slate-800/80 dark:border-slate-700 overflow-hidden transition-all duration-300 mb-6">
           <div 
@@ -369,7 +360,7 @@ const MyRequests = () => {
             </div>
           )}
         </Card>
-
+        
         {/* Tickets Table */}
         <Card className="shadow-xl border-0 overflow-hidden dark:bg-slate-800/80 dark:border-slate-700">
           <CardHeader className="bg-gradient-to-r from-slate-50 to-white dark:from-slate-800 dark:to-slate-800/50 border-b dark:border-slate-700">
@@ -394,7 +385,7 @@ const MyRequests = () => {
                 <TabsTrigger value="completed" className="rounded-lg data-[state=active]:bg-white dark:data-[state=active]:bg-slate-800">Completed ({stats.completed})</TabsTrigger>
                 <TabsTrigger value="returned" className="rounded-lg data-[state=active]:bg-white dark:data-[state=active]:bg-slate-800">Returned ({stats.returned})</TabsTrigger>
               </TabsList>
-
+              
               <TabsContent value={activeTab} className="mt-0">
                 {filteredTickets.length === 0 ? (
                   <div className="text-center py-12">
@@ -512,8 +503,5 @@ const MyRequests = () => {
     </div>
   );
 };
-
-// Add X icon import at top
-import { X } from "lucide-react";
 
 export default MyRequests;

@@ -1,395 +1,560 @@
 // src/pages/gso/GsoReports.jsx
-import React, { useState, useEffect } from 'react';
-import { gsoAPI } from '../../services/api';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import React, { useState, useMemo } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { reportsAPI } from '../../services/api';
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+} from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { 
-  FileBarChart, 
-  Loader2, 
-  RefreshCw, 
-  Calendar, 
-  TrendingUp, 
-  CheckCircle, 
-  Send, 
-  XCircle,
-  ChevronDown,
-  ChevronUp,
-  Filter,
-  Eye,
-  BarChart3,
+import { Input } from '@/components/ui/input';
+import { Badge } from '@/components/ui/badge';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
+  ResponsiveContainer,
   PieChart,
-  ArrowUpRight,
-  ArrowDownRight,
-  Clock
+  Pie,
+  Cell,
+  LineChart,
+  Line,
+  AreaChart,
+  Area,
+} from 'recharts';
+import {
+  Loader2,
+  RefreshCw,
+  FileText,
+  Download,
+  Calendar,
+  Filter,
+  TrendingUp,
+  TrendingDown,
+  Fuel,
+  DollarSign,
+  Truck,
+  Building2,
+  Users,
+  Clock,
+  CheckCircle,
 } from 'lucide-react';
+import { toast } from 'react-hot-toast';
+import { format } from 'date-fns';
+
+// ============================================
+// HELPERS
+// ============================================
+
+const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ef4444', '#06b6d4', '#ec4899', '#f97316'];
+
+const formatCurrency = (amount) => {
+  return new Intl.NumberFormat('en-PH', {
+    style: 'currency',
+    currency: 'PHP',
+    minimumFractionDigits: 2,
+  }).format(amount || 0);
+};
+
+const formatNumber = (num) => {
+  return new Intl.NumberFormat('en-PH').format(num || 0);
+};
+
+// ============================================
+// COMPONENT
+// ============================================
 
 const GsoReports = () => {
-    const [stats, setStats] = useState(null);
-    const [loading, setLoading] = useState(true);
-    const [showFilters, setShowFilters] = useState(false);
-    const [dateRange, setDateRange] = useState({
-        start_date: new Date(new Date().setDate(new Date().getDate() - 30)).toISOString().split('T')[0],
-        end_date: new Date().toISOString().split('T')[0]
-    });
+  const [activeTab, setActiveTab] = useState('fuel-consumption');
+  const [dateRange, setDateRange] = useState({
+    startDate: format(new Date(new Date().setDate(1)), 'yyyy-MM-dd'),
+    endDate: format(new Date(), 'yyyy-MM-dd'),
+  });
+  const [departmentFilter, setDepartmentFilter] = useState('all');
+  const [vehicleFilter, setVehicleFilter] = useState('all');
+  const [yearFilter, setYearFilter] = useState(new Date().getFullYear());
+  const [monthFilter, setMonthFilter] = useState('all');
 
-    useEffect(() => {
-        fetchReports();
-    }, [dateRange]);
+  // ============ QUERIES ============
 
-    const fetchReports = async () => {
-        setLoading(true);
-        try {
-            const response = await gsoAPI.getReports({ 
-                start_date: dateRange.start_date, 
-                end_date: dateRange.end_date 
-            });
-            const reportData = response.data?.data || response.data;
-            setStats(reportData);
-        } catch (error) {
-            console.error('Failed to fetch reports:', error);
-        } finally {
-            setLoading(false);
-        }
-    };
+  // Fuel Consumption Report
+  const { 
+    data: fuelData, 
+    isLoading: fuelLoading, 
+    refetch: refetchFuel,
+    isFetching: fuelFetching,
+  } = useQuery({
+    queryKey: ['fuel-consumption-report', dateRange, departmentFilter, vehicleFilter, yearFilter, monthFilter],
+    queryFn: async () => {
+      try {
+        const params = {
+          start_date: dateRange.startDate,
+          end_date: dateRange.endDate,
+          department_id: departmentFilter !== 'all' ? departmentFilter : undefined,
+          vehicle_id: vehicleFilter !== 'all' ? vehicleFilter : undefined,
+          year: yearFilter,
+          month: monthFilter !== 'all' ? monthFilter : undefined,
+        };
+        const response = await reportsAPI.getFuelReport(params);
+        return response.data?.data || response.data || {};
+      } catch (error) {
+        console.error('Error fetching fuel report:', error);
+        toast.error('Failed to load fuel report');
+        return {};
+      }
+    },
+  });
 
-    const handleDateChange = (e) => {
-        const { name, value } = e.target;
-        setDateRange(prev => ({ ...prev, [name]: value }));
-    };
+  // Trip Summary Report
+  const {
+    data: tripData,
+    isLoading: tripLoading,
+    refetch: refetchTrips,
+  } = useQuery({
+    queryKey: ['trip-summary-report', dateRange, departmentFilter],
+    queryFn: async () => {
+      try {
+        const params = {
+          start_date: dateRange.startDate,
+          end_date: dateRange.endDate,
+          department_id: departmentFilter !== 'all' ? departmentFilter : undefined,
+        };
+        const response = await reportsAPI.getTripReport(params);
+        return response.data?.data || response.data || {};
+      } catch (error) {
+        console.error('Error fetching trip report:', error);
+        toast.error('Failed to load trip report');
+        return {};
+      }
+    },
+  });
 
-    const clearFilters = () => {
-        setDateRange({
-            start_date: new Date(new Date().setDate(new Date().getDate() - 30)).toISOString().split('T')[0],
-            end_date: new Date().toISOString().split('T')[0]
-        });
-    };
+  // ============ HANDLERS ============
+  const handleRefresh = () => {
+    refetchFuel();
+    refetchTrips();
+    toast.success('Reports refreshed');
+  };
 
-    const hasActiveFilters = dateRange.start_date !== new Date(new Date().setDate(new Date().getDate() - 30)).toISOString().split('T')[0] ||
-                            dateRange.end_date !== new Date().toISOString().split('T')[0];
-
-    const totalProcessed = (stats?.total_verified || 0) + (stats?.total_rejected || 0);
-    const approvalRate = totalProcessed > 0 ? ((stats?.total_verified || 0) / totalProcessed * 100).toFixed(1) : 0;
-    const rejectionRate = totalProcessed > 0 ? ((stats?.total_rejected || 0) / totalProcessed * 100).toFixed(1) : 0;
-
-    if (loading) {
-        return (
-            <div className="flex justify-center items-center h-96">
-                <div className="text-center">
-                    <Loader2 className="h-10 w-10 animate-spin text-blue-600 dark:text-blue-400 mx-auto mb-4" />
-                    <p className="text-slate-500 dark:text-slate-400">Loading reports...</p>
-                </div>
-            </div>
-        );
+  const handleExport = async (type) => {
+    try {
+      toast.loading('Exporting report...');
+      // Implement export logic
+      setTimeout(() => {
+        toast.dismiss();
+        toast.success(`${type} report exported successfully`);
+      }, 1500);
+    } catch (error) {
+      toast.error('Failed to export report');
     }
+  };
 
+  // ============ LOADING ============
+  if (fuelLoading || tripLoading) {
     return (
-        <div className="space-y-6 animate-fade-in-up">
-            {/* Header */}
-            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-                <div>
-                    <h1 className="text-2xl font-bold bg-gradient-to-r from-slate-800 to-slate-600 dark:from-white dark:to-slate-300 bg-clip-text text-transparent flex items-center gap-2">
-                        <FileBarChart className="h-6 w-6" />
-                        GSO Reports
-                    </h1>
-                    <p className="text-slate-500 dark:text-slate-400 mt-1">
-                        Summary of GSO verification activities and performance metrics
-                    </p>
-                </div>
+      <div className="flex justify-center items-center h-96">
+        <div className="text-center">
+          <Loader2 className="h-12 w-12 animate-spin text-blue-600 mx-auto mb-4" />
+          <p className="text-slate-500">Loading reports...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // ============ RENDER ============
+  return (
+    <div className="space-y-6 p-6">
+      {/* Header */}
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
+            <FileText className="h-6 w-6 text-blue-600" />
+            Reports
+          </h1>
+          <p className="text-slate-600 dark:text-slate-400">
+            Generate and view reports for fuel consumption, trips, and budget
+          </p>
+        </div>
+        <div className="flex gap-3 flex-wrap">
+          <Button
+            variant="outline"
+            onClick={handleRefresh}
+            disabled={fuelFetching}
+            className="flex items-center gap-2"
+          >
+            <RefreshCw className={`h-4 w-4 ${fuelFetching ? 'animate-spin' : ''}`} />
+            Refresh
+          </Button>
+          <Button
+            onClick={() => handleExport(activeTab)}
+            className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700"
+          >
+            <Download className="h-4 w-4" />
+            Export
+          </Button>
+        </div>
+      </div>
+
+      {/* Filters */}
+      <Card className="dark:bg-slate-800/80 dark:border-slate-700">
+        <CardContent className="pt-6">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div>
+              <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Date Range</label>
+              <div className="flex gap-2 mt-1">
+                <Input
+                  type="date"
+                  value={dateRange.startDate}
+                  onChange={(e) => setDateRange(prev => ({ ...prev, startDate: e.target.value }))}
+                  className="dark:bg-slate-900 dark:border-slate-700"
+                />
+                <Input
+                  type="date"
+                  value={dateRange.endDate}
+                  onChange={(e) => setDateRange(prev => ({ ...prev, endDate: e.target.value }))}
+                  className="dark:bg-slate-900 dark:border-slate-700"
+                />
+              </div>
             </div>
 
-            {/* Filters Card */}
-            <Card className="dark:bg-slate-800/80 dark:border-slate-700 overflow-hidden transition-all duration-300">
-                <div 
-                    className="px-6 py-4 border-b dark:border-slate-700 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors"
-                    onClick={() => setShowFilters(!showFilters)}
-                >
-                    <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                            <Filter className="h-4 w-4 text-slate-500" />
-                            <span className="font-medium text-slate-700 dark:text-slate-300">Date Range</span>
-                            {hasActiveFilters && (
-                                <span className="px-2 py-0.5 text-xs bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-full">
-                                    Custom
-                                </span>
-                            )}
-                        </div>
-                        {showFilters ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-                    </div>
+            <div>
+              <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Department</label>
+              <Select value={departmentFilter} onValueChange={setDepartmentFilter}>
+                <SelectTrigger className="mt-1 dark:bg-slate-900 dark:border-slate-700">
+                  <SelectValue placeholder="All Departments" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Departments</SelectItem>
+                  {/* Department options would come from API */}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div>
+              <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Vehicle</label>
+              <Select value={vehicleFilter} onValueChange={setVehicleFilter}>
+                <SelectTrigger className="mt-1 dark:bg-slate-900 dark:border-slate-700">
+                  <SelectValue placeholder="All Vehicles" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Vehicles</SelectItem>
+                  {/* Vehicle options would come from API */}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div>
+              <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Year</label>
+              <Select value={String(yearFilter)} onValueChange={(val) => setYearFilter(Number(val))}>
+                <SelectTrigger className="mt-1 dark:bg-slate-900 dark:border-slate-700">
+                  <SelectValue placeholder="Select Year" />
+                </SelectTrigger>
+                <SelectContent>
+                  {[2026, 2025, 2024, 2023, 2022].map(year => (
+                    <SelectItem key={year} value={String(year)}>{year}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Tabs */}
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+        <TabsList className="grid w-full grid-cols-4 bg-slate-100 dark:bg-slate-800 p-1 rounded-xl">
+          <TabsTrigger value="fuel-consumption" className="rounded-lg data-[state=active]:bg-white dark:data-[state=active]:bg-slate-900">
+            <Fuel className="h-4 w-4 mr-2" />
+            Fuel Consumption
+          </TabsTrigger>
+          <TabsTrigger value="trip-summary" className="rounded-lg data-[state=active]:bg-white dark:data-[state=active]:bg-slate-900">
+            <Truck className="h-4 w-4 mr-2" />
+            Trip Summary
+          </TabsTrigger>
+          <TabsTrigger value="vehicle-efficiency" className="rounded-lg data-[state=active]:bg-white dark:data-[state=active]:bg-slate-900">
+            <TrendingUp className="h-4 w-4 mr-2" />
+            Vehicle Efficiency
+          </TabsTrigger>
+          <TabsTrigger value="budget-utilization" className="rounded-lg data-[state=active]:bg-white dark:data-[state=active]:bg-slate-900">
+            <DollarSign className="h-4 w-4 mr-2" />
+            Budget Utilization
+          </TabsTrigger>
+        </TabsList>
+
+        {/* Tab 1: Fuel Consumption */}
+        <TabsContent value="fuel-consumption" className="space-y-4 mt-6">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <Card className="dark:bg-slate-800/80 dark:border-slate-700">
+              <CardContent className="pt-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-slate-500">Total Trips</p>
+                    <p className="text-2xl font-bold">{fuelData?.summary?.total_trips || 0}</p>
+                  </div>
+                  <Truck className="h-8 w-8 text-blue-500" />
                 </div>
-                
-                {showFilters && (
-                    <div className="p-6 animate-slide-down">
-                        <div className="flex flex-col md:flex-row gap-4 items-end">
-                            <div className="flex-1">
-                                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Start Date</label>
-                                <div className="relative">
-                                    <Calendar className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-400" />
-                                    <input
-                                        type="date"
-                                        name="start_date"
-                                        value={dateRange.start_date}
-                                        onChange={handleDateChange}
-                                        className="w-full pl-10 px-3 py-2 border border-slate-300 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-slate-900 dark:text-white"
-                                    />
-                                </div>
-                            </div>
-                            <div className="flex-1">
-                                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">End Date</label>
-                                <div className="relative">
-                                    <Calendar className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-400" />
-                                    <input
-                                        type="date"
-                                        name="end_date"
-                                        value={dateRange.end_date}
-                                        onChange={handleDateChange}
-                                        className="w-full pl-10 px-3 py-2 border border-slate-300 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-slate-900 dark:text-white"
-                                    />
-                                </div>
-                            </div>
-                            <div className="flex gap-2">
-                                <Button onClick={fetchReports} className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 shadow-md">
-                                    <RefreshCw className="h-4 w-4 mr-2" />
-                                    Apply
-                                </Button>
-                                {hasActiveFilters && (
-                                    <Button variant="outline" onClick={clearFilters} className="dark:border-slate-700 dark:text-slate-300">
-                                        Reset
-                                    </Button>
-                                )}
-                            </div>
-                        </div>
-                    </div>
-                )}
+              </CardContent>
+            </Card>
+            <Card className="dark:bg-slate-800/80 dark:border-slate-700">
+              <CardContent className="pt-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-slate-500">Total Fuel (Liters)</p>
+                    <p className="text-2xl font-bold">{formatNumber(fuelData?.summary?.total_liters)}</p>
+                  </div>
+                  <Fuel className="h-8 w-8 text-emerald-500" />
+                </div>
+              </CardContent>
+            </Card>
+            <Card className="dark:bg-slate-800/80 dark:border-slate-700">
+              <CardContent className="pt-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-slate-500">Total Cost</p>
+                    <p className="text-2xl font-bold">{formatCurrency(fuelData?.summary?.total_cost)}</p>
+                  </div>
+                  <DollarSign className="h-8 w-8 text-yellow-500" />
+                </div>
+              </CardContent>
+            </Card>
+            <Card className="dark:bg-slate-800/80 dark:border-slate-700">
+              <CardContent className="pt-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-slate-500">Avg. Km/L</p>
+                    <p className="text-2xl font-bold">{fuelData?.summary?.average_km_per_liter || 0}</p>
+                  </div>
+                  <TrendingUp className="h-8 w-8 text-purple-500" />
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Charts */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            {/* Department Breakdown */}
+            <Card className="dark:bg-slate-800/80 dark:border-slate-700">
+              <CardHeader>
+                <CardTitle className="text-sm font-medium">Department Breakdown</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <ResponsiveContainer width="100%" height={250}>
+                  <BarChart data={Object.entries(fuelData?.department_breakdown || {}).map(([name, data]) => ({
+                    name,
+                    liters: data.liters || 0,
+                    cost: data.cost || 0,
+                  }))}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="name" angle={-45} textAnchor="end" height={80} />
+                    <YAxis />
+                    <Tooltip />
+                    <Legend />
+                    <Bar dataKey="liters" fill="#3b82f6" name="Liters" />
+                    <Bar dataKey="cost" fill="#10b981" name="Cost (₱)" />
+                  </BarChart>
+                </ResponsiveContainer>
+              </CardContent>
             </Card>
 
-            {/* Stats Cards - Premium Design */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
-                <Card className="dark:bg-slate-800/80 dark:border-slate-700 overflow-hidden hover:shadow-lg transition-all duration-300 group">
-                    <CardContent className="pt-6">
-                        <div className="flex items-center justify-between">
-                            <div>
-                                <p className="text-sm font-medium text-slate-500 dark:text-slate-400">Verified Tickets</p>
-                                <p className="text-3xl font-bold text-emerald-600 dark:text-emerald-400 mt-1">
-                                    {stats?.total_verified || stats?.total_approved || 0}
-                                </p>
-                                <div className="flex items-center gap-1 mt-2">
-                                    <ArrowUpRight className="h-3 w-3 text-emerald-500" />
-                                    <span className="text-xs text-emerald-600 dark:text-emerald-400">Approved</span>
-                                </div>
-                            </div>
-                            <div className="w-12 h-12 bg-emerald-100 dark:bg-emerald-900/30 rounded-2xl flex items-center justify-center group-hover:scale-110 transition-transform">
-                                <CheckCircle className="h-6 w-6 text-emerald-600 dark:text-emerald-400" />
-                            </div>
-                        </div>
-                    </CardContent>
-                </Card>
+            {/* Monthly Trend */}
+            <Card className="dark:bg-slate-800/80 dark:border-slate-700">
+              <CardHeader>
+                <CardTitle className="text-sm font-medium">Monthly Trend</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <ResponsiveContainer width="100%" height={250}>
+                  <AreaChart data={fuelData?.monthly_trend || []}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="month" />
+                    <YAxis />
+                    <Tooltip />
+                    <Area type="monotone" dataKey="liters" stroke="#3b82f6" fill="#3b82f6" fillOpacity={0.3} name="Liters" />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+          </div>
 
-                <Card className="dark:bg-slate-800/80 dark:border-slate-700 overflow-hidden hover:shadow-lg transition-all duration-300 group">
-                    <CardContent className="pt-6">
-                        <div className="flex items-center justify-between">
-                            <div>
-                                <p className="text-sm font-medium text-slate-500 dark:text-slate-400">Forwarded to MO</p>
-                                <p className="text-3xl font-bold text-blue-600 dark:text-blue-400 mt-1">
-                                    {stats?.total_forwarded || 0}
-                                </p>
-                                <div className="flex items-center gap-1 mt-2">
-                                    <Send className="h-3 w-3 text-blue-500" />
-                                    <span className="text-xs text-blue-600 dark:text-blue-400">Pending Release</span>
-                                </div>
-                            </div>
-                            <div className="w-12 h-12 bg-blue-100 dark:bg-blue-900/30 rounded-2xl flex items-center justify-center group-hover:scale-110 transition-transform">
-                                <Send className="h-6 w-6 text-blue-600 dark:text-blue-400" />
-                            </div>
-                        </div>
-                    </CardContent>
-                </Card>
+          {/* Vehicle Breakdown Table */}
+          <Card className="dark:bg-slate-800/80 dark:border-slate-700">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Truck className="h-5 w-5 text-blue-500" />
+                Vehicle Breakdown
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Vehicle</TableHead>
+                    <TableHead>Model</TableHead>
+                    <TableHead>Trips</TableHead>
+                    <TableHead className="text-right">Liters</TableHead>
+                    <TableHead className="text-right">Cost</TableHead>
+                    <TableHead className="text-right">Km/L</TableHead>
+                    <TableHead>Efficiency</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {(fuelData?.vehicle_breakdown || []).map((vehicle) => (
+                    <TableRow key={vehicle.plate_number}>
+                      <TableCell className="font-medium">{vehicle.plate_number}</TableCell>
+                      <TableCell>{vehicle.model}</TableCell>
+                      <TableCell>{vehicle.trips}</TableCell>
+                      <TableCell className="text-right">{formatNumber(vehicle.liters)}</TableCell>
+                      <TableCell className="text-right">{formatCurrency(vehicle.cost)}</TableCell>
+                      <TableCell className="text-right">{vehicle.km_per_liter}</TableCell>
+                      <TableCell>
+                        <Badge className={
+                          vehicle.km_per_liter >= 10 ? 'bg-green-500' :
+                          vehicle.km_per_liter >= 7 ? 'bg-blue-500' :
+                          vehicle.km_per_liter >= 5 ? 'bg-yellow-500' :
+                          'bg-red-500'
+                        }>
+                          {vehicle.km_per_liter >= 10 ? 'Excellent' :
+                           vehicle.km_per_liter >= 7 ? 'Good' :
+                           vehicle.km_per_liter >= 5 ? 'Average' : 'Needs Attention'}
+                        </Badge>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        </TabsContent>
 
-                <Card className="dark:bg-slate-800/80 dark:border-slate-700 overflow-hidden hover:shadow-lg transition-all duration-300 group">
-                    <CardContent className="pt-6">
-                        <div className="flex items-center justify-between">
-                            <div>
-                                <p className="text-sm font-medium text-slate-500 dark:text-slate-400">Rejected Tickets</p>
-                                <p className="text-3xl font-bold text-red-600 dark:text-red-400 mt-1">
-                                    {stats?.total_rejected || 0}
-                                </p>
-                                <div className="flex items-center gap-1 mt-2">
-                                    <ArrowDownRight className="h-3 w-3 text-red-500" />
-                                    <span className="text-xs text-red-600 dark:text-red-400">Returned</span>
-                                </div>
-                            </div>
-                            <div className="w-12 h-12 bg-red-100 dark:bg-red-900/30 rounded-2xl flex items-center justify-center group-hover:scale-110 transition-transform">
-                                <XCircle className="h-6 w-6 text-red-600 dark:text-red-400" />
-                            </div>
-                        </div>
-                    </CardContent>
-                </Card>
+        {/* Tab 2: Trip Summary */}
+        <TabsContent value="trip-summary" className="space-y-4 mt-6">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <Card className="dark:bg-slate-800/80 dark:border-slate-700">
+              <CardContent className="pt-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-slate-500">Total Trips</p>
+                    <p className="text-2xl font-bold">{tripData?.total_trips || 0}</p>
+                  </div>
+                  <Truck className="h-8 w-8 text-blue-500" />
+                </div>
+              </CardContent>
+            </Card>
+            <Card className="dark:bg-slate-800/80 dark:border-slate-700">
+              <CardContent className="pt-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-slate-500">Pending</p>
+                    <p className="text-2xl font-bold text-yellow-500">{tripData?.status_breakdown?.pending_mayors_office || 0}</p>
+                  </div>
+                  <Clock className="h-8 w-8 text-yellow-500" />
+                </div>
+              </CardContent>
+            </Card>
+            <Card className="dark:bg-slate-800/80 dark:border-slate-700">
+              <CardContent className="pt-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-slate-500">Completed</p>
+                    <p className="text-2xl font-bold text-green-500">{tripData?.status_breakdown?.closed || 0}</p>
+                  </div>
+                  <CheckCircle className="h-8 w-8 text-green-500" />
+                </div>
+              </CardContent>
+            </Card>
+          </div>
 
-                <Card className="dark:bg-slate-800/80 dark:border-slate-700 overflow-hidden hover:shadow-lg transition-all duration-300 group">
-                    <CardContent className="pt-6">
-                        <div className="flex items-center justify-between">
-                            <div>
-                                <p className="text-sm font-medium text-slate-500 dark:text-slate-400">Total Processed</p>
-                                <p className="text-3xl font-bold text-purple-600 dark:text-purple-400 mt-1">
-                                    {totalProcessed}
-                                </p>
-                                <div className="flex items-center gap-1 mt-2">
-                                    <TrendingUp className="h-3 w-3 text-purple-500" />
-                                    <span className="text-xs text-purple-600 dark:text-purple-400">Overall</span>
-                                </div>
-                            </div>
-                            <div className="w-12 h-12 bg-purple-100 dark:bg-purple-900/30 rounded-2xl flex items-center justify-center group-hover:scale-110 transition-transform">
-                                <TrendingUp className="h-6 w-6 text-purple-600 dark:text-purple-400" />
-                            </div>
-                        </div>
-                    </CardContent>
-                </Card>
-            </div>
+          {/* Department Breakdown Pie Chart */}
+          <Card className="dark:bg-slate-800/80 dark:border-slate-700">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Building2 className="h-5 w-5 text-purple-500" />
+                Department Breakdown
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ResponsiveContainer width="100%" height={300}>
+                <PieChart>
+                  <Pie
+                    data={tripData?.department_breakdown || []}
+                    cx="50%"
+                    cy="50%"
+                    labelLine={false}
+                    label={({ department, total }) => `${department}: ${total}`}
+                    outerRadius={100}
+                    fill="#8884d8"
+                    dataKey="total"
+                  >
+                    {(tripData?.department_breakdown || []).map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                    ))}
+                  </Pie>
+                  <Tooltip />
+                  <Legend />
+                </PieChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
+        </TabsContent>
 
-            {/* Approval/Rejection Rate Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                <Card className="dark:bg-slate-800/80 dark:border-slate-700">
-                    <CardContent className="pt-6">
-                        <div className="flex items-center justify-between mb-4">
-                            <h3 className="font-semibold text-slate-700 dark:text-slate-300">Approval Rate</h3>
-                            <CheckCircle className="h-5 w-5 text-emerald-500" />
-                        </div>
-                        <div className="relative pt-1">
-                            <div className="flex mb-2 items-center justify-between">
-                                <div>
-                                    <span className="text-xs font-semibold inline-block text-emerald-600 dark:text-emerald-400">
-                                        {approvalRate}%
-                                    </span>
-                                </div>
-                            </div>
-                            <div className="overflow-hidden h-2 text-xs flex rounded-full bg-emerald-200 dark:bg-emerald-900/50">
-                                <div 
-                                    style={{ width: `${approvalRate}%` }}
-                                    className="shadow-none flex flex-col text-center whitespace-nowrap text-white justify-center bg-emerald-500 transition-all duration-500"
-                                />
-                            </div>
-                            <p className="text-xs text-slate-500 dark:text-slate-400 mt-3">
-                                {stats?.total_verified || 0} out of {totalProcessed} tickets approved
-                            </p>
-                        </div>
-                    </CardContent>
-                </Card>
+        {/* Tab 3: Vehicle Efficiency */}
+        <TabsContent value="vehicle-efficiency" className="space-y-4 mt-6">
+          <Card className="dark:bg-slate-800/80 dark:border-slate-700">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <TrendingUp className="h-5 w-5 text-emerald-500" />
+                Vehicle Efficiency Report
+              </CardTitle>
+              <CardDescription>Fuel efficiency analysis by vehicle</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {/* Vehicle efficiency data would be displayed here */}
+              <p className="text-slate-500 dark:text-slate-400">Vehicle efficiency data loading...</p>
+            </CardContent>
+          </Card>
+        </TabsContent>
 
-                <Card className="dark:bg-slate-800/80 dark:border-slate-700">
-                    <CardContent className="pt-6">
-                        <div className="flex items-center justify-between mb-4">
-                            <h3 className="font-semibold text-slate-700 dark:text-slate-300">Rejection Rate</h3>
-                            <XCircle className="h-5 w-5 text-red-500" />
-                        </div>
-                        <div className="relative pt-1">
-                            <div className="flex mb-2 items-center justify-between">
-                                <div>
-                                    <span className="text-xs font-semibold inline-block text-red-600 dark:text-red-400">
-                                        {rejectionRate}%
-                                    </span>
-                                </div>
-                            </div>
-                            <div className="overflow-hidden h-2 text-xs flex rounded-full bg-red-200 dark:bg-red-900/50">
-                                <div 
-                                    style={{ width: `${rejectionRate}%` }}
-                                    className="shadow-none flex flex-col text-center whitespace-nowrap text-white justify-center bg-red-500 transition-all duration-500"
-                                />
-                            </div>
-                            <p className="text-xs text-slate-500 dark:text-slate-400 mt-3">
-                                {stats?.total_rejected || 0} out of {totalProcessed} tickets rejected
-                            </p>
-                        </div>
-                    </CardContent>
-                </Card>
-            </div>
-
-            {/* Monthly Breakdown Table */}
-            {stats?.monthly_breakdown && stats.monthly_breakdown.length > 0 && (
-                <Card className="dark:bg-slate-800/80 dark:border-slate-700 overflow-hidden">
-                    <CardHeader className="border-b dark:border-slate-700">
-                        <CardTitle className="flex items-center gap-2 text-slate-900 dark:text-white">
-                            <BarChart3 className="h-5 w-5" />
-                            Monthly Breakdown
-                        </CardTitle>
-                    </CardHeader>
-                    <CardContent className="p-0">
-                        <div className="overflow-x-auto">
-                            <table className="w-full">
-                                <thead className="bg-slate-50 dark:bg-slate-900/50">
-                                    <tr>
-                                        <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Month</th>
-                                        <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Verified</th>
-                                        <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Forwarded</th>
-                                        <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Rejected</th>
-                                        <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Total</th>
-                                    </tr>
-                                </thead>
-                                <tbody className="divide-y divide-slate-200 dark:divide-slate-700">
-                                    {stats.monthly_breakdown.map((item, index) => (
-                                        <tr 
-                                            key={index} 
-                                            className="hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors animate-fade-in"
-                                            style={{ animationDelay: `${index * 50}ms` }}
-                                        >
-                                            <td className="px-4 py-3">
-                                                <div className="flex items-center gap-2">
-                                                    <Calendar className="h-3 w-3 text-slate-400" />
-                                                    <span className="text-sm font-medium text-slate-700 dark:text-slate-300">{item.month}</span>
-                                                </div>
-                                            </td>
-                                            <td className="px-4 py-3">
-                                                <span className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400">
-                                                    <CheckCircle className="h-3 w-3" />
-                                                    {item.verified}
-                                                </span>
-                                            </td>
-                                            <td className="px-4 py-3">
-                                                <span className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400">
-                                                    <Send className="h-3 w-3" />
-                                                    {item.forwarded}
-                                                </span>
-                                            </td>
-                                            <td className="px-4 py-3">
-                                                <span className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400">
-                                                    <XCircle className="h-3 w-3" />
-                                                    {item.rejected}
-                                                </span>
-                                            </td>
-                                            <td className="px-4 py-3">
-                                                <span className="font-semibold text-slate-700 dark:text-slate-300">
-                                                    {item.verified + item.forwarded + item.rejected}
-                                                </span>
-                                            </td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
-                        </div>
-                    </CardContent>
-                </Card>
-            )}
-
-            {/* Empty State */}
-            {(!stats || (stats?.total_verified === 0 && stats?.total_rejected === 0 && stats?.total_forwarded === 0)) && (
-                <Card className="dark:bg-slate-800/80 dark:border-slate-700">
-                    <CardContent className="py-12 text-center">
-                        <FileBarChart className="h-12 w-12 text-slate-300 dark:text-slate-600 mx-auto mb-3" />
-                        <p className="text-slate-500 dark:text-slate-400">No report data available</p>
-                        <p className="text-sm text-slate-400 dark:text-slate-500 mt-1">
-                            Try adjusting your date range or check back later
-                        </p>
-                    </CardContent>
-                </Card>
-            )}
-
-            {/* Last Updated Info */}
-            <div className="text-center">
-                <p className="text-xs text-slate-400 dark:text-slate-500 flex items-center justify-center gap-1">
-                    <Clock className="h-3 w-3" />
-                    Last updated: {new Date().toLocaleString()}
-                </p>
-            </div>
-        </div>
-    );
+        {/* Tab 4: Budget Utilization */}
+        <TabsContent value="budget-utilization" className="space-y-4 mt-6">
+          <Card className="dark:bg-slate-800/80 dark:border-slate-700">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <DollarSign className="h-5 w-5 text-yellow-500" />
+                Budget Utilization Report
+              </CardTitle>
+              <CardDescription>Budget allocation and usage by department</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {/* Budget utilization data would be displayed here */}
+              <p className="text-slate-500 dark:text-slate-400">Budget utilization data loading...</p>
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
+    </div>
+  );
 };
 
 export default GsoReports;

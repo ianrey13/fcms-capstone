@@ -38,60 +38,139 @@ class BudgetPolicyController extends Controller
      */
   public function store(Request $request)
 {
+    // ✅ Debug log
+    Log::info('=== BudgetPolicyController::store called ===');
+    Log::info('Request data:', $request->all());
+    Log::info('User ID: ' . ($request->user()?->user_id ?? 'null'));
+    Log::info('User Role: ' . ($request->user()?->role ?? 'null'));
+    
     $validator = Validator::make($request->all(), [
         'department_id' => 'required|exists:departments,department_id',
         'default_weekly_allocation' => 'required|numeric|min:0'
     ]);
     
     if ($validator->fails()) {
+        Log::error('Validation failed:', $validator->errors()->toArray());
         return response()->json(['errors' => $validator->errors()], 422);
     }
     
     $user = $request->user();
     
-    if ($user->role !== 'superadmin') {
+    if ($user->role !== 'mayors_office' && $user->role !== 'gso_office') {
+        Log::warning('Unauthorized attempt', ['role' => $user->role]);
         return response()->json(['message' => 'Unauthorized'], 403);
     }
     
     DB::beginTransaction();
     
     try {
-        // Insert or update policy
+        $departmentId = $request->department_id;
+        $allocation = $request->default_weekly_allocation;
+        
+        Log::info('Processing budget policy', [
+            'department_id' => $departmentId,
+            'allocation' => $allocation
+        ]);
+        
+        // ✅ 1. Insert or Update Policy
         $existingPolicy = DB::table('dept_budget_policy')
-            ->where('department_id', $request->department_id)
+            ->where('department_id', $departmentId)
             ->first();
+        
+        Log::info('Existing policy:', ['policy' => $existingPolicy]);
         
         if ($existingPolicy) {
             DB::table('dept_budget_policy')
-                ->where('department_id', $request->department_id)
+                ->where('department_id', $departmentId)
                 ->update([
-                    'default_weekly_allocation' => $request->default_weekly_allocation,
+                    'default_weekly_allocation' => $allocation,
                     'updated_at' => now()
                 ]);
+            Log::info('Updated existing policy');
         } else {
             DB::table('dept_budget_policy')->insert([
-                'department_id' => $request->department_id,
-                'default_weekly_allocation' => $request->default_weekly_allocation,
+                'department_id' => $departmentId,
+                'default_weekly_allocation' => $allocation,
                 'created_at' => now(),
                 'updated_at' => now()
             ]);
+            Log::info('Created new policy');
         }
+        
+        // ✅ 2. Check if a budget period exists for this week
+        $weekStart = now()->startOfWeek()->toDateString();
+        Log::info('Week start: ' . $weekStart);
+        
+        $existingPeriod = DB::table('dept_budget_period')
+            ->where('department_id', $departmentId)
+            ->where('week_start', $weekStart)
+            ->first();
+        
+        Log::info('Existing period:', ['period' => $existingPeriod]);
+        
+        if ($existingPeriod) {
+            // ✅ UPDATE existing period
+            DB::table('dept_budget_period')
+                ->where('period_id', $existingPeriod->period_id)
+                ->update([
+                    'allocated_amount' => $allocation,
+                    'status' => 'active',
+                    'closed_at' => null,
+                    'updated_at' => now()
+                ]);
+            Log::info('Updated existing period');
+        } else {
+            // ✅ INSERT new period
+            DB::table('dept_budget_period')->insert([
+                'department_id' => $departmentId,
+                'week_start' => $weekStart,
+                'allocated_amount' => $allocation,
+                'status' => 'active',
+                'created_at' => now()
+            ]);
+            Log::info('Created new period');
+        }
+        
+        // ✅ Verify the insert worked
+        $verifyPolicy = DB::table('dept_budget_policy')
+            ->where('department_id', $departmentId)
+            ->first();
+        
+        $verifyPeriod = DB::table('dept_budget_period')
+            ->where('department_id', $departmentId)
+            ->where('week_start', $weekStart)
+            ->first();
+        
+        Log::info('Verification after save:', [
+            'policy' => $verifyPolicy,
+            'period' => $verifyPeriod
+        ]);
         
         DB::commit();
         
+        Log::info('✅ Transaction committed successfully');
+        
         return response()->json([
             'success' => true,
-            'message' => 'Budget policy created successfully'
+            'message' => 'Budget policy created successfully',
+            'data' => [
+                'department_id' => $departmentId,
+                'allocated_amount' => $allocation,
+                'week_start' => $weekStart,
+            ]
         ], 201);
         
     } catch (\Exception $e) {
         DB::rollBack();
+        Log::error('❌ Failed to create policy: ' . $e->getMessage());
+        Log::error('Stack trace: ' . $e->getTraceAsString());
         return response()->json([
             'success' => false,
             'message' => 'Failed to create policy: ' . $e->getMessage()
         ], 500);
     }
 }
+    
     /**
      * Update a budget policy
      */
@@ -104,6 +183,15 @@ class BudgetPolicyController extends Controller
             
             if ($validator->fails()) {
                 return response()->json(['errors' => $validator->errors()], 422);
+            }
+            
+            $user = $request->user();
+            
+            // ✅ FIXED: Allow Mayor's Office and GSO Office
+            if ($user->role !== 'mayors_office' && $user->role !== 'gso_office') {
+                return response()->json([
+                    'message' => 'Unauthorized - Only Mayor\'s Office and GSO can manage budget policies'
+                ], 403);
             }
             
             $updated = DB::table('dept_budget_policy')
@@ -138,6 +226,15 @@ class BudgetPolicyController extends Controller
     public function destroy($departmentId)
     {
         try {
+            $user = auth()->user();
+            
+            // ✅ FIXED: Allow Mayor's Office and GSO Office
+            if ($user->role !== 'mayors_office' && $user->role !== 'gso_office') {
+                return response()->json([
+                    'message' => 'Unauthorized - Only Mayor\'s Office and GSO can manage budget policies'
+                ], 403);
+            }
+            
             $deleted = DB::table('dept_budget_policy')
                 ->where('department_id', $departmentId)
                 ->delete();
@@ -162,132 +259,133 @@ class BudgetPolicyController extends Controller
     }
     
     /**
-     * ✅ NEW: Force activate a budget period for a specific department
-     * This creates a new active budget period for the department
+     * Force activate a budget period for a specific department
      */
     public function forceActivate(Request $request)
-{
-    try {
-        $validator = Validator::make($request->all(), [
-            'department_id' => 'required|exists:departments,department_id',
-            'amount' => 'required|numeric|min:0'
-        ]);
-        
-        if ($validator->fails()) {
-            return response()->json(['errors' => $validator->errors()], 422);
-        }
-        
-        $user = $request->user();
-        
-        if ($user->role !== 'superadmin') {
-            return response()->json(['message' => 'Unauthorized'], 403);
-        }
-        
-        $departmentId = $request->department_id;
-        $amount = $request->amount;
-        $weekStart = now()->startOfWeek();
-        
-        DB::beginTransaction();
-        
-        // ✅ FIRST: Check if an active period already exists for this week
-        $existingPeriod = DB::table('dept_budget_period')
-            ->where('department_id', $departmentId)
-            ->where('week_start', $weekStart)
-            ->first();
-        
-        if ($existingPeriod) {
-            // Update the existing period instead of creating a new one
-            DB::table('dept_budget_period')
-                ->where('period_id', $existingPeriod->period_id)
-                ->update([
+    {
+        try {
+            $validator = Validator::make($request->all(), [
+                'department_id' => 'required|exists:departments,department_id',
+                'amount' => 'required|numeric|min:0'
+            ]);
+            
+            if ($validator->fails()) {
+                return response()->json(['errors' => $validator->errors()], 422);
+            }
+            
+            $user = $request->user();
+            
+            // ✅ FIXED: Allow Mayor's Office and GSO Office
+            if ($user->role !== 'mayors_office' && $user->role !== 'gso_office') {
+                return response()->json([
+                    'message' => 'Unauthorized - Only Mayor\'s Office and GSO can manage budget policies'
+                ], 403);
+            }
+            
+            $departmentId = $request->department_id;
+            $amount = $request->amount;
+            $weekStart = now()->startOfWeek();
+            
+            DB::beginTransaction();
+            
+            // Check if an active period already exists for this week
+            $existingPeriod = DB::table('dept_budget_period')
+                ->where('department_id', $departmentId)
+                ->where('week_start', $weekStart)
+                ->first();
+            
+            if ($existingPeriod) {
+                DB::table('dept_budget_period')
+                    ->where('period_id', $existingPeriod->period_id)
+                    ->update([
+                        'allocated_amount' => $amount,
+                        'status' => 'active',
+                        'closed_at' => null,
+                        'updated_at' => now(),
+                    ]);
+                
+                DB::table('dept_budget_period')
+                    ->where('department_id', $departmentId)
+                    ->where('period_id', '!=', $existingPeriod->period_id)
+                    ->where('status', 'active')
+                    ->update([
+                        'status' => 'closed', 
+                        'closed_at' => now()
+                    ]);
+            } else {
+                DB::table('dept_budget_period')
+                    ->where('department_id', $departmentId)
+                    ->where('status', 'active')
+                    ->update([
+                        'status' => 'closed', 
+                        'closed_at' => now()
+                    ]);
+                
+                DB::table('dept_budget_period')->insert([
+                    'department_id' => $departmentId,
+                    'week_start' => $weekStart,
                     'allocated_amount' => $amount,
                     'status' => 'active',
-                    'closed_at' => null,
-                    'updated_at' => now(),
+                    'created_at' => now(),
                 ]);
+            }
             
-            // Close any other active periods for this department (except this one)
-            DB::table('dept_budget_period')
+            // Ensure policy exists with the correct amount
+            $policy = DB::table('dept_budget_policy')
                 ->where('department_id', $departmentId)
-                ->where('period_id', '!=', $existingPeriod->period_id)
-                ->where('status', 'active')
-                ->update([
-                    'status' => 'closed', 
-                    'closed_at' => now()
-                ]);
-        } else {
-            // Close any existing active periods for this department
-            DB::table('dept_budget_period')
-                ->where('department_id', $departmentId)
-                ->where('status', 'active')
-                ->update([
-                    'status' => 'closed', 
-                    'closed_at' => now()
-                ]);
+                ->first();
             
-            // Create new active period
-            DB::table('dept_budget_period')->insert([
-                'department_id' => $departmentId,
-                'week_start' => $weekStart,
-                'allocated_amount' => $amount,
-                'status' => 'active',
-                'created_at' => now(),
-            ]);
-        }
-        
-        // Ensure policy exists with the correct amount
-        $policy = DB::table('dept_budget_policy')
-            ->where('department_id', $departmentId)
-            ->first();
-        
-        if (!$policy) {
-            DB::table('dept_budget_policy')->insert([
-                'department_id' => $departmentId,
-                'default_weekly_allocation' => $amount,
-                'created_at' => now(),
-                'updated_at' => now(),
-            ]);
-        } else {
-            DB::table('dept_budget_policy')
-                ->where('department_id', $departmentId)
-                ->update([
+            if (!$policy) {
+                DB::table('dept_budget_policy')->insert([
+                    'department_id' => $departmentId,
                     'default_weekly_allocation' => $amount,
+                    'created_at' => now(),
                     'updated_at' => now(),
                 ]);
+            } else {
+                DB::table('dept_budget_policy')
+                    ->where('department_id', $departmentId)
+                    ->update([
+                        'default_weekly_allocation' => $amount,
+                        'updated_at' => now(),
+                    ]);
+            }
+            
+            DB::commit();
+            
+            return response()->json([
+                'success' => true,
+                'message' => 'Budget period activated successfully',
+                'data' => [
+                    'department_id' => $departmentId,
+                    'allocated_amount' => $amount,
+                    'week_start' => $weekStart->toDateString(),
+                ]
+            ]);
+            
+        } catch (\Exception $e) {
+            DB::rollBack();
+            Log::error('Force activate error: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to activate budget period: ' . $e->getMessage()
+            ], 500);
         }
-        
-        DB::commit();
-        
-        return response()->json([
-            'success' => true,
-            'message' => 'Budget period activated successfully',
-            'data' => [
-                'department_id' => $departmentId,
-                'allocated_amount' => $amount,
-                'week_start' => $weekStart->toDateString(),
-            ]
-        ]);
-        
-    } catch (\Exception $e) {
-        DB::rollBack();
-        Log::error('Force activate error: ' . $e->getMessage());
-        return response()->json([
-            'success' => false,
-            'message' => 'Failed to activate budget period: ' . $e->getMessage()
-        ], 500);
     }
-}
     
     /**
-     * ✅ NEW: Run weekly reset for all departments
+     * Run weekly reset for all departments
      */
     public function runWeeklyReset(Request $request)
     {
         try {
             $user = $request->user();
             
-            if ($user->role !== 'superadmin') {
-                return response()->json(['message' => 'Unauthorized'], 403);
+            // ✅ FIXED: Allow Mayor's Office and GSO Office
+            if ($user->role !== 'mayors_office' && $user->role !== 'gso_office') {
+                return response()->json([
+                    'message' => 'Unauthorized - Only Mayor\'s Office and GSO can manage budget policies'
+                ], 403);
             }
             
             DB::beginTransaction();
@@ -305,11 +403,9 @@ class BudgetPolicyController extends Controller
             $createdCount = 0;
             
             $weekStart = now()->startOfWeek();
-            $weekEnd = now()->endOfWeek();
             
             // Create new active periods for each policy
             foreach ($policies as $policy) {
-                // Check if period already exists for this week
                 $exists = DB::table('dept_budget_period')
                     ->where('department_id', $policy->department_id)
                     ->where('week_start', $weekStart)
@@ -328,15 +424,6 @@ class BudgetPolicyController extends Controller
             }
             
             DB::commit();
-            
-            // Log the reset event
-            // DB::table('event_run_log')->insert([
-            //     'event_name' => 'weekly_budget_reset',
-            //     'run_at' => now(),
-            //     'status' => 'success',
-            //     'periods_closed' => $closedCount,
-            //     'periods_created' => $createdCount,
-            // ]);
             
             return response()->json([
                 'success' => true,
@@ -375,18 +462,16 @@ class BudgetPolicyController extends Controller
                 ->where('dbp.status', 'active')
                 ->get();
             
-            // Calculate spent and remaining amounts
-                   foreach ($status as $item) {
-            $spent = DB::table('gas_slip as gs')
-                ->join('dept_budget_period as dbp2', 'gs.period_id', '=', 'dbp2.period_id')
-                ->where('dbp2.department_id', $item->department_id)
-                ->where('dbp2.status', 'active')
-                ->sum('gs.amount_released');
-            
-            $item->spent_amount = $spent ?? 0;
-            $item->remaining_amount = $item->allocated_amount - ($spent ?? 0);
-        }
-
+            foreach ($status as $item) {
+                $spent = DB::table('gas_slip as gs')
+                    ->join('dept_budget_period as dbp2', 'gs.period_id', '=', 'dbp2.period_id')
+                    ->where('dbp2.department_id', $item->department_id)
+                    ->where('dbp2.status', 'active')
+                    ->sum('gs.amount_released');
+                
+                $item->spent_amount = $spent ?? 0;
+                $item->remaining_amount = $item->allocated_amount - ($spent ?? 0);
+            }
             
             return response()->json([
                 'success' => true,
@@ -400,36 +485,35 @@ class BudgetPolicyController extends Controller
         }
     }
     
- /**
- * Get event run logs
- */
-public function getEventLogs()
-{
-    try {
-        // Check if table exists first
-        $tableExists = DB::select("SHOW TABLES LIKE 'event_run_log'");
-        
-        if (empty($tableExists)) {
+    /**
+     * Get event run logs
+     */
+    public function getEventLogs()
+    {
+        try {
+            $tableExists = DB::select("SHOW TABLES LIKE 'event_run_log'");
+            
+            if (empty($tableExists)) {
+                return response()->json([
+                    'success' => true,
+                    'data' => []
+                ]);
+            }
+            
+            $logs = DB::table('event_run_log')
+                ->orderBy('run_at', 'desc')
+                ->limit(50)
+                ->get();
+            
+            return response()->json([
+                'success' => true,
+                'data' => $logs
+            ]);
+        } catch (\Exception $e) {
             return response()->json([
                 'success' => true,
                 'data' => []
             ]);
         }
-        
-        $logs = DB::table('event_run_log')
-            ->orderBy('run_at', 'desc')
-            ->limit(50)
-            ->get();
-        
-        return response()->json([
-            'success' => true,
-            'data' => $logs
-        ]);
-    } catch (\Exception $e) {
-        return response()->json([
-            'success' => true,
-            'data' => []
-        ]);
     }
-}
 }

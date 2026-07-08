@@ -5,7 +5,6 @@ namespace App\Http\Controllers\API;
 use App\Http\Controllers\Controller;
 use App\Models\Department;
 use App\Models\User;
-use App\Models\OicDesignation;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\DB;
@@ -20,14 +19,6 @@ class DepartmentController extends Controller
     {
         try {
             $departments = Department::orderBy('department_name')->get();
-
-            // Add head of office and OIC info
-            $departments->map(function ($department) {
-                $department->head_of_office = $this->getCurrentHeadOfOffice($department->department_id);
-                $department->current_oic = $this->getCurrentOIC($department->department_id);
-                $department->head_status = $this->getHeadStatus($department->department_id);
-                return $department;
-            });
 
             return response()->json([
                 'success' => true,
@@ -64,6 +55,7 @@ class DepartmentController extends Controller
             $department = Department::create([
                 'department_name' => $request->department_name,
                 'department_code' => strtoupper($request->department_code),
+                'is_active' => true,
             ]);
 
             return response()->json([
@@ -87,11 +79,6 @@ class DepartmentController extends Controller
     {
         try {
             $department = Department::findOrFail($id);
-
-            // Add additional info
-            $department->head_of_office = $this->getCurrentHeadOfOffice($id);
-            $department->current_oic = $this->getCurrentOIC($id);
-            $department->head_status = $this->getHeadStatus($id);
 
             return response()->json([
                 'success' => true,
@@ -161,10 +148,7 @@ class DepartmentController extends Controller
                 ], 400);
             }
 
-            // Soft delete
-            $department->deleted_at = now();
-            $department->deleted_by = auth()->id();
-            $department->save();
+            $department->delete(); // Soft delete
 
             return response()->json([
                 'success' => true,
@@ -180,19 +164,13 @@ class DepartmentController extends Controller
     }
 
     /**
-     * Assign Head of Office to a department
+     * ✅ ADD THIS: Toggle department status (active/inactive)
      */
-    public function assignHeadOfOffice(Request $request, $id)
+    public function toggleStatus(Request $request, $id)
     {
         try {
-            Log::info('Assign Head called', [
-                'department_id' => $id,
-                'user_id' => $request->user_id,
-                'all_input' => $request->all()
-            ]);
-
             $validator = Validator::make($request->all(), [
-                'user_id' => 'required|exists:users,user_id'
+                'is_active' => 'required|boolean',
             ]);
 
             if ($validator->fails()) {
@@ -203,399 +181,58 @@ class DepartmentController extends Controller
                 ], 422);
             }
 
-            $department = Department::findOrFail($id);
+            $department = Department::find($id);
 
-            // Get the user
-            $user = User::where('user_id', $request->user_id)->first();
-
-            if (!$user) {
+            if (!$department) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'User not found'
+                    'message' => 'Department not found'
                 ], 404);
             }
 
-            // Check if user is head_of_office role
-            if ($user->role !== User::ROLE_HEAD_OF_OFFICE) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'User must have head_of_office role. Current role: ' . $user->role
-                ], 400);
+            $department->is_active = $request->is_active;
+            $department->save();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Department status updated successfully',
+                'data' => $department
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Department toggleStatus error: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to update department status: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Get all departments for Mayor's Office
+     */
+    public function getAllDepartmentsForMO(Request $request)
+    {
+        try {
+            $user = $request->user();
+
+            if (!$user->isMayorsOffice()) {
+                return response()->json(['message' => 'Unauthorized'], 403);
             }
 
-            DB::beginTransaction();
-
-            // Deactivate any existing active designations for this department
-            $existingDesignations = OicDesignation::where('department_id', $id)
+            $departments = Department::select('department_id', 'department_name', 'department_code')
                 ->where('is_active', true)
+                ->orderBy('department_name')
                 ->get();
 
-            foreach ($existingDesignations as $existing) {
-                $existing->is_active = false;
-                $existing->revoked_at = now();
-                $existing->save();
-            }
-
-            // Create new designation
-            $designation = new OicDesignation();
-            $designation->department_id = $id;
-            $designation->head_of_office_id = $user->user_id;
-            $designation->oic_user_id = $user->user_id;
-            $designation->is_active = true;
-            $designation->designated_at = now();
-            $designation->save();
-
-            // Update user's department and status
-            $user->department_id = $id;
-            $user->head_active_status = 'active';
-            $user->save();
-
-            DB::commit();
-
             return response()->json([
                 'success' => true,
-                'message' => 'Head of Office assigned successfully',
-                'data' => [
-                    'department' => [
-                        'id' => $department->department_id,
-                        'name' => $department->department_name,
-                        'code' => $department->department_code,
-                    ],
-                    'head_of_office' => [
-                        'id' => $user->user_id,
-                        'name' => $user->full_name,
-                        'email' => $user->email,
-                    ]
-                ]
+                'data' => $departments
             ]);
         } catch (\Exception $e) {
-            DB::rollBack();
-            Log::error('Assign Head error: ' . $e->getMessage());
-            Log::error('Assign Head trace: ' . $e->getTraceAsString());
             return response()->json([
                 'success' => false,
-                'message' => 'Failed to assign Head of Office: ' . $e->getMessage()
+                'message' => $e->getMessage()
             ], 500);
         }
     }
-
-   /**
- * Remove Head of Office from a department
- */
-public function removeHeadOfOffice($id)
-{    
-    try {
-        Log::info('Remove Head called for department: ' . $id);
-        
-        $department = Department::find($id);
-        if (!$department) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Department not found'
-            ], 404);
-        }
-        
-        DB::beginTransaction();
-        
-        // Find and update designation
-        $designation = OicDesignation::where('department_id', $id)
-            ->where('is_active', true)
-            ->first();
-        
-        if ($designation) {
-            $headUserId = $designation->head_of_office_id;
-            
-            // Just deactivate, don't delete
-            $designation->is_active = false;
-            $designation->revoked_at = now();
-            $designation->save();
-            
-            // Update the user - DON'T set department_id to null
-            if ($headUserId) {
-                $user = User::find($headUserId);
-                if ($user) {
-                    $user->head_active_status = null;
-                    // Remove this line: $user->department_id = null;
-                    $user->save();
-                    Log::info('Updated user ' . $headUserId . ' - removed head status only');
-                }
-            }
-        }
-        
-        DB::commit();
-        
-        return response()->json([
-            'success' => true,
-            'message' => 'Head of Office removed successfully'
-        ]);
-        
-    } catch (\Exception $e) {
-        DB::rollBack();
-        Log::error('Remove Head error: ' . $e->getMessage());
-        return response()->json([
-            'success' => false,
-            'message' => 'Failed to remove Head of Office: ' . $e->getMessage()
-        ], 500);
-    }
-}
-
-    /**
-     * Assign OIC (Officer-in-Charge) to a department
-     */
-    public function assignOIC(Request $request, $id)
-    {
-        try {
-            Log::info('Assign OIC called', [
-                'department_id' => $id,
-                'user_id' => $request->user_id
-            ]);
-
-            $validator = Validator::make($request->all(), [
-                'user_id' => 'required|exists:users,user_id'
-            ]);
-
-            if ($validator->fails()) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Validation failed',
-                    'errors' => $validator->errors()
-                ], 422);
-            }
-
-            $department = Department::findOrFail($id);
-            $user = User::where('user_id', $request->user_id)->first();
-
-            if (!$user) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'User not found'
-                ], 404);
-            }
-
-            $currentDesignation = OicDesignation::where('department_id', $id)
-                ->where('is_active', true)
-                ->first();
-
-            if (!$currentDesignation) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'No active department head found. Please assign Head of Office first.'
-                ], 400);
-            }
-
-            DB::beginTransaction();
-
-            // Update the OIC
-            $currentDesignation->oic_user_id = $user->user_id;
-            $currentDesignation->save();
-
-            // Update user's department
-            if ($user->department_id != $id) {
-                $user->department_id = $id;
-                $user->save();
-            }
-
-            DB::commit();
-
-            return response()->json([
-                'success' => true,
-                'message' => 'OIC assigned successfully',
-                'data' => [
-                    'department' => [
-                        'id' => $department->department_id,
-                        'name' => $department->department_name,
-                        'code' => $department->department_code,
-                    ],
-                    'oic' => [
-                        'id' => $user->user_id,
-                        'name' => $user->full_name,
-                        'email' => $user->email,
-                    ]
-                ]
-            ]);
-        } catch (\Exception $e) {
-            DB::rollBack();
-            Log::error('Assign OIC error: ' . $e->getMessage());
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to assign OIC: ' . $e->getMessage()
-            ], 500);
-        }
-    }
-
-    /**
-     * Remove OIC from a department
-     */
-    public function removeOIC($id)
-    {
-        try {
-            Log::info('Remove OIC called', ['department_id' => $id]);
-
-            $department = Department::findOrFail($id);
-
-            DB::beginTransaction();
-
-            // Get current designation
-            $designation = OicDesignation::where('department_id', $id)
-                ->where('is_active', true)
-                ->first();
-
-            if (!$designation) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'No active designation found for this department'
-                ], 404);
-            }
-
-            // Set OIC back to the head (self)
-            $designation->oic_user_id = $designation->head_of_office_id;
-            $designation->save();
-
-            DB::commit();
-
-            return response()->json([
-                'success' => true,
-                'message' => 'OIC removed successfully'
-            ]);
-        } catch (\Exception $e) {
-            DB::rollBack();
-            Log::error('Remove OIC error: ' . $e->getMessage());
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to remove OIC: ' . $e->getMessage()
-            ], 500);
-        }
-    }
-    /**
-     * Get department leadership info (Head and OIC)
-     */
-    public function getLeadershipInfo($id)
-    {
-        try {
-            $department = Department::findOrFail($id);
-
-            $head = $this->getCurrentHeadOfOffice($id);
-            $oic = $this->getCurrentOIC($id);
-
-            return response()->json([
-                'success' => true,
-                'data' => [
-                    'department' => [
-                        'id' => $department->department_id,
-                        'name' => $department->department_name,
-                        'code' => $department->department_code,
-                    ],
-                    'head_of_office' => $head,
-                    'oic' => $oic,
-                    'head_status' => $this->getHeadStatus($id),
-                    'has_active_oic' => !is_null($oic),
-                ]
-            ]);
-        } catch (\Exception $e) {
-            Log::error('Get Leadership error: ' . $e->getMessage());
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to fetch leadership info: ' . $e->getMessage()
-            ], 500);
-        }
-    }
-
-    /**
-     * Get current head of office for a department
-     */
-    private function getCurrentHeadOfOffice($departmentId)
-    {
-        $designation = OicDesignation::where('department_id', $departmentId)
-            ->where('is_active', true)
-            ->first();
-
-        if (!$designation) {
-            return null;
-        }
-
-        $user = User::where('user_id', $designation->head_of_office_id)->first();
-        if (!$user) {
-            return null;
-        }
-
-        return [
-            'id' => $user->user_id,
-            'name' => $user->full_name,
-            'email' => $user->email,
-        ];
-    }
-
-    /**
-     * Get current OIC for a department (if different from head)
-     */
-    private function getCurrentOIC($departmentId)
-    {
-        $designation = OicDesignation::where('department_id', $departmentId)
-            ->where('is_active', true)
-            ->first();
-
-        if (!$designation) {
-            return null;
-        }
-
-        // If OIC is the same as head, return null (no separate OIC)
-        if ($designation->head_of_office_id == $designation->oic_user_id) {
-            return null;
-        }
-
-        $user = User::where('user_id', $designation->oic_user_id)->first();
-        if (!$user) {
-            return null;
-        }
-
-        return [
-            'id' => $user->user_id,
-            'name' => $user->full_name,
-            'email' => $user->email,
-        ];
-    }
-
-    /**
-     * Get head status for a department
-     */
-    private function getHeadStatus($departmentId)
-    {
-        $head = $this->getCurrentHeadOfOffice($departmentId);
-        if (!$head) {
-            return 'inactive';
-        }
-
-        $user = User::where('user_id', $head['id'])->first();
-        return $user && $user->head_active_status === 'active' ? 'active' : 'inactive';
-    }
-
-
-/**
- * Get all departments for Mayor's Office 
- */
-public function getAllDepartmentsForMO(Request $request)
-{
-    try {
-        $user = $request->user();
-        
-        if (!$user->isMayorsOffice() && !$user->isSuperAdmin()) {
-            return response()->json(['message' => 'Unauthorized'], 403);
-        }
-        
-        $departments = Department::select('department_id', 'department_name', 'department_code')
-            ->orderBy('department_name')
-            ->get();
-        
-        return response()->json([
-            'success' => true,
-            'data' => $departments
-        ]);
-    } catch (\Exception $e) {
-        return response()->json([
-            'success' => false,
-            'message' => $e->getMessage()
-        ], 500);
-    }
-}
-
 }

@@ -27,44 +27,47 @@ class Notification extends Model
         'read_at' => 'datetime',
         'is_read' => 'boolean'
     ];
+
+    // ============ TO ARRAY (for broadcasting) ============
+    
+    public function toArray()
+    {
+        return [
+            'notification_id' => $this->notification_id,
+            'recipient_user_id' => $this->recipient_user_id,
+            'notification_type' => $this->notification_type,
+            'entity_type' => $this->entity_type,
+            'entity_id' => $this->entity_id,
+            'message' => $this->message,
+            'channel' => $this->channel,
+            'is_read' => $this->is_read,
+            'created_at' => $this->created_at?->toDateTimeString(),
+            'read_at' => $this->read_at?->toDateTimeString(),
+        ];
+    }
     
     // ============ SCOPES ============
     
-    /**
-     * Scope query for specific user
-     */
     public function scopeForUser($query, $userId)
     {
         return $query->where('recipient_user_id', $userId);
     }
     
-    /**
-     * Scope query for unread notifications
-     */
     public function scopeUnread($query)
     {
         return $query->where('is_read', false);
     }
     
-    /**
-     * Scope query for read notifications
-     */
     public function scopeRead($query)
     {
         return $query->where('is_read', true);
     }
     
-    /**
-     * Scope query by notification type
-     */
     public function scopeOfType($query, $type)
     {
         return $query->where('notification_type', $type);
     }
     
-    /**
-     * Scope query by entity type
-     */
     public function scopeOfEntity($query, $entityType, $entityId = null)
     {
         $query->where('entity_type', $entityType);
@@ -74,23 +77,16 @@ class Notification extends Model
         return $query;
     }
     
-    /**
-     * Scope for budget assistance requests
-     */
     public function scopeBudgetAssistance($query)
     {
         return $query->where('notification_type', 'budget_assistance_request');
     }
     
-    /**
-     * Scope for trip related notifications
-     */
     public function scopeTripRelated($query)
     {
         return $query->whereIn('notification_type', [
             'trip_submitted',
-            'head_approved',
-            'head_rejected',
+            'trip_created',
             'gso_approved',
             'gso_rejected',
             'mo_approved',
@@ -103,49 +99,32 @@ class Notification extends Model
     
     // ============ METHODS ============
     
-    /**
-     * Mark notification as read
-     */
     public function markAsRead()
     {
         $this->is_read = true;
         $this->read_at = now();
         $this->save();
-        
         return $this;
     }
     
-    /**
-     * Mark notification as unread
-     */
     public function markAsUnread()
     {
         $this->is_read = false;
         $this->read_at = null;
         $this->save();
-        
         return $this;
     }
     
-    /**
-     * Check if notification is read
-     */
     public function isRead()
     {
         return $this->is_read === true;
     }
     
-    /**
-     * Check if notification is unread
-     */
     public function isUnread()
     {
         return $this->is_read === false;
     }
     
-    /**
-     * Get formatted time ago
-     */
     public function getTimeAgoAttribute()
     {
         $now = now();
@@ -165,9 +144,6 @@ class Notification extends Model
         }
     }
     
-    /**
-     * Get short message (truncated)
-     */
     public function getShortMessageAttribute($length = 100)
     {
         if (strlen($this->message) <= $length) {
@@ -178,17 +154,11 @@ class Notification extends Model
     
     // ============ RELATIONSHIPS ============
     
-    /**
-     * Get the recipient user
-     */
     public function recipient()
     {
         return $this->belongsTo(User::class, 'recipient_user_id', 'user_id');
     }
     
-    /**
-     * Get the related entity (polymorphic-like)
-     */
     public function getEntity()
     {
         switch ($this->entity_type) {
@@ -196,60 +166,129 @@ class Notification extends Model
                 return TripTicket::find($this->entity_id);
             case 'gas_slip':
                 return GasSlip::find($this->entity_id);
-            
-            case 'oic_designation':
-                return OicDesignation::find($this->entity_id);
             case 'mo_request':
-                // This is stored in session/cache, not database
                 return null;
             default:
                 return null;
         }
     }
     
+    // ============ PUSH NOTIFICATION HELPERS ============
+    
     /**
-     * Get notification icon class
+     * Get push tokens for the recipient
      */
+    public function getRecipientPushTokens()
+    {
+        if (!$this->recipient) {
+            return collect();
+        }
+        
+        return PushToken::where('user_id', $this->recipient_user_id)
+            ->where('is_active', true)
+            ->get();
+    }
+    
+    /**
+     * Check if notification should send push
+     */
+    public function shouldSendPush()
+    {
+        // Notification types that should trigger push
+        $pushTypes = [
+            'fund_released',
+            'fund_issued',
+            'trip_assigned',
+            'trip_started',
+            'trip_completed',
+            'mo_approved',
+            'budget_low_warning',
+            'trip_created',
+            'trip_submitted',
+        ];
+        
+        return in_array($this->notification_type, $pushTypes) && 
+               ($this->channel === 'push' || $this->channel === 'both');
+    }
+    
+    /**
+     * Get push notification title based on type
+     */
+    public function getPushTitle()
+    {
+        $titles = [
+            'fund_released' => '💰 Fund Released',
+            'fund_issued' => '💰 Fund Issued',
+            'trip_assigned' => '🚗 New Trip Assigned',
+            'trip_started' => '🚗 Trip Started',
+            'trip_completed' => '✅ Trip Completed',
+            'mo_approved' => '✅ Trip Approved',
+            'mo_rejected' => '❌ Trip Rejected',
+            'budget_low_warning' => '⚠️ Budget Low',
+            'trip_created' => '📄 New Trip',
+            'trip_submitted' => '📋 Trip Submitted',
+        ];
+
+        return $titles[$this->notification_type] ?? '📨 New Notification';
+    }
+    
+    /**
+     * Get push notification data payload
+     */
+    public function getPushData()
+    {
+        return [
+            'notification_id' => $this->notification_id,
+            'type' => $this->notification_type,
+            'entity_type' => $this->entity_type,
+            'entity_id' => $this->entity_id,
+            'message' => $this->message,
+        ];
+    }
+    
+    // ============ ICON & COLOR HELPERS ============
+    
     public function getIconAttribute()
     {
         $icons = [
             'trip_submitted' => '📋',
-            'head_approved' => '✅',
-            'head_rejected' => '❌',
-            'gso_approved' => '✓',
-            'gso_rejected' => '✗',
+            'trip_created' => '📄',
+            'gso_approved' => '✅',
+            'gso_rejected' => '❌',
             'mo_approved' => '💰',
             'mo_rejected' => '🚫',
             'fund_issued' => '💵',
+            'fund_released' => '💵',
+            'trip_assigned' => '🚗',
             'trip_started' => '🚗',
             'trip_completed' => '🏁',
             'budget_low_warning' => '⚠️',
             'budget_assistance_request' => '🆘',
             'fund_return_pending' => '↩️',
+            'mo_created_ticket' => '📝',
         ];
         
         return $icons[$this->notification_type] ?? '🔔';
     }
     
-    /**
-     * Get notification color class
-     */
     public function getColorClassAttribute()
     {
         $colors = [
             'trip_submitted' => 'blue',
-            'head_approved' => 'green',
-            'head_rejected' => 'red',
+            'trip_created' => 'green',
             'gso_approved' => 'green',
             'gso_rejected' => 'red',
             'mo_approved' => 'green',
             'mo_rejected' => 'red',
             'fund_issued' => 'green',
+            'fund_released' => 'green',
+            'trip_assigned' => 'blue',
             'trip_started' => 'blue',
             'trip_completed' => 'green',
             'budget_low_warning' => 'yellow',
             'budget_assistance_request' => 'orange',
             'fund_return_pending' => 'yellow',
+            'mo_created_ticket' => 'purple',
         ];
         
         return $colors[$this->notification_type] ?? 'gray';

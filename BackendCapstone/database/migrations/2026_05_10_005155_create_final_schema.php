@@ -7,20 +7,24 @@ use Illuminate\Support\Facades\DB;
 
 return new class extends Migration
 {
-    /**
-     * Run the migrations.
-     */
-    public function up(): void
+    public function up()
     {
+        // ============================================
+        // DROP EXISTING PROCEDURE FIRST (FIX)
+        // ============================================
+        DB::unprepared('DROP PROCEDURE IF EXISTS proc_weekly_budget_reset');
+
         // ============================================
         // 1. DEPARTMENTS TABLE
         // ============================================
         Schema::create('departments', function (Blueprint $table) {
             $table->id('department_id');
-            $table->string('department_name', 150);
+            $table->string('department_name', 150)->unique();
             $table->string('department_code', 20)->unique();
             $table->boolean('is_active')->default(true);
             $table->timestamp('created_at')->useCurrent();
+            $table->timestamp('updated_at')->nullable();
+            $table->timestamp('deleted_at')->nullable();
         });
 
         // ============================================
@@ -33,21 +37,50 @@ return new class extends Migration
             $table->string('middle_name', 50)->nullable();
             $table->string('last_name', 50);
             $table->string('email', 150)->unique();
+            $table->string('employee_number', 50)->nullable()->unique();
+
             $table->string('password_hash', 255)->nullable();
-            $table->enum('role', ['superadmin', 'dept_office', 'head_of_office', 'gso_staff', 'mayors_office', 'driver']);
-            $table->enum('head_active_status', ['active', 'inactive'])->nullable();
+            $table->enum('role', [
+                'gso_office',
+                'mayors_office',
+                'staff',
+                'driver'
+            ]);
+            $table->boolean('can_drive')->default(false);
             $table->string('esignature_path', 500)->nullable();
             $table->string('esignature_hash', 64)->nullable();
             $table->enum('status', ['active', 'inactive'])->default('active');
             $table->timestamp('created_at')->useCurrent();
+            $table->timestamp('updated_at')->nullable();
             $table->timestamp('last_login_at')->nullable();
+            $table->tinyInteger('failed_login_attempts')->default(0);
+            $table->timestamp('locked_until')->nullable();
+            $table->timestamp('account_locked_until')->nullable();
+            $table->timestamp('deactivated_at')->nullable();
+            $table->foreignId('deactivated_by')->nullable()->constrained('users', 'user_id')->nullOnDelete();
+            $table->string('deactivation_reason', 255)->nullable();
+            $table->timestamp('password_changed_at')->nullable();
+
             
             $table->index('role');
             $table->index('department_id');
         });
 
         // ============================================
-        // 3. VEHICLES TABLE
+        // 3. DRIVERS TABLE
+        // ============================================
+        Schema::create('drivers', function (Blueprint $table) {
+            $table->id('driver_id');
+            $table->foreignId('user_id')->unique()->constrained('users', 'user_id');
+            $table->string('license_number', 50)->nullable();
+            $table->date('license_expiry')->nullable();
+            $table->enum('status', ['active', 'inactive'])->default('active');
+            $table->timestamp('created_at')->useCurrent();
+            $table->timestamp('updated_at')->nullable();
+        });
+
+        // ============================================
+        // 4. VEHICLES TABLE
         // ============================================
         Schema::create('vehicles', function (Blueprint $table) {
             $table->id('vehicle_id');
@@ -59,6 +92,7 @@ return new class extends Migration
             $table->enum('odometer_status', ['functional', 'non_functional'])->default('functional');
             $table->boolean('maintenance_flag')->default(false);
             $table->timestamp('created_at')->useCurrent();
+            $table->timestamp('updated_at')->nullable();
             $table->date('odometer_broken_since')->nullable();
             $table->boolean('odometer_repair_requested')->default(false);
             $table->timestamp('odometer_repair_completed_at')->nullable();
@@ -67,22 +101,13 @@ return new class extends Migration
         });
 
         // ============================================
-        // 4. DRIVERS TABLE
-        // ============================================
-        Schema::create('drivers', function (Blueprint $table) {
-            $table->id('driver_id');
-            $table->foreignId('user_id')->unique()->constrained('users', 'user_id');
-            $table->string('license_number', 50)->nullable();
-            $table->enum('status', ['active', 'inactive'])->default('active');
-            $table->timestamp('created_at')->useCurrent();
-        });
-
-        // ============================================
         // 5. DEPT BUDGET POLICY TABLE
         // ============================================
         Schema::create('dept_budget_policy', function (Blueprint $table) {
             $table->foreignId('department_id')->primary()->constrained('departments', 'department_id');
             $table->decimal('default_weekly_allocation', 12, 2)->default(0.00);
+            $table->timestamp('created_at')->useCurrent();
+            $table->timestamp('updated_at')->nullable();
         });
 
         // ============================================
@@ -96,6 +121,7 @@ return new class extends Migration
             $table->decimal('allocated_amount', 12, 2)->default(0.00);
             $table->enum('status', ['active', 'closed'])->default('active');
             $table->timestamp('created_at')->useCurrent();
+            $table->timestamp('updated_at')->nullable();
             $table->timestamp('closed_at')->nullable();
             
             $table->unique(['department_id', 'week_start']);
@@ -109,11 +135,11 @@ return new class extends Migration
             $table->id('trip_ticket_id');
             $table->string('trip_ticket_number', 20)->unique()->nullable();
             $table->foreignId('department_id')->constrained('departments', 'department_id');
-            $table->foreignId('driver_id')->constrained('drivers', 'driver_id');
-            $table->foreignId('vehicle_id')->constrained('vehicles', 'vehicle_id');
             $table->foreignId('submitted_by')->constrained('users', 'user_id');
+            $table->foreignId('driver_id')->nullable()->constrained('drivers', 'driver_id');
+            $table->foreignId('vehicle_id')->constrained('vehicles', 'vehicle_id');
             $table->foreignId('created_by_mo_user_id')->nullable()->constrained('users', 'user_id');
-            $table->boolean('submitted_by_head')->default(false);
+            $table->boolean('submitted_by_staff')->default(true);
             $table->timestamp('submitted_at')->useCurrent();
             $table->date('trip_date');
             $table->text('purpose');
@@ -121,24 +147,38 @@ return new class extends Migration
             $table->string('charge_to', 20);
             $table->string('passenger_name', 120)->nullable();
             $table->enum('status', [
-                'draft', 'pending_head_approval', 'pending_gso_review', 
-                'pending_mayors_office', 'returned_for_revision', 'funds_issued', 
-                'in_transit', 'pending_reconciliation', 'closed', 'rejected', 'cancelled'
+                'draft',
+                'pending_mayors_office',  // ✅ GSO creates directly - no GSO review
+                'returned_for_revision',
+                'funds_issued',
+                'in_transit',
+                'pending_reconciliation',
+                'closed',
+                'rejected',
+                'cancelled',
+                'acknowledged'
             ])->default('draft');
             $table->string('original_charge_to', 20)->nullable();
             $table->foreignId('charge_to_modified_by')->nullable()->constrained('users', 'user_id');
             $table->timestamp('charge_to_modified_at')->nullable();
             $table->text('charge_to_modification_reason')->nullable();
-            $table->boolean('odometer_exception')->default(false)->comment('1 = trip uses GPS distance (broken odometer)');
-            $table->text('odometer_exception_note')->nullable()->comment('Driver/GSO note about broken odometer');
+            $table->boolean('odometer_exception')->default(false);
+            $table->text('odometer_exception_note')->nullable();
             $table->foreignId('odometer_exception_approved_by')->nullable()->constrained('users', 'user_id');
             $table->timestamp('odometer_exception_approved_at')->nullable();
+            $table->timestamp('updated_at')->nullable();
+            $table->decimal('estimated_distance_km', 10, 2)->nullable();
+            $table->decimal('estimated_fuel_liters', 10, 2)->nullable();
+            $table->boolean('has_insufficient_budget')->default(false);
+            $table->decimal('budget_shortage', 12, 2)->default(0.00);
+            $table->integer('original_department_id')->nullable();
             
             $table->index('status');
             $table->index(['status', 'submitted_at'], 'idx_tt_status_date');
             $table->index('charge_to');
             $table->foreign('charge_to')->references('department_code')->on('departments');
         });
+
 
         // ============================================
         // 8. GAS SLIP TABLE
@@ -151,11 +191,18 @@ return new class extends Migration
             $table->decimal('budget_before', 12, 2);
             $table->decimal('budget_after', 12, 2);
             $table->foreignId('period_id')->constrained('dept_budget_period', 'period_id');
+            $table->enum('reconciliation_status', ['pending', 'verified', 'discrepancy'])->default('pending');
+            $table->text('reconciliation_note')->nullable();
+            $table->foreignId('reconciled_by')->nullable()->constrained('users', 'user_id');
+            $table->timestamp('reconciled_at')->nullable();
+            $table->foreignId('receipt_acknowledged_by')->nullable()->constrained('users', 'user_id');
+            $table->timestamp('receipt_acknowledged_at')->nullable();
             $table->foreignId('acknowledged_by')->nullable()->constrained('users', 'user_id');
             $table->timestamp('acknowledged_at')->nullable();
             $table->decimal('acknowledgement_gps_lat', 10, 7)->nullable();
             $table->decimal('acknowledgement_gps_lng', 10, 7)->nullable();
             $table->timestamp('created_at')->useCurrent();
+            $table->timestamp('updated_at')->nullable();
             
             $table->index('created_by');
             $table->index('acknowledged_by');
@@ -181,68 +228,13 @@ return new class extends Migration
             $table->timestamp('trip_ended_at')->nullable();
             $table->unsignedInteger('trip_elapsed_minutes')->nullable();
             $table->timestamp('created_at')->useCurrent();
+            $table->timestamp('updated_at')->nullable();
             $table->enum('distance_calculation_method', ['odometer', 'gps', 'manual_estimate'])->default('odometer');
-            $table->decimal('gps_distance_km', 8, 2)->nullable()->comment('GPS calculated distance when odometer broken');
+            $table->decimal('gps_distance_km', 8, 2)->nullable();
         });
 
         // ============================================
-        // 10. HEAD APPROVAL TABLE
-        // ============================================
-        Schema::create('head_approval', function (Blueprint $table) {
-            $table->id('approval_id');
-            $table->foreignId('trip_ticket_id')->constrained('trip_ticket', 'trip_ticket_id');
-            $table->tinyInteger('review_cycle')->unsigned()->default(1);
-            $table->foreignId('approved_by')->constrained('users', 'user_id');
-            $table->boolean('is_oic_action')->default(false);
-            $table->enum('decision', ['approved', 'rejected', 'returned']);
-            $table->text('review_note')->nullable();
-            $table->string('esignature_path', 500)->nullable();
-            $table->string('esignature_hash', 64)->nullable();
-            $table->timestamp('reviewed_at')->useCurrent();
-            
-            $table->unique(['trip_ticket_id', 'review_cycle'], 'uq_head_approval_ticket_cycle');
-            $table->index('approved_by');
-        });
-
-        // ============================================
-        // 11. GSO VERIFICATION TABLE
-        // ============================================
-        Schema::create('gso_verification', function (Blueprint $table) {
-            $table->id('verification_id');
-            $table->foreignId('trip_ticket_id')->constrained('trip_ticket', 'trip_ticket_id');
-            $table->tinyInteger('review_cycle')->unsigned()->default(1);
-            $table->foreignId('verified_by')->constrained('users', 'user_id');
-            $table->enum('decision', ['approved', 'rejected', 'returned']);
-            $table->text('verification_note')->nullable();
-            $table->string('assigned_number', 20)->nullable();
-            $table->timestamp('verified_at')->useCurrent();
-            
-            $table->unique(['trip_ticket_id', 'review_cycle'], 'uq_gso_ticket_cycle');
-            $table->index('verified_by');
-        });
-
-        // ============================================
-        // 12. OIC DESIGNATION TABLE
-        // ============================================
-        Schema::create('oic_designation', function (Blueprint $table) {
-            $table->id('designation_id');
-            $table->foreignId('department_id')->constrained('departments', 'department_id');
-            $table->foreignId('head_of_office_id')->constrained('users', 'user_id');
-            $table->foreignId('oic_user_id')->constrained('users', 'user_id');
-            $table->boolean('is_active')->default(true);
-            $table->enum('reason', ['official_meeting', 'official_travel', 'medical_leave', 'personal_emergency', 'other_official_business']);
-            $table->text('reason_details')->nullable();
-            $table->date('expected_return_date')->nullable();
-            $table->timestamp('designated_at')->useCurrent();
-            $table->timestamp('revoked_at')->nullable();
-            
-            $table->index('department_id');
-            $table->index('head_of_office_id');
-            $table->index('oic_user_id');
-        });
-
-        // ============================================
-        // 13. TRIP TICKET CANCELLATION TABLE
+        // 10. TRIP TICKET CANCELLATION TABLE
         // ============================================
         Schema::create('trip_ticket_cancellation', function (Blueprint $table) {
             $table->id('cancellation_id');
@@ -259,7 +251,7 @@ return new class extends Migration
         });
 
         // ============================================
-        // 14. TRIP VEHICLE SNAPSHOT TABLE
+        // 11. TRIP VEHICLE SNAPSHOT TABLE
         // ============================================
         Schema::create('trip_vehicle_snapshot', function (Blueprint $table) {
             $table->foreignId('trip_ticket_id')->primary()->constrained('trip_ticket', 'trip_ticket_id');
@@ -270,11 +262,66 @@ return new class extends Migration
         });
 
         // ============================================
-        // 15. AUDIT LOG TABLE
+        // 12. TRIP TICKET RETURN TABLE
+        // ============================================
+        Schema::create('trip_ticket_return', function (Blueprint $table) {
+            $table->id('return_id');
+            $table->foreignId('trip_ticket_id')->constrained('trip_ticket', 'trip_ticket_id');
+            $table->enum('return_type', [
+                'rejected_by_mo',        // ✅ Only MO returns/rejects now
+                'returned_by_mo',
+                'resubmitted_by_staff'
+            ]);
+            $table->text('return_note')->nullable();
+            $table->json('fields_changed')->nullable();
+            $table->foreignId('actioned_by')->constrained('users', 'user_id');
+            $table->timestamp('actioned_at')->useCurrent();
+        });
+
+        // ============================================
+        // 13. NOTIFICATIONS TABLE
+        // ============================================
+        Schema::create('notifications', function (Blueprint $table) {
+            $table->id('notification_id');
+            $table->foreignId('recipient_user_id')->constrained('users', 'user_id')->onDelete('cascade');
+            $table->enum('notification_type', [
+                'trip_submitted',
+                'gso_approved', 'gso_rejected',
+                'forwarded_to_mo', 'batch_forwarded_to_mo',
+                'mo_approved', 'mo_rejected',
+                'fund_issued',
+                'trip_started', 'trip_completed',
+                'reconciliation_closed',
+                'duplicate_receipt_flag',
+                'signature_integrity_violation',
+                'crud_request_submitted', 'crud_request_approved', 'crud_request_rejected',
+                'budget_low_warning', 'fund_return_pending',
+                'budget_assistance_request', 'mo_created_ticket',
+                'trip_created'  // ✅ Added for GSO created trips
+            ]);
+            $table->enum('entity_type', [
+                'trip_ticket', 'gas_slip', 'fund_issuance',
+                'department_request', 'dept_crud_request',
+                'oic_designation', 'trip_ticket_esignature',
+                'mo_request'
+            ]);
+            $table->integer('entity_id');
+            $table->string('message', 500);
+            $table->enum('channel', ['in_app', 'push'])->default('in_app');
+            $table->boolean('is_read')->default(false);
+            $table->timestamp('created_at')->useCurrent();
+            $table->timestamp('read_at')->nullable();
+            
+            $table->index(['entity_type', 'entity_id']);
+            $table->index('created_at');
+        });
+
+        // ============================================
+        // 14. AUDIT LOG TABLE
         // ============================================
         Schema::create('audit_log', function (Blueprint $table) {
             $table->id('log_id');
-            $table->foreignId('user_id')->nullable()->constrained('users', 'user_id');
+            $table->foreignId('user_id')->nullable()->constrained('users', 'user_id')->nullOnDelete();
             $table->string('action', 50);
             $table->string('table_name', 50);
             $table->unsignedInteger('record_id');
@@ -287,10 +334,48 @@ return new class extends Migration
         });
 
         // ============================================
-        // CREATE TRIGGERS
+        // 15. SYSTEM SETTINGS TABLE
         // ============================================
-        
-        // Trigger: trg_trip_odometer_check (BEFORE INSERT on trip_ticket)
+        Schema::create('system_setting', function (Blueprint $table) {
+            $table->increments('setting_id');
+            $table->string('setting_key', 80)->unique();
+            $table->text('setting_value');
+            $table->foreignId('updated_by')->nullable()->constrained('users', 'user_id')->nullOnDelete();
+            $table->timestamp('updated_at')->nullable();
+        });
+
+        // ============================================
+        // 16. FILE STORAGE TABLE
+        // ============================================
+        Schema::create('file_storage', function (Blueprint $table) {
+            $table->id('file_id');
+            $table->char('file_uuid', 36);
+            $table->string('original_filename', 255);
+            $table->string('stored_filename', 255);
+            $table->string('mime_type', 100);
+            $table->bigInteger('file_size');
+            $table->string('file_hash', 64);
+            $table->string('storage_path_hash', 64);
+            $table->string('encryption_key_id', 50)->nullable();
+            $table->foreignId('uploaded_by')->constrained('users', 'user_id');
+            $table->timestamp('uploaded_at')->useCurrent();
+            $table->boolean('is_malware_scanned')->default(false);
+            $table->boolean('is_quarantined')->default(false);
+            $table->integer('accessed_count')->default(0);
+            $table->timestamp('last_accessed_at')->nullable();
+            $table->date('retention_until')->nullable();
+            $table->boolean('is_deleted')->default(false);
+            $table->timestamp('deleted_at')->nullable();
+            $table->foreignId('deleted_by')->nullable()->constrained('users', 'user_id')->nullOnDelete();
+        });
+
+        // ============================================
+     
+
+        // ============================================
+        // TRIGGERS (No GSO Verification Triggers)
+        // ============================================
+
         DB::unprepared("
             CREATE TRIGGER trg_trip_odometer_check BEFORE INSERT ON trip_ticket
             FOR EACH ROW
@@ -310,7 +395,6 @@ return new class extends Migration
             END
         ");
 
-        // Trigger: trg_log_charge_to_change (BEFORE UPDATE on trip_ticket)
         DB::unprepared("
             CREATE TRIGGER trg_log_charge_to_change BEFORE UPDATE ON trip_ticket
             FOR EACH ROW
@@ -323,22 +407,20 @@ return new class extends Migration
             END
         ");
 
-        // Trigger: trg_gso_approve_odometer_exception (BEFORE UPDATE on trip_ticket)
+        // ❌ REMOVED: trg_gso_approve_odometer_exception (GSO no longer approves)
+
         DB::unprepared("
-            CREATE TRIGGER trg_gso_approve_odometer_exception BEFORE UPDATE ON trip_ticket
+            CREATE TRIGGER trg_fuel_receipt_validation BEFORE UPDATE ON fuel_log
             FOR EACH ROW
             BEGIN
-                IF NEW.status = 'pending_mayors_office' 
-                   AND OLD.status = 'pending_gso_review'
-                   AND NEW.odometer_exception = 1
-                   AND NEW.odometer_exception_approved_by IS NULL THEN
-                    
-                    SET NEW.odometer_exception_approved_at = NOW();
+                IF (NEW.liters_availed > 0 OR NEW.amount_on_receipt > 0) 
+                   AND (NEW.receipt_photo_path IS NULL OR NEW.receipt_photo_path = '') THEN
+                    SIGNAL SQLSTATE '45000'
+                    SET MESSAGE_TEXT = 'Receipt photo required when fuel amount is recorded';
                 END IF;
             END
         ");
 
-        // Trigger: trg_fuel_require_distance (BEFORE UPDATE on fuel_log)
         DB::unprepared("
             CREATE TRIGGER trg_fuel_require_distance BEFORE UPDATE ON fuel_log
             FOR EACH ROW
@@ -373,20 +455,6 @@ return new class extends Migration
             END
         ");
 
-        // Trigger: trg_fuel_receipt_validation (BEFORE UPDATE on fuel_log)
-        DB::unprepared("
-            CREATE TRIGGER trg_fuel_receipt_validation BEFORE UPDATE ON fuel_log
-            FOR EACH ROW
-            BEGIN
-                IF (NEW.liters_availed > 0 OR NEW.amount_on_receipt > 0) 
-                   AND (NEW.receipt_photo_path IS NULL OR NEW.receipt_photo_path = '') THEN
-                    SIGNAL SQLSTATE '45000'
-                    SET MESSAGE_TEXT = 'Receipt photo required when fuel amount is recorded';
-                END IF;
-            END
-        ");
-
-        // Trigger: trg_gas_slip_budget_immutable (BEFORE UPDATE on gas_slip)
         DB::unprepared("
             CREATE TRIGGER trg_gas_slip_budget_immutable BEFORE UPDATE ON gas_slip
             FOR EACH ROW
@@ -398,139 +466,13 @@ return new class extends Migration
             END
         ");
 
-        // Trigger: trg_head_no_self_approve (BEFORE INSERT on head_approval)
-        DB::unprepared("
-            CREATE TRIGGER trg_head_no_self_approve BEFORE INSERT ON head_approval
-            FOR EACH ROW
-            BEGIN
-                DECLARE v_sub INT UNSIGNED;
-                SELECT submitted_by INTO v_sub FROM trip_ticket WHERE trip_ticket_id = NEW.trip_ticket_id;
-                IF NEW.approved_by = v_sub THEN
-                    SIGNAL SQLSTATE '45000'
-                    SET MESSAGE_TEXT = 'Head of Office cannot approve a ticket they personally submitted.';
-                END IF;
-            END
-        ");
-
-        // Trigger: trg_head_approval_check_active (BEFORE INSERT on head_approval)
-        DB::unprepared("
-            CREATE TRIGGER trg_head_approval_check_active BEFORE INSERT ON head_approval
-            FOR EACH ROW
-            BEGIN
-                DECLARE v_head_status VARCHAR(20);
-                DECLARE v_is_oic_active INT;
-                
-                SELECT head_active_status INTO v_head_status
-                FROM users WHERE user_id = NEW.approved_by;
-                
-                IF NEW.is_oic_action = 0 AND v_head_status = 'inactive' THEN
-                    SIGNAL SQLSTATE '45000'
-                    SET MESSAGE_TEXT = 'Head of Office is inactive (OIC delegated). Only OIC can approve tickets.';
-                END IF;
-            END
-        ");
-
-        // Trigger: trg_head_note_required (BEFORE INSERT on head_approval)
-        DB::unprepared("
-            CREATE TRIGGER trg_head_note_required BEFORE INSERT ON head_approval
-            FOR EACH ROW
-            BEGIN
-                IF NEW.decision = 'rejected' AND (NEW.review_note IS NULL OR TRIM(NEW.review_note)='') THEN
-                    SIGNAL SQLSTATE '45000'
-                    SET MESSAGE_TEXT = 'review_note is mandatory when rejecting at head approval stage.';
-                END IF;
-            END
-        ");
-
-        // Trigger: trg_gso_no_self_verify (BEFORE INSERT on gso_verification)
-        DB::unprepared("
-            CREATE TRIGGER trg_gso_no_self_verify BEFORE INSERT ON gso_verification
-            FOR EACH ROW
-            BEGIN
-                DECLARE v_sub INT UNSIGNED;
-                SELECT submitted_by INTO v_sub FROM trip_ticket WHERE trip_ticket_id = NEW.trip_ticket_id;
-                IF NEW.verified_by = v_sub THEN
-                    SIGNAL SQLSTATE '45000'
-                    SET MESSAGE_TEXT = 'GSO staff cannot verify a ticket they personally submitted.';
-                END IF;
-            END
-        ");
-
-        // Trigger: trg_gso_note_required (BEFORE INSERT on gso_verification)
-        DB::unprepared("
-            CREATE TRIGGER trg_gso_note_required BEFORE INSERT ON gso_verification
-            FOR EACH ROW
-            BEGIN
-                IF NEW.decision = 'rejected' AND (NEW.verification_note IS NULL OR TRIM(NEW.verification_note)='') THEN
-                    SIGNAL SQLSTATE '45000'
-                    SET MESSAGE_TEXT = 'verification_note is mandatory when rejecting at GSO stage.';
-                END IF;
-            END
-        ");
-
-        // Trigger: trg_oic_one_active_per_dept (BEFORE INSERT on oic_designation)
-        DB::unprepared("
-            CREATE TRIGGER trg_oic_one_active_per_dept BEFORE INSERT ON oic_designation
-            FOR EACH ROW
-            BEGIN
-                IF NEW.is_active = 1 AND EXISTS (
-                    SELECT 1 FROM oic_designation
-                    WHERE department_id = NEW.department_id AND is_active = 1
-                ) THEN
-                    SIGNAL SQLSTATE '45000'
-                    SET MESSAGE_TEXT = 'Department already has an active OIC. Revoke the current OIC first.';
-                END IF;
-                IF NEW.oic_user_id = NEW.head_of_office_id THEN
-                    SIGNAL SQLSTATE '45000'
-                    SET MESSAGE_TEXT = 'The Head of Office cannot designate themselves as OIC.';
-                END IF;
-            END
-        ");
-
-        // Trigger: trg_oic_require_esignature (BEFORE INSERT on oic_designation)
-        DB::unprepared("
-            CREATE TRIGGER trg_oic_require_esignature BEFORE INSERT ON oic_designation
-            FOR EACH ROW
-            BEGIN
-                DECLARE v_has_esignature INT;
-                
-                SELECT COUNT(*) INTO v_has_esignature
-                FROM users 
-                WHERE user_id = NEW.oic_user_id 
-                    AND esignature_path IS NOT NULL 
-                    AND esignature_path != '';
-                
-                IF v_has_esignature = 0 THEN
-                    SIGNAL SQLSTATE '45000'
-                    SET MESSAGE_TEXT = 'Designated OIC must have an enrolled e-signature before assuming duties';
-                END IF;
-            END
-        ");
-
-        // Trigger: trg_oic_same_department (BEFORE INSERT on oic_designation)
-        DB::unprepared("
-            CREATE TRIGGER trg_oic_same_department BEFORE INSERT ON oic_designation
-            FOR EACH ROW
-            BEGIN
-                DECLARE v_oic_dept INT;
-                DECLARE v_head_dept INT;
-                
-                SELECT department_id INTO v_oic_dept
-                FROM users WHERE user_id = NEW.oic_user_id;
-                
-                SELECT department_id INTO v_head_dept
-                FROM users WHERE user_id = NEW.head_of_office_id;
-                
-                IF v_oic_dept != v_head_dept THEN
-                    SIGNAL SQLSTATE '45000'
-                    SET MESSAGE_TEXT = 'OIC must belong to the same department as the Head of Office';
-                END IF;
-            END
-        ");
+        // ❌ REMOVED: trg_gso_no_self_verify (no gso_verification table)
+        // ❌ REMOVED: trg_gso_note_required (no gso_verification table)
 
         // ============================================
-        // CREATE STORED PROCEDURE
+        // STORED PROCEDURE
         // ============================================
+
         DB::unprepared("
             CREATE PROCEDURE proc_weekly_budget_reset()
             BEGIN
@@ -563,24 +505,22 @@ return new class extends Migration
         ");
 
         // ============================================
-        // CREATE EVENTS
+        // EVENTS
         // ============================================
-        
-        // Event: evt_weekly_budget_reset
+
         DB::unprepared("
             CREATE EVENT evt_weekly_budget_reset
             ON SCHEDULE EVERY 1 WEEK
-            STARTS '2026-05-11 00:00:00'
+            STARTS '2026-06-21 00:00:00'
             ON COMPLETION PRESERVE
             ENABLE
             DO CALL proc_weekly_budget_reset()
         ");
 
-        // Event: evt_escalate_broken_odometer
         DB::unprepared("
             CREATE EVENT evt_escalate_broken_odometer
             ON SCHEDULE EVERY 1 DAY
-            STARTS '2026-05-10 06:03:18'
+            STARTS '2026-06-21 06:00:00'
             ON COMPLETION NOT PRESERVE
             ENABLE
             DO
@@ -594,75 +534,235 @@ return new class extends Migration
             END
         ");
 
-        // Event: evt_auto_revoke_oic
-        DB::unprepared("
-            CREATE EVENT evt_auto_revoke_oic
-            ON SCHEDULE EVERY 1 DAY
-            STARTS '2026-05-10 06:06:55'
-            ON COMPLETION NOT PRESERVE
-            ENABLE
-            DO
-            BEGIN
-                UPDATE oic_designation 
-                SET is_active = 0, 
-                    revoked_at = NOW()
-                WHERE is_active = 1 
-                    AND expected_return_date IS NOT NULL 
-                    AND expected_return_date < CURDATE();
-            END
+        // ============================================
+        // VIEWS
+        // ============================================
+
+        DB::statement("
+            CREATE VIEW v_remaining_budget AS
+            SELECT 
+                p.period_id,
+                p.department_id,
+                d.department_name,
+                d.department_code,
+                p.week_start,
+                p.week_end,
+                p.allocated_amount,
+                COALESCE(SUM(gs.amount_released), 0) AS total_spent_amount,
+                (p.allocated_amount - COALESCE(SUM(gs.amount_released), 0)) AS remaining_amount,
+                ROUND(((COALESCE(SUM(gs.amount_released), 0) / NULLIF(p.allocated_amount, 0)) * 100), 2) AS utilization_percentage,
+                CASE WHEN COALESCE(SUM(gs.amount_released), 0) > p.allocated_amount THEN 1 ELSE 0 END AS is_over_budget,
+                CASE WHEN (((p.allocated_amount - COALESCE(SUM(gs.amount_released), 0)) / NULLIF(p.allocated_amount, 0)) * 100) < 10 THEN 1 ELSE 0 END AS is_critical_low_warning,
+                CASE WHEN (((p.allocated_amount - COALESCE(SUM(gs.amount_released), 0)) / NULLIF(p.allocated_amount, 0)) * 100) < 20 THEN 1 ELSE 0 END AS is_low_warning,
+                p.status,
+                p.created_at,
+                p.closed_at,
+                (TO_DAYS(p.week_end) - TO_DAYS(CURDATE())) AS days_remaining_in_period,
+                ROUND((COALESCE(SUM(gs.amount_released), 0) / NULLIF((TO_DAYS(CURDATE()) - TO_DAYS(p.week_start)), 0)), 2) AS avg_daily_spend,
+                ROUND(((COALESCE(SUM(gs.amount_released), 0) / NULLIF((TO_DAYS(CURDATE()) - TO_DAYS(p.week_start)), 0)) * 7), 2) AS projected_week_total
+            FROM dept_budget_period p
+            JOIN departments d ON d.department_id = p.department_id
+            LEFT JOIN gas_slip gs ON gs.period_id = p.period_id
+            GROUP BY p.period_id, p.department_id, d.department_name, d.department_code,
+                     p.week_start, p.week_end, p.allocated_amount, p.status, p.created_at, p.closed_at
+        ");
+
+        DB::statement("
+            CREATE VIEW v_active_trips AS
+            SELECT 
+                tt.trip_ticket_id,
+                tt.trip_ticket_number,
+                d.department_name,
+                CONCAT(u.first_name, ' ', u.last_name) AS driver_name,
+                v.vehicle_model,
+                v.plate_number,
+                tt.destination,
+                tt.purpose,
+                tt.trip_date,
+                tt.submitted_at,
+                TIMESTAMPDIFF(HOUR, tt.submitted_at, NOW()) AS hours_in_status,
+                fl.trip_started_at,
+                fl.trip_ended_at,
+                CASE 
+                    WHEN fl.trip_started_at IS NOT NULL AND fl.trip_ended_at IS NULL THEN 'In Transit'
+                    WHEN fl.trip_started_at IS NULL THEN 'Not Started'
+                    ELSE 'Completed'
+                END AS trip_progress
+            FROM trip_ticket tt
+            JOIN departments d ON tt.department_id = d.department_id
+            JOIN drivers dr ON tt.driver_id = dr.driver_id
+            JOIN users u ON dr.user_id = u.user_id
+            JOIN vehicles v ON tt.vehicle_id = v.vehicle_id
+            LEFT JOIN gas_slip gs ON tt.trip_ticket_id = gs.trip_ticket_id
+            LEFT JOIN fuel_log fl ON gs.gas_slip_id = fl.gas_slip_id
+            WHERE tt.status IN ('in_transit', 'funds_issued', 'pending_reconciliation')
+            ORDER BY tt.submitted_at DESC
+        ");
+
+        DB::statement("
+            CREATE VIEW v_department_budget_summary AS
+            SELECT 
+                d.department_id,
+                d.department_name,
+                d.department_code,
+                COUNT(p.period_id) AS total_periods,
+                SUM(p.allocated_amount) AS total_allocated,
+                SUM(COALESCE(gs.amount_released, 0)) AS total_spent,
+                (SUM(p.allocated_amount) - SUM(COALESCE(gs.amount_released, 0))) AS total_remaining,
+                MAX(CASE WHEN p.status = 'active' THEN p.allocated_amount ELSE 0 END) AS current_weekly_budget,
+                MAX(CASE WHEN p.status = 'active' THEN p.week_start ELSE NULL END) AS current_week_start,
+                MAX(CASE WHEN p.status = 'active' THEN p.week_end ELSE NULL END) AS current_week_end
+            FROM departments d
+            LEFT JOIN dept_budget_period p ON d.department_id = p.department_id
+            LEFT JOIN gas_slip gs ON p.period_id = gs.period_id
+            WHERE d.is_active = 1
+            GROUP BY d.department_id, d.department_name, d.department_code
+        ");
+
+        DB::statement("
+            CREATE VIEW v_fuel_efficiency AS
+            SELECT 
+                v.vehicle_id,
+                v.vehicle_model,
+                v.plate_number,
+                v.fuel_type,
+                d.department_name AS owner_department,
+                COUNT(DISTINCT tt.trip_ticket_id) AS total_trips,
+                COUNT(fl.fuel_log_id) AS trips_with_fuel_data,
+                ROUND(SUM(fl.liters_availed), 2) AS total_liters,
+                ROUND(AVG(fl.liters_availed), 2) AS avg_liters_per_trip,
+                ROUND(SUM(fl.amount_on_receipt), 2) AS total_fuel_cost,
+                ROUND(SUM(
+                    CASE 
+                        WHEN v.odometer_status = 'functional' AND tt.odometer_exception = 0 THEN (fl.odometer_end - fl.odometer_start)
+                        WHEN tt.odometer_exception = 1 AND fl.gps_distance_km IS NOT NULL THEN fl.gps_distance_km
+                        WHEN fl.odometer_end IS NOT NULL AND fl.odometer_start IS NOT NULL THEN (fl.odometer_end - fl.odometer_start)
+                        ELSE 0
+                    END
+                ), 2) AS total_km,
+                ROUND(AVG(
+                    CASE 
+                        WHEN v.odometer_status = 'functional' AND tt.odometer_exception = 0 THEN (fl.odometer_end - fl.odometer_start)
+                        WHEN tt.odometer_exception = 1 AND fl.gps_distance_km IS NOT NULL THEN fl.gps_distance_km
+                        WHEN fl.odometer_end IS NOT NULL AND fl.odometer_start IS NOT NULL THEN (fl.odometer_end - fl.odometer_start)
+                        ELSE NULL
+                    END
+                ), 2) AS avg_km_per_trip,
+                ROUND(SUM(
+                    CASE 
+                        WHEN v.odometer_status = 'functional' AND tt.odometer_exception = 0 THEN (fl.odometer_end - fl.odometer_start)
+                        WHEN tt.odometer_exception = 1 AND fl.gps_distance_km IS NOT NULL THEN fl.gps_distance_km
+                        WHEN fl.odometer_end IS NOT NULL AND fl.odometer_start IS NOT NULL THEN (fl.odometer_end - fl.odometer_start)
+                        ELSE 0
+                    END
+                ) / NULLIF(SUM(fl.liters_availed), 0), 2) AS km_per_liter,
+                ROUND(((SUM(fl.liters_availed) / NULLIF(SUM(
+                    CASE 
+                        WHEN v.odometer_status = 'functional' AND tt.odometer_exception = 0 THEN (fl.odometer_end - fl.odometer_start)
+                        WHEN tt.odometer_exception = 1 AND fl.gps_distance_km IS NOT NULL THEN fl.gps_distance_km
+                        WHEN fl.odometer_end IS NOT NULL AND fl.odometer_start IS NOT NULL THEN (fl.odometer_end - fl.odometer_start)
+                        ELSE 0
+                    END
+                ), 0)) * 100), 2) AS liters_per_100km,
+                ROUND(SUM(fl.amount_on_receipt) / NULLIF(SUM(
+                    CASE 
+                        WHEN v.odometer_status = 'functional' AND tt.odometer_exception = 0 THEN (fl.odometer_end - fl.odometer_start)
+                        WHEN tt.odometer_exception = 1 AND fl.gps_distance_km IS NOT NULL THEN fl.gps_distance_km
+                        WHEN fl.odometer_end IS NOT NULL AND fl.odometer_start IS NOT NULL THEN (fl.odometer_end - fl.odometer_start)
+                        ELSE 0
+                    END
+                ), 0), 2) AS peso_per_km,
+                CASE 
+                    WHEN COUNT(CASE WHEN tt.odometer_exception = 1 THEN 1 END) > 0 THEN 'Includes GPS/Manual distance data'
+                    ELSE 'All odometer-based'
+                END AS distance_data_source,
+                CASE 
+                    WHEN ROUND(SUM(
+                        CASE 
+                            WHEN v.odometer_status = 'functional' AND tt.odometer_exception = 0 THEN (fl.odometer_end - fl.odometer_start)
+                            WHEN tt.odometer_exception = 1 AND fl.gps_distance_km IS NOT NULL THEN fl.gps_distance_km
+                            ELSE 0
+                        END
+                    ) / NULLIF(SUM(fl.liters_availed), 0), 2) >= 10 THEN 'Excellent'
+                    WHEN ROUND(SUM(
+                        CASE 
+                            WHEN v.odometer_status = 'functional' AND tt.odometer_exception = 0 THEN (fl.odometer_end - fl.odometer_start)
+                            WHEN tt.odometer_exception = 1 AND fl.gps_distance_km IS NOT NULL THEN fl.gps_distance_km
+                            ELSE 0
+                        END
+                    ) / NULLIF(SUM(fl.liters_availed), 0), 2) >= 7 THEN 'Good'
+                    WHEN ROUND(SUM(
+                        CASE 
+                            WHEN v.odometer_status = 'functional' AND tt.odometer_exception = 0 THEN (fl.odometer_end - fl.odometer_start)
+                            WHEN tt.odometer_exception = 1 AND fl.gps_distance_km IS NOT NULL THEN fl.gps_distance_km
+                            ELSE 0
+                        END
+                    ) / NULLIF(SUM(fl.liters_availed), 0), 2) >= 5 THEN 'Average'
+                    WHEN ROUND(SUM(
+                        CASE 
+                            WHEN v.odometer_status = 'functional' AND tt.odometer_exception = 0 THEN (fl.odometer_end - fl.odometer_start)
+                            WHEN tt.odometer_exception = 1 AND fl.gps_distance_km IS NOT NULL THEN fl.gps_distance_km
+                            ELSE 0
+                        END
+                    ) / NULLIF(SUM(fl.liters_availed), 0), 2) >= 3 THEN 'Poor'
+                    ELSE 'Critical - Needs Maintenance'
+                END AS efficiency_rating,
+                MIN(fl.trip_started_at) AS first_trip_recorded,
+                MAX(fl.trip_ended_at) AS last_trip_recorded
+            FROM vehicles v
+            JOIN departments d ON v.department_id = d.department_id
+            LEFT JOIN trip_ticket tt ON v.vehicle_id = tt.vehicle_id
+            LEFT JOIN gas_slip gs ON tt.trip_ticket_id = gs.trip_ticket_id
+            LEFT JOIN fuel_log fl ON gs.gas_slip_id = fl.gas_slip_id
+            WHERE v.status = 'active' AND fl.liters_availed > 0
+            GROUP BY v.vehicle_id, v.vehicle_model, v.plate_number, v.fuel_type, d.department_name
         ");
     }
 
-    /**
-     * Reverse the migrations.
-     */
-    public function down(): void
+    public function down()
     {
-        // Disable foreign key checks
         DB::statement('SET FOREIGN_KEY_CHECKS=0');
-        
+
+        // Drop views
+        DB::statement('DROP VIEW IF EXISTS v_remaining_budget');
+        DB::statement('DROP VIEW IF EXISTS v_active_trips');
+        DB::statement('DROP VIEW IF EXISTS v_department_budget_summary');
+        DB::statement('DROP VIEW IF EXISTS v_fuel_efficiency');
+
         // Drop events
         DB::unprepared('DROP EVENT IF EXISTS evt_weekly_budget_reset');
         DB::unprepared('DROP EVENT IF EXISTS evt_escalate_broken_odometer');
-        DB::unprepared('DROP EVENT IF EXISTS evt_auto_revoke_oic');
-        
-        // Drop stored procedure
+
+        // Drop procedure
         DB::unprepared('DROP PROCEDURE IF EXISTS proc_weekly_budget_reset');
-        
+
         // Drop triggers
         DB::unprepared('DROP TRIGGER IF EXISTS trg_trip_odometer_check');
         DB::unprepared('DROP TRIGGER IF EXISTS trg_log_charge_to_change');
-        DB::unprepared('DROP TRIGGER IF EXISTS trg_gso_approve_odometer_exception');
-        DB::unprepared('DROP TRIGGER IF EXISTS trg_fuel_require_distance');
         DB::unprepared('DROP TRIGGER IF EXISTS trg_fuel_receipt_validation');
+        DB::unprepared('DROP TRIGGER IF EXISTS trg_fuel_require_distance');
         DB::unprepared('DROP TRIGGER IF EXISTS trg_gas_slip_budget_immutable');
-        DB::unprepared('DROP TRIGGER IF EXISTS trg_head_no_self_approve');
-        DB::unprepared('DROP TRIGGER IF EXISTS trg_head_approval_check_active');
-        DB::unprepared('DROP TRIGGER IF EXISTS trg_head_note_required');
-        DB::unprepared('DROP TRIGGER IF EXISTS trg_gso_no_self_verify');
-        DB::unprepared('DROP TRIGGER IF EXISTS trg_gso_note_required');
-        DB::unprepared('DROP TRIGGER IF EXISTS trg_oic_one_active_per_dept');
-        DB::unprepared('DROP TRIGGER IF EXISTS trg_oic_require_esignature');
-        DB::unprepared('DROP TRIGGER IF EXISTS trg_oic_same_department');
-        
-        // Drop tables in reverse order (respecting foreign keys)
+        // ❌ REMOVED GSO triggers
+
+        // Drop tables
+        Schema::dropIfExists('file_storage');
+        Schema::dropIfExists('system_setting');
         Schema::dropIfExists('audit_log');
+        Schema::dropIfExists('notifications');
         Schema::dropIfExists('trip_vehicle_snapshot');
+        Schema::dropIfExists('trip_ticket_return');
         Schema::dropIfExists('trip_ticket_cancellation');
-        Schema::dropIfExists('oic_designation');
-        Schema::dropIfExists('gso_verification');
-        Schema::dropIfExists('head_approval');
         Schema::dropIfExists('fuel_log');
         Schema::dropIfExists('gas_slip');
+        // ❌ REMOVED: gso_verification
         Schema::dropIfExists('trip_ticket');
         Schema::dropIfExists('dept_budget_period');
         Schema::dropIfExists('dept_budget_policy');
-        Schema::dropIfExists('drivers');
         Schema::dropIfExists('vehicles');
+        Schema::dropIfExists('drivers');
         Schema::dropIfExists('users');
         Schema::dropIfExists('departments');
-        
-        // Re-enable foreign key checks
+
         DB::statement('SET FOREIGN_KEY_CHECKS=1');
     }
 };

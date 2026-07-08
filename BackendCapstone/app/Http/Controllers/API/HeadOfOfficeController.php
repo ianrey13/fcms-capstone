@@ -11,6 +11,9 @@ use App\Models\OicDesignation;
 use App\Models\Notification;
 use App\Models\Vehicle;
 use App\Models\Driver;
+use App\Models\DeptBudgetPeriod;
+use App\Models\GasSlip;
+
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -25,16 +28,39 @@ class HeadOfOfficeController extends Controller
     public function getDashboard(Request $request)
     {
         $user = $request->user();
-        
+
         if (!$user->isDeptHead() && !$user->isOIC()) {
             return response()->json(['message' => 'Unauthorized'], 403);
         }
-        
+
         $department = $user->getManagedDepartment();
         if (!$department) {
             return response()->json(['message' => 'No department managed'], 404);
         }
-        
+
+        // ✅ ADD BUDGET INFORMATION
+        $budgetInfo = [
+            'remaining' => 0,
+            'allocated' => 0,
+            'utilization' => 0,
+        ];
+
+        $currentPeriod = DeptBudgetPeriod::where('department_id', $department->department_id)
+            ->where('status', 'active')
+            ->first();
+
+        if ($currentPeriod) {
+            $totalSpent = GasSlip::where('period_id', $currentPeriod->period_id)
+                ->whereNotNull('acknowledged_at')
+                ->sum('amount_released');
+
+            $budgetInfo['allocated'] = $currentPeriod->allocated_amount;
+            $budgetInfo['remaining'] = $currentPeriod->allocated_amount - $totalSpent;
+            $budgetInfo['utilization'] = $currentPeriod->allocated_amount > 0
+                ? round(($totalSpent / $currentPeriod->allocated_amount) * 100, 1)
+                : 0;
+        }
+
         $stats = [
             'pending_approval' => TripTicket::where('department_id', $department->department_id)
                 ->where('status', TripTicket::STATUS_PENDING_HEAD_APPROVAL)
@@ -56,8 +82,12 @@ class HeadOfOfficeController extends Controller
                 ->where('status', TripTicket::STATUS_PENDING_HEAD_APPROVAL)
                 ->where('has_insufficient_budget', true)
                 ->count(),
+
+            'department_budget' => max(0, $budgetInfo['remaining']),
+            'budget_allocated' => $budgetInfo['allocated'],
+            'budget_utilization' => $budgetInfo['utilization'],
         ];
-        
+
         // Get recent pending tickets with driver info and budget warning
         $recentTickets = TripTicket::with(['vehicle', 'driver.user', 'submittedBy'])
             ->where('department_id', $department->department_id)
@@ -65,13 +95,13 @@ class HeadOfOfficeController extends Controller
             ->orderBy('submitted_at', 'desc')
             ->limit(5)
             ->get()
-            ->map(function($ticket) {
+            ->map(function ($ticket) {
                 $driverName = null;
                 if ($ticket->driver && $ticket->driver->user) {
                     $user = $ticket->driver->user;
                     $driverName = trim(($user->first_name ?? '') . ' ' . ($user->last_name ?? ''));
                 }
-                
+
                 return [
                     'id' => $ticket->trip_ticket_id,
                     'ticket_number' => $ticket->trip_ticket_number,
@@ -82,7 +112,7 @@ class HeadOfOfficeController extends Controller
                     'budget_shortage' => $ticket->budget_shortage,
                 ];
             });
-        
+
         return response()->json([
             'success' => true,
             'department' => [
@@ -95,59 +125,59 @@ class HeadOfOfficeController extends Controller
             'is_oic' => $user->isOIC(),
             'head_status' => $this->getHeadStatus($department->department_id),
         ]);
-    }    
+    }
     /**
      * Get pending trip tickets for Head approval - WITH BUDGET WARNING
      */
     public function getPendingTickets(Request $request)
     {
         $user = $request->user();
-        
+
         // Check if user is Department Head or OIC
         if (!$user->isDeptHead() && !$user->isOIC()) {
             return response()->json(['message' => 'Unauthorized'], 403);
         }
-        
+
         // Get department where user is Head or OIC
         $department = $user->getManagedDepartment();
         if (!$department) {
             return response()->json(['message' => 'No department managed'], 404);
         }
-        
+
         $pendingTickets = TripTicket::with(['vehicle', 'submittedBy', 'driver.user'])
             ->where('department_id', $department->department_id)
             ->where('status', TripTicket::STATUS_PENDING_HEAD_APPROVAL)
             ->orderBy('submitted_at', 'asc')
             ->get()
-            ->map(function($ticket) {
+            ->map(function ($ticket) {
                 // Build driver full name
                 $driverName = null;
                 if ($ticket->driver && $ticket->driver->user) {
                     $user = $ticket->driver->user;
                     $driverName = trim(
-                        ($user->first_name ?? '') . ' ' . 
-                        ($user->middle_name ? $user->middle_name . ' ' : '') . 
-                        ($user->last_name ?? '')
+                        ($user->first_name ?? '') . ' ' .
+                            ($user->middle_name ? $user->middle_name . ' ' : '') .
+                            ($user->last_name ?? '')
                     );
                     if (empty($driverName)) {
                         $driverName = $user->email ?? 'Unknown';
                     }
                 }
-                
+
                 // Build requester full name
                 $requesterName = null;
                 if ($ticket->submittedBy) {
                     $requester = $ticket->submittedBy;
                     $requesterName = trim(
-                        ($requester->first_name ?? '') . ' ' . 
-                        ($requester->middle_name ? $requester->middle_name . ' ' : '') . 
-                        ($requester->last_name ?? '')
+                        ($requester->first_name ?? '') . ' ' .
+                            ($requester->middle_name ? $requester->middle_name . ' ' : '') .
+                            ($requester->last_name ?? '')
                     );
                     if (empty($requesterName)) {
                         $requesterName = $requester->email ?? 'Unknown';
                     }
                 }
-                
+
                 return [
                     'id' => $ticket->trip_ticket_id,
                     'ticket_number' => $ticket->trip_ticket_number,
@@ -169,7 +199,7 @@ class HeadOfOfficeController extends Controller
                     'requester' => $requesterName ? ['full_name' => $requesterName] : null,
                 ];
             });
-        
+
         return response()->json([
             'success' => true,
             'department' => [
@@ -181,8 +211,8 @@ class HeadOfOfficeController extends Controller
             'tickets' => $pendingTickets
         ]);
     }
-    
- 
+
+
     /**
      * Approve a trip ticket
      */
@@ -191,36 +221,36 @@ class HeadOfOfficeController extends Controller
         $validator = Validator::make($request->all(), [
             'note' => 'nullable|string|max:500'
         ]);
-        
+
         if ($validator->fails()) {
             return response()->json(['errors' => $validator->errors()], 422);
         }
-        
+
         $user = $request->user();
-        
+
         if (!$user->canApproveDepartmentTickets()) {
             return response()->json(['message' => 'Unauthorized'], 403);
         }
-        
+
         $tripTicket = TripTicket::where('trip_ticket_id', $id)
             ->where('status', TripTicket::STATUS_PENDING_HEAD_APPROVAL)
             ->first();
-        
+
         if (!$tripTicket) {
             return response()->json(['message' => 'Trip ticket not found or already processed'], 404);
         }
-        
+
         $department = $user->getManagedDepartment();
         if (!$department || $tripTicket->department_id !== $department->department_id) {
             return response()->json(['message' => 'Unauthorized - not your department'], 403);
         }
-        
+
         DB::beginTransaction();
-        
+
         try {
             $lastCycle = HeadApproval::where('trip_ticket_id', $id)->max('review_cycle') ?? 0;
             $reviewCycle = $lastCycle + 1;
-            
+
             $headApproval = HeadApproval::create([
                 'trip_ticket_id' => $id,
                 'review_cycle' => $reviewCycle,
@@ -230,14 +260,14 @@ class HeadOfOfficeController extends Controller
                 'review_note' => $request->note,
                 'reviewed_at' => now(),
             ]);
-            
+
             $tripTicket->status = TripTicket::STATUS_PENDING_GSO_REVIEW;
             $tripTicket->save();
-            
+
             DB::commit();
-            
+
             $this->sendGsoNotification($tripTicket);
-            
+
             return response()->json([
                 'success' => true,
                 'message' => 'Trip ticket approved successfully',
@@ -248,7 +278,6 @@ class HeadOfOfficeController extends Controller
                     'approval' => $headApproval,
                 ]
             ]);
-            
         } catch (\Exception $e) {
             DB::rollBack();
             Log::error('Head approve error: ' . $e->getMessage());
@@ -258,7 +287,7 @@ class HeadOfOfficeController extends Controller
             ], 500);
         }
     }
-    
+
     /**
      * Reject a trip ticket
      */
@@ -267,36 +296,36 @@ class HeadOfOfficeController extends Controller
         $validator = Validator::make($request->all(), [
             'note' => 'required|string|min:5|max:500'
         ]);
-        
+
         if ($validator->fails()) {
             return response()->json(['errors' => $validator->errors()], 422);
         }
-        
+
         $user = $request->user();
-        
+
         if (!$user->canApproveDepartmentTickets()) {
             return response()->json(['message' => 'Unauthorized'], 403);
         }
-        
+
         $tripTicket = TripTicket::where('trip_ticket_id', $id)
             ->where('status', TripTicket::STATUS_PENDING_HEAD_APPROVAL)
             ->first();
-        
+
         if (!$tripTicket) {
             return response()->json(['message' => 'Trip ticket not found or already processed'], 404);
         }
-        
+
         $department = $user->getManagedDepartment();
         if (!$department || $tripTicket->department_id !== $department->department_id) {
             return response()->json(['message' => 'Unauthorized - not your department'], 403);
         }
-        
+
         DB::beginTransaction();
-        
+
         try {
             $lastCycle = HeadApproval::where('trip_ticket_id', $id)->max('review_cycle') ?? 0;
             $reviewCycle = $lastCycle + 1;
-            
+
             $headApproval = HeadApproval::create([
                 'trip_ticket_id' => $id,
                 'review_cycle' => $reviewCycle,
@@ -306,10 +335,10 @@ class HeadOfOfficeController extends Controller
                 'review_note' => $request->note,
                 'reviewed_at' => now(),
             ]);
-            
+
             $tripTicket->status = TripTicket::STATUS_RETURNED_FOR_REVISION;
             $tripTicket->save();
-            
+
             DB::table('trip_ticket_return')->insert([
                 'trip_ticket_id' => $id,
                 'return_type' => 'rejected_by_head',
@@ -317,11 +346,11 @@ class HeadOfOfficeController extends Controller
                 'actioned_by' => $user->user_id,
                 'actioned_at' => now(),
             ]);
-            
+
             DB::commit();
-            
+
             $this->sendRejectionNotification($tripTicket, $request->note);
-            
+
             return response()->json([
                 'success' => true,
                 'message' => 'Trip ticket rejected. Reason sent to department office.',
@@ -332,7 +361,6 @@ class HeadOfOfficeController extends Controller
                     'approval' => $headApproval,
                 ]
             ]);
-            
         } catch (\Exception $e) {
             DB::rollBack();
             Log::error('Head reject error: ' . $e->getMessage());
@@ -342,77 +370,77 @@ class HeadOfOfficeController extends Controller
             ], 500);
         }
     }
-    
-    
-   /**
- * Toggle Head status (Active/Inactive) - for OIC activation
- */
-public function toggleHeadStatus(Request $request)
-{
-    $validator = Validator::make($request->all(), [
-        'status' => 'required|in:active,inactive',
-        'reason' => 'required_if:status,inactive|string|nullable'
-    ]);
 
-    if ($validator->fails()) {
-        return response()->json(['errors' => $validator->errors()], 422);
-    }
 
-    $user = $request->user();
-
-    if (!$user->isDeptHead()) {
-        return response()->json(['message' => 'Only Department Head can toggle status'], 403);
-    }
-
-    $designation = OicDesignation::where('head_of_office_id', $user->user_id)
-        ->where('is_active', true)
-        ->first();
-
-    if (!$designation) {
-        return response()->json(['message' => 'No department assigned as Head of Office'], 404);
-    }
-
-    DB::beginTransaction();
-
-    $user->head_active_status = $request->status;
-    $user->save();
-
-    // ✅ FIXED: Update oic_designation instead of oic_delegation_log
-    DB::table('oic_designation')
-        ->where('designation_id', $designation->designation_id)
-        ->update([
-            'reason' => $request->status === 'inactive' ? 'head_inactive' : 'head_active',
-            'reason_details' => $request->reason,
+    /**
+     * Toggle Head status (Active/Inactive) - for OIC activation
+     */
+    public function toggleHeadStatus(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'status' => 'required|in:active,inactive',
+            'reason' => 'required_if:status,inactive|string|nullable'
         ]);
 
-    if ($request->status === 'inactive' && $designation->head_of_office_id != $designation->oic_user_id) {
-        $oicUser = User::find($designation->oic_user_id);
-        if ($oicUser) {
-            Notification::create([
-                'recipient_user_id' => $oicUser->user_id,
-                'notification_type' => 'oic_activated',
-                'entity_type' => 'oic_designation',
-                'entity_id' => $designation->designation_id,
-                'message' => 'You have been activated as Officer-in-Charge',
-                'channel' => 'in_app',
-                'created_at' => now(),
-            ]);
+        if ($validator->fails()) {
+            return response()->json(['errors' => $validator->errors()], 422);
         }
+
+        $user = $request->user();
+
+        if (!$user->isDeptHead()) {
+            return response()->json(['message' => 'Only Department Head can toggle status'], 403);
+        }
+
+        $designation = OicDesignation::where('head_of_office_id', $user->user_id)
+            ->where('is_active', true)
+            ->first();
+
+        if (!$designation) {
+            return response()->json(['message' => 'No department assigned as Head of Office'], 404);
+        }
+
+        DB::beginTransaction();
+
+        $user->head_active_status = $request->status;
+        $user->save();
+
+        // ✅ FIXED: Update oic_designation instead of oic_delegation_log
+        DB::table('oic_designation')
+            ->where('designation_id', $designation->designation_id)
+            ->update([
+                'reason' => $request->status === 'inactive' ? 'head_inactive' : 'head_active',
+                'reason_details' => $request->reason,
+            ]);
+
+        if ($request->status === 'inactive' && $designation->head_of_office_id != $designation->oic_user_id) {
+            $oicUser = User::find($designation->oic_user_id);
+            if ($oicUser) {
+                Notification::create([
+                    'recipient_user_id' => $oicUser->user_id,
+                    'notification_type' => 'oic_activated',
+                    'entity_type' => 'oic_designation',
+                    'entity_id' => $designation->designation_id,
+                    'message' => 'You have been activated as Officer-in-Charge',
+                    'channel' => 'in_app',
+                    'created_at' => now(),
+                ]);
+            }
+        }
+
+        DB::commit();
+
+        return response()->json([
+            'success' => true,
+            'message' => $request->status === 'active'
+                ? 'You are now active. OIC privileges have been revoked.'
+                : 'You are now inactive. OIC can now approve tickets.',
+            'head_status' => $request->status,
+            'oic_user_id' => $designation->oic_user_id,
+            'has_oic' => $designation->head_of_office_id != $designation->oic_user_id,
+        ]);
     }
 
-    DB::commit();
-
-    return response()->json([
-        'success' => true,
-        'message' => $request->status === 'active' 
-            ? 'You are now active. OIC privileges have been revoked.'
-            : 'You are now inactive. OIC can now approve tickets.',
-        'head_status' => $request->status,
-        'oic_user_id' => $designation->oic_user_id,
-        'has_oic' => $designation->head_of_office_id != $designation->oic_user_id,
-    ]);
-}
-    
     /**
      * Get OIC status and information
      */
@@ -420,18 +448,18 @@ public function toggleHeadStatus(Request $request)
     {
         // Keep your existing implementation
         $user = $request->user();
-        
+
         if (!$user->isDeptHead() && !$user->isOIC()) {
             return response()->json(['message' => 'Unauthorized'], 403);
         }
-        
-        $designation = OicDesignation::where(function($query) use ($user) {
-                $query->where('head_of_office_id', $user->user_id)
-                    ->orWhere('oic_user_id', $user->user_id);
-            })
+
+        $designation = OicDesignation::where(function ($query) use ($user) {
+            $query->where('head_of_office_id', $user->user_id)
+                ->orWhere('oic_user_id', $user->user_id);
+        })
             ->where('is_active', true)
             ->first();
-        
+
         if (!$designation) {
             return response()->json([
                 'has_oic' => false,
@@ -439,14 +467,14 @@ public function toggleHeadStatus(Request $request)
                 'can_approve' => false,
             ]);
         }
-        
+
         $department = Department::find($designation->department_id);
         $headUser = User::find($designation->head_of_office_id);
         $oicUser = User::find($designation->oic_user_id);
-        
+
         $isHeadActive = $headUser && $headUser->head_active_status === 'active';
         $hasDifferentOic = $designation->head_of_office_id != $designation->oic_user_id;
-        
+
         return response()->json([
             'head_status' => $isHeadActive ? 'active' : 'inactive',
             'has_oic' => $hasDifferentOic && !$isHeadActive,
@@ -463,7 +491,7 @@ public function toggleHeadStatus(Request $request)
             ] : null,
         ]);
     }
-    
+
     /**
      * Get active trips for real-time monitoring
      */
@@ -472,21 +500,21 @@ public function toggleHeadStatus(Request $request)
         // Keep your existing implementation
         try {
             $user = $request->user();
-            
+
             if (!$user->isDeptHead() && !$user->isOIC()) {
                 return response()->json(['message' => 'Unauthorized'], 403);
             }
-            
+
             $department = $user->getManagedDepartment();
             if (!$department) {
                 return response()->json([]);
             }
-            
+
             $activeTrips = TripTicket::with(['vehicle', 'driver.user'])
                 ->where('department_id', $department->department_id)
                 ->where('status', TripTicket::STATUS_IN_TRANSIT)
                 ->get()
-                ->map(function($trip) {
+                ->map(function ($trip) {
                     return [
                         'id' => $trip->trip_ticket_id,
                         'ticket_number' => $trip->trip_ticket_number,
@@ -500,15 +528,14 @@ public function toggleHeadStatus(Request $request)
                         ] : null,
                     ];
                 });
-            
+
             return response()->json($activeTrips);
-            
         } catch (\Exception $e) {
             Log::error('GetActiveTrips error: ' . $e->getMessage());
             return response()->json([]);
         }
     }
-    
+
     /**
      * Get fuel consumption overview for the department
      */
@@ -517,11 +544,11 @@ public function toggleHeadStatus(Request $request)
         // Keep your existing implementation
         try {
             $user = $request->user();
-            
+
             if (!$user->isDeptHead() && !$user->isOIC()) {
                 return response()->json(['message' => 'Unauthorized'], 403);
             }
-            
+
             $department = $user->getManagedDepartment();
             if (!$department) {
                 return response()->json([
@@ -532,7 +559,7 @@ public function toggleHeadStatus(Request $request)
                     'weekly_allocation' => 0
                 ]);
             }
-            
+
             $fuelData = DB::table('fuel_log as fl')
                 ->join('gas_slip as gs', 'fl.gas_slip_id', '=', 'gs.gas_slip_id')
                 ->join('trip_ticket as tt', 'gs.trip_ticket_id', '=', 'tt.trip_ticket_id')
@@ -544,16 +571,16 @@ public function toggleHeadStatus(Request $request)
                     DB::raw('COUNT(DISTINCT tt.trip_ticket_id) as trip_count')
                 )
                 ->first();
-            
+
             $currentPeriod = DB::table('dept_budget_period')
                 ->where('department_id', $department->department_id)
                 ->where('status', 'active')
                 ->first();
-            
+
             $totalCost = $fuelData->total_cost ?? 0;
             $weeklyAllocation = $currentPeriod->allocated_amount ?? 0;
             $budgetUtilization = $weeklyAllocation > 0 ? round(($totalCost / $weeklyAllocation) * 100) : 0;
-            
+
             return response()->json([
                 'total_liters' => round($fuelData->total_liters ?? 0, 2),
                 'total_cost' => $totalCost,
@@ -562,7 +589,6 @@ public function toggleHeadStatus(Request $request)
                 'weekly_allocation' => $weeklyAllocation,
                 'remaining_budget' => max(0, $weeklyAllocation - $totalCost),
             ]);
-            
         } catch (\Exception $e) {
             Log::error('GetFuelConsumption error: ' . $e->getMessage());
             return response()->json([
@@ -575,7 +601,7 @@ public function toggleHeadStatus(Request $request)
             ]);
         }
     }
-    
+
     /**
      * Get head status for a department
      */
@@ -584,15 +610,15 @@ public function toggleHeadStatus(Request $request)
         $designation = OicDesignation::where('department_id', $departmentId)
             ->where('is_active', true)
             ->first();
-        
+
         if (!$designation) {
             return 'inactive';
         }
-        
+
         $headUser = User::find($designation->head_of_office_id);
         return ($headUser && $headUser->head_active_status === 'active') ? 'active' : 'inactive';
     }
-    
+
     /**
      * Send notification to GSO
      */
@@ -601,7 +627,7 @@ public function toggleHeadStatus(Request $request)
         $gsoStaff = User::where('role', 'gso_staff')
             ->where('status', 'active')
             ->get();
-        
+
         foreach ($gsoStaff as $staff) {
             Notification::create([
                 'recipient_user_id' => $staff->user_id,
@@ -614,14 +640,14 @@ public function toggleHeadStatus(Request $request)
             ]);
         }
     }
-    
+
     /**
      * Send rejection notification to department office
      */
     private function sendRejectionNotification($tripTicket, $reason)
     {
         $deptOffice = User::find($tripTicket->submitted_by);
-        
+
         if ($deptOffice) {
             Notification::create([
                 'recipient_user_id' => $deptOffice->user_id,
@@ -642,16 +668,16 @@ public function toggleHeadStatus(Request $request)
     {
         $user = $request->user();
         $department = $user->getManagedDepartment();
-        
+
         if (!$department) {
             return response()->json(['data' => []]);
         }
-        
+
         $vehicles = Vehicle::where('department_id', $department->department_id)
             ->where('status', 'active')
             ->where('maintenance_flag', false)
             ->get();
-        
+
         return response()->json(['data' => $vehicles]);
     }
 
@@ -663,20 +689,20 @@ public function toggleHeadStatus(Request $request)
         try {
             $user = $request->user();
             $department = $user->getManagedDepartment();
-            
+
             if (!$department) {
                 return response()->json(['data' => []]);
             }
-            
+
             $departmentId = $request->input('department_id', $department->department_id);
-            
+
             $drivers = Driver::with('user')
-                ->whereHas('user', function($query) use ($departmentId) {
+                ->whereHas('user', function ($query) use ($departmentId) {
                     $query->where('department_id', $departmentId);
                 })
                 ->where('status', 'active')
                 ->get()
-                ->map(function($driver) {
+                ->map(function ($driver) {
                     $fullName = 'Unknown Driver';
                     if ($driver->user) {
                         $parts = [];
@@ -685,7 +711,7 @@ public function toggleHeadStatus(Request $request)
                         if ($driver->user->last_name) $parts[] = $driver->user->last_name;
                         $fullName = !empty($parts) ? implode(' ', $parts) : $driver->user->email;
                     }
-                    
+
                     return [
                         'driver_id' => $driver->driver_id,
                         'full_name' => $fullName,
@@ -698,9 +724,8 @@ public function toggleHeadStatus(Request $request)
                         ] : null,
                     ];
                 });
-            
+
             return response()->json(['data' => $drivers]);
-            
         } catch (\Exception $e) {
             Log::error('GetActiveDrivers error: ' . $e->getMessage());
             return response()->json(['data' => []]);

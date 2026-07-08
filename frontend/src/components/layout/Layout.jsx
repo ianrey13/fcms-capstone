@@ -1,9 +1,9 @@
 // src/components/layout/Layout.jsx
 import React, { useState, useEffect } from 'react';
 import Sidebar from './Sidebar';
-import NotificationBell from '../../components/notifications/NotificationBell';
+import NotificationBell from '../notifications/NotificationBell';
 import { useAuth } from '../../contexts/AuthContext';
-import { Bell, Menu, Sun, Moon } from 'lucide-react';
+import { Menu, Sun, Moon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
 const Layout = ({ children }) => {
@@ -12,19 +12,15 @@ const Layout = ({ children }) => {
   const [isDarkMode, setIsDarkMode] = useState(false);
   const { user } = useAuth();
 
-  useEffect(() => {
-    const checkMobile = () => {
-      setIsMobile(window.innerWidth < 768);
-      if (window.innerWidth < 768) {
-        setIsSidebarOpen(false);
-      } else {
-        setIsSidebarOpen(true);
-      }
-    };
-    checkMobile();
-    window.addEventListener('resize', checkMobile);
-    return () => window.removeEventListener('resize', checkMobile);
-  }, []);
+useEffect(() => {
+  const checkMobile = () => {
+    const mobile = window.innerWidth < 768;
+    setIsMobile(mobile);
+  };
+  checkMobile();
+  window.addEventListener('resize', checkMobile);
+  return () => window.removeEventListener('resize', checkMobile);
+}, []); 
 
   // Load dark mode preference
   useEffect(() => {
@@ -128,7 +124,7 @@ const Layout = ({ children }) => {
         style={{ marginLeft: marginLeft, paddingTop: '70px' }}
         className="transition-all duration-300 ease-in-out"
       >
-        <div className="p-4 md:p-6 animate-fade-in-up">
+        <div className="p-4 md:p-6">
           {children}
         </div>
       </main>

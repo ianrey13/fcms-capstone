@@ -17,6 +17,10 @@ import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { driverAPI } from '../../../services/api';
 
+// ============================================
+// TYPES
+// ============================================
+
 interface Trip {
   trip_ticket_id: number;
   trip_ticket_number: string;
@@ -33,16 +37,24 @@ interface Trip {
   purpose?: string;
 }
 
+// ============================================
+// COMPONENT
+// ============================================
+
 export default function ActiveTripScreen() {
-  const { id } = useLocalSearchParams();
+  const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
 
   const [trip, setTrip] = useState<Trip | null>(null);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
   const [showHelpModal, setShowHelpModal] = useState(false);
+  
   const tripId = id || trip?.trip_ticket_id;
-  const router_back = useRouter();
+
+  // ============================================
+  // LIFE CYCLE
+  // ============================================
 
   useEffect(() => {
     fetchActiveTrip();
@@ -65,6 +77,10 @@ export default function ActiveTripScreen() {
     }
   };
 
+  // ============================================
+  // ACTIONS
+  // ============================================
+
   const handleAcknowledge = async () => {
     if (!tripId) return;
     
@@ -72,7 +88,7 @@ export default function ActiveTripScreen() {
     try {
       await driverAPI.acknowledgeFunds(Number(tripId));
       Alert.alert('Success', 'Gas slip acknowledged! You can now start your trip.');
-      await fetchActiveTrip(); // Refresh trip data
+      await fetchActiveTrip();
     } catch (error: any) {
       console.error('Acknowledge error:', error);
       Alert.alert('Error', error.response?.data?.message || 'Failed to acknowledge');
@@ -88,7 +104,7 @@ export default function ActiveTripScreen() {
     try {
       await driverAPI.startTrip(Number(tripId));
       Alert.alert('Success', 'Trip started! You are now in transit.');
-      await fetchActiveTrip(); // Refresh trip data
+      await fetchActiveTrip();
     } catch (error: any) {
       console.error('Start trip error:', error);
       Alert.alert('Error', error.response?.data?.message || 'Failed to start trip');
@@ -119,7 +135,7 @@ export default function ActiveTripScreen() {
               Alert.alert(
                 'Trip Completed',
                 'Your trip has been successfully completed.',
-                [{ text: 'OK', onPress: () => router_back.replace('/auth') }]
+                [{ text: 'OK', onPress: () => router.replace('/auth') }]
               );
             } catch (error: any) {
               console.error('Complete trip error:', error);
@@ -134,18 +150,22 @@ export default function ActiveTripScreen() {
   };
 
   const handleUploadReceipt = () => {
-    router_back.push({
+    router.push({
       pathname: '/auth/receipt',
       params: { 
-        id: tripId,
+        id: tripId?.toString(),
         tripNumber: trip?.trip_ticket_number 
       }
     });
   };
 
   const handleGoBack = () => {
-    router_back.back();
+    router.back();
   };
+
+  // ============================================
+  // HELPERS
+  // ============================================
 
   const formatDate = (dateString?: string) => {
     if (!dateString) return 'Not specified';
@@ -219,10 +239,19 @@ export default function ActiveTripScreen() {
     }
   };
 
+  // ============================================
+  // LOADING STATE
+  // ============================================
+
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
-        <LinearGradient colors={['#0f172a', '#1e293b']} style={styles.loadingGradient}>
+        <LinearGradient 
+          colors={['#0f172a', '#1e293b']} 
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={styles.loadingGradient}
+        >
           <ActivityIndicator size="large" color="#3b82f6" />
           <Text style={styles.loadingText}>Loading trip details...</Text>
         </LinearGradient>
@@ -230,10 +259,19 @@ export default function ActiveTripScreen() {
     );
   }
 
+  // ============================================
+  // EMPTY STATE
+  // ============================================
+
   if (!trip) {
     return (
       <View style={styles.emptyContainer}>
-        <LinearGradient colors={['#0f172a', '#1e293b']} style={styles.emptyGradient}>
+        <LinearGradient 
+          colors={['#0f172a', '#1e293b']} 
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={styles.emptyGradient}
+        >
           <View style={styles.emptyIconContainer}>
             <Ionicons name="car-outline" size={64} color="#475569" />
           </View>
@@ -243,10 +281,15 @@ export default function ActiveTripScreen() {
           </Text>
           <TouchableOpacity
             style={styles.emptyButton}
-            onPress={() => router_back.replace('/auth')}
+            onPress={() => router.replace('/auth')}
             activeOpacity={0.8}
           >
-            <LinearGradient colors={['#3b82f6', '#2563eb']} style={styles.emptyButtonGradient}>
+            <LinearGradient 
+              colors={['#3b82f6', '#2563eb']} 
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+              style={styles.emptyButtonGradient}
+            >
               <Text style={styles.emptyButtonText}>Go to Dashboard</Text>
             </LinearGradient>
           </TouchableOpacity>
@@ -254,6 +297,10 @@ export default function ActiveTripScreen() {
       </View>
     );
   }
+
+  // ============================================
+  // MAIN RENDER
+  // ============================================
 
   const statusConfig = getStatusConfig(trip.status);
   const actionHandler = getActionHandler();
@@ -369,7 +416,7 @@ export default function ActiveTripScreen() {
 
           {/* Action Buttons */}
           <View style={styles.actionsContainer}>
-            {/* Primary Action Button (Acknowledge/Start/Complete) */}
+            {/* Primary Action Button */}
             {actionHandler && (
               <TouchableOpacity 
                 onPress={actionHandler} 
@@ -377,7 +424,12 @@ export default function ActiveTripScreen() {
                 activeOpacity={0.8} 
                 style={styles.actionButton}
               >
-                <LinearGradient colors={actionColors} style={styles.actionGradient}>
+                <LinearGradient 
+                  colors={actionColors} 
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                  style={styles.actionGradient}
+                >
                   <View style={styles.actionTextContainer}>
                     <Text style={styles.actionTitle}>{statusConfig.action}</Text>
                     {trip.status === 'funds_issued' && (
@@ -403,10 +455,15 @@ export default function ActiveTripScreen() {
               </TouchableOpacity>
             )}
 
-            {/* Upload Receipt Button (Always visible for in_transit) */}
+            {/* Upload Receipt Button */}
             {(trip.status === 'in_transit' || trip.status === 'acknowledged') && (
               <TouchableOpacity onPress={handleUploadReceipt} activeOpacity={0.8} style={styles.secondaryButton}>
-                <LinearGradient colors={['#d97706', '#b45309']} style={styles.secondaryGradient}>
+                <LinearGradient 
+                  colors={['#d97706', '#b45309']} 
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                  style={styles.secondaryGradient}
+                >
                   <Ionicons name="camera" size={24} color="white" />
                   <View style={styles.actionTextContainer}>
                     <Text style={styles.actionTitle}>UPLOAD RECEIPT</Text>
@@ -416,45 +473,23 @@ export default function ActiveTripScreen() {
               </TouchableOpacity>
             )}
           </View>
-
-          {/* Workflow Steps */}
-          {/* <View style={styles.workflowCard}>
-            <Text style={styles.workflowTitle}>Trip Workflow</Text>
-            <View style={styles.stepsContainer}>
-              {[
-                { step: 1, label: 'Acknowledge', status: trip.status !== 'funds_issued' ? 'completed' : trip.status === 'funds_issued' ? 'current' : 'pending' },
-                { step: 2, label: 'Start Trip', status: trip.status === 'in_transit' || trip.status === 'completed' ? 'completed' : trip.status === 'acknowledged' ? 'current' : 'pending' },
-                { step: 3, label: 'Upload Receipt', status: 'pending' },
-                { step: 4, label: 'Complete', status: 'pending' },
-              ].map((step) => (
-                <View key={step.step} style={styles.stepItem}>
-                  <View style={[
-                    styles.stepCircle,
-                    step.status === 'completed' && styles.stepCompleted,
-                    step.status === 'current' && styles.stepCurrent,
-                  ]}>
-                    {step.status === 'completed' ? (
-                      <Ionicons name="checkmark" size={14} color="white" />
-                    ) : (
-                      <Text style={styles.stepNumber}>{step.step}</Text>
-                    )}
-                  </View>
-                  <Text style={[
-                    styles.stepLabel,
-                    step.status === 'completed' && styles.stepLabelCompleted,
-                    step.status === 'current' && styles.stepLabelCurrent,
-                  ]}>{step.label}</Text>
-                </View>
-              ))}
-            </View>
-          </View> */}
         </ScrollView>
 
         {/* Help Modal */}
-        {/* <Modal visible={showHelpModal} transparent={true} animationType="fade" onRequestClose={() => setShowHelpModal(false)}>
+        <Modal 
+          visible={showHelpModal} 
+          transparent={true} 
+          animationType="fade" 
+          onRequestClose={() => setShowHelpModal(false)}
+        >
           <View style={styles.modalOverlay}>
             <View style={styles.modalContainer}>
-              <LinearGradient colors={['#2563eb', '#1e40af']} style={styles.modalHeader}>
+              <LinearGradient 
+                colors={['#2563eb', '#1e40af']} 
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+                style={styles.modalHeader}
+              >
                 <Text style={styles.modalTitle}>Trip Guide</Text>
                 <TouchableOpacity onPress={() => setShowHelpModal(false)} style={styles.modalCloseButton}>
                   <Ionicons name="close" size={22} color="white" />
@@ -500,18 +535,27 @@ export default function ActiveTripScreen() {
                 </View>
               </View>
 
-              <TouchableOpacity style={styles.modalButton} onPress={() => setShowHelpModal(false)}>
-                <LinearGradient colors={['#3b82f6', '#2563eb']} style={styles.modalButtonGradient}>
+              <TouchableOpacity style={styles.modalButton} onPress={() => setShowHelpModal(false)} activeOpacity={0.8}>
+                <LinearGradient 
+                  colors={['#3b82f6', '#2563eb']} 
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                  style={styles.modalButtonGradient}
+                >
                   <Text style={styles.modalButtonText}>Got it</Text>
                 </LinearGradient>
               </TouchableOpacity>
             </View>
           </View>
-        </Modal> */}
+        </Modal>
       </View>
     </>
   );
 }
+
+// ============================================
+// STYLES
+// ============================================
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f8fafc' },
@@ -554,7 +598,17 @@ const styles = StyleSheet.create({
 
   emptyContainer: { flex: 1 },
   emptyGradient: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 32 },
-  emptyIconContainer: { width: 100, height: 100, borderRadius: 28, backgroundColor: 'rgba(255, 255, 255, 0.05)', alignItems: 'center', justifyContent: 'center', marginBottom: 20, borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.1)' },
+  emptyIconContainer: { 
+    width: 100, 
+    height: 100, 
+    borderRadius: 28, 
+    backgroundColor: 'rgba(255, 255, 255, 0.05)', 
+    alignItems: 'center', 
+    justifyContent: 'center', 
+    marginBottom: 20, 
+    borderWidth: 1, 
+    borderColor: 'rgba(255, 255, 255, 0.1)' 
+  },
   emptyTitle: { fontSize: 22, fontWeight: '800', color: '#ffffff', marginBottom: 8 },
   emptySubtitle: { fontSize: 14, color: 'rgba(255, 255, 255, 0.5)', textAlign: 'center', lineHeight: 22, marginBottom: 28 },
   emptyButton: { borderRadius: 14, overflow: 'hidden' },
@@ -562,7 +616,15 @@ const styles = StyleSheet.create({
   emptyButtonText: { color: '#ffffff', fontSize: 15, fontWeight: '700' },
 
   statusBadgeContainer: { alignItems: 'center', marginTop: 16, marginBottom: 16 },
-  statusBadge: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 24, borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.1)' },
+  statusBadge: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    paddingHorizontal: 16, 
+    paddingVertical: 8, 
+    borderRadius: 24, 
+    borderWidth: 1, 
+    borderColor: 'rgba(255, 255, 255, 0.1)' 
+  },
   statusDot: { width: 8, height: 8, borderRadius: 4, marginRight: 8 },
   statusText: { fontSize: 12, fontWeight: '800', letterSpacing: 1 },
 
@@ -579,43 +641,101 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
   cardHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 16 },
-  cardIconContainer: { width: 36, height: 36, borderRadius: 12, backgroundColor: '#eff6ff', alignItems: 'center', justifyContent: 'center', marginRight: 10 },
+  cardIconContainer: { 
+    width: 36, 
+    height: 36, 
+    borderRadius: 12, 
+    backgroundColor: '#eff6ff', 
+    alignItems: 'center', 
+    justifyContent: 'center', 
+    marginRight: 10 
+  },
   cardTitle: { fontSize: 17, fontWeight: '800', color: '#0f172a' },
   detailsContainer: { gap: 12 },
   detailRow: { flexDirection: 'row', alignItems: 'flex-start' },
-  detailIconContainer: { width: 32, height: 32, borderRadius: 10, backgroundColor: '#f8fafc', alignItems: 'center', justifyContent: 'center', marginRight: 12, marginTop: 2 },
+  detailIconContainer: { 
+    width: 32, 
+    height: 32, 
+    borderRadius: 10, 
+    backgroundColor: '#f8fafc', 
+    alignItems: 'center', 
+    justifyContent: 'center', 
+    marginRight: 12, 
+    marginTop: 2 
+  },
   detailContent: { flex: 1 },
   detailLabel: { fontSize: 11, fontWeight: '600', color: '#94a3b8', marginBottom: 2, textTransform: 'uppercase', letterSpacing: 0.5 },
   detailValue: { fontSize: 14, fontWeight: '600', color: '#334155', lineHeight: 20 },
   amountValue: { color: '#059669', fontWeight: '700', fontSize: 15 },
 
   actionsContainer: { paddingHorizontal: 16, gap: 12, marginBottom: 20 },
-  actionButton: { borderRadius: 16, overflow: 'hidden', shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.15, shadowRadius: 8, elevation: 4 },
-  actionGradient: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 18, paddingHorizontal: 20 },
+  actionButton: { 
+    borderRadius: 16, 
+    overflow: 'hidden', 
+    shadowColor: '#000', 
+    shadowOffset: { width: 0, height: 4 }, 
+    shadowOpacity: 0.15, 
+    shadowRadius: 8, 
+    elevation: 4 
+  },
+  actionGradient: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    justifyContent: 'space-between', 
+    paddingVertical: 18, 
+    paddingHorizontal: 20 
+  },
   actionTextContainer: { flex: 1 },
   actionTitle: { color: '#ffffff', fontSize: 16, fontWeight: '800', letterSpacing: 0.5 },
   actionSubtitle: { color: 'rgba(255, 255, 255, 0.8)', fontSize: 12, fontWeight: '500', marginTop: 2 },
 
-  secondaryButton: { borderRadius: 16, overflow: 'hidden', shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.15, shadowRadius: 8, elevation: 4 },
-  secondaryGradient: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 16, paddingHorizontal: 20 },
+  secondaryButton: { 
+    borderRadius: 16, 
+    overflow: 'hidden', 
+    shadowColor: '#000', 
+    shadowOffset: { width: 0, height: 4 }, 
+    shadowOpacity: 0.15, 
+    shadowRadius: 8, 
+    elevation: 4 
+  },
+  secondaryGradient: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    justifyContent: 'space-between', 
+    paddingVertical: 16, 
+    paddingHorizontal: 20 
+  },
 
-  workflowCard: { backgroundColor: '#ffffff', borderRadius: 16, marginHorizontal: 16, marginTop: 8, marginBottom: 16, padding: 16, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.04, shadowRadius: 8, elevation: 2 },
-  workflowTitle: { fontSize: 14, fontWeight: '700', color: '#1e293b', marginBottom: 16, textAlign: 'center' },
-  stepsContainer: { flexDirection: 'row', justifyContent: 'space-between' },
-  stepItem: { alignItems: 'center', flex: 1 },
-  stepCircle: { width: 28, height: 28, borderRadius: 14, backgroundColor: '#e2e8f0', alignItems: 'center', justifyContent: 'center', marginBottom: 6 },
-  stepNumber: { fontSize: 12, fontWeight: '700', color: '#64748b' },
-  stepCompleted: { backgroundColor: '#22c55e' },
-  stepCurrent: { backgroundColor: '#3b82f6' },
-  stepLabel: { fontSize: 10, color: '#94a3b8', textAlign: 'center' },
-  stepLabelCompleted: { color: '#22c55e', fontWeight: '600' },
-  stepLabelCurrent: { color: '#3b82f6', fontWeight: '600' },
-
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.6)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: 24 },
-  modalContainer: { backgroundColor: '#ffffff', borderRadius: 24, width: '100%', maxWidth: 360, overflow: 'hidden' },
-  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 18 },
+  modalOverlay: { 
+    flex: 1, 
+    backgroundColor: 'rgba(0, 0, 0, 0.6)', 
+    justifyContent: 'center', 
+    alignItems: 'center', 
+    paddingHorizontal: 24 
+  },
+  modalContainer: { 
+    backgroundColor: '#ffffff', 
+    borderRadius: 24, 
+    width: '100%', 
+    maxWidth: 360, 
+    overflow: 'hidden' 
+  },
+  modalHeader: { 
+    flexDirection: 'row', 
+    justifyContent: 'space-between', 
+    alignItems: 'center', 
+    paddingHorizontal: 20, 
+    paddingVertical: 18 
+  },
   modalTitle: { fontSize: 18, fontWeight: '800', color: '#ffffff' },
-  modalCloseButton: { width: 36, height: 36, borderRadius: 10, backgroundColor: 'rgba(255, 255, 255, 0.15)', alignItems: 'center', justifyContent: 'center' },
+  modalCloseButton: { 
+    width: 36, 
+    height: 36, 
+    borderRadius: 10, 
+    backgroundColor: 'rgba(255, 255, 255, 0.15)', 
+    alignItems: 'center', 
+    justifyContent: 'center' 
+  },
   modalContent: { padding: 20, gap: 16 },
   guideItem: { flexDirection: 'row', gap: 14 },
   guideIconContainer: { width: 44, height: 44, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },

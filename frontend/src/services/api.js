@@ -62,120 +62,70 @@ export const authAPI = {
       password,
       password_confirmation: password,
     }),
+    
+  updateProfile: (data) => api.post("/auth/update-profile", data),
 };
 
 // ============ TRIP TICKET API ============
 export const tripTicketAPI = {
-  // Basic CRUD
   getAll: (params) => api.get("/trip-tickets", { params }),
   getById: (id) => api.get(`/trip-tickets/${id}`),
   create: (data) => api.post("/trip-tickets", data),
   update: (id, data) => api.put(`/trip-tickets/${id}`, data),
   delete: (id) => api.delete(`/trip-tickets/${id}`),
-
-  // Draft management
-  saveDraft: (data) => api.post("/trip-tickets/draft", data),
-  updateDraft: (id, data) => api.put(`/trip-tickets/${id}/draft`, data),
-
-  // Submit for approval
-  submit: (data) => api.post("/trip-tickets/submit", data),
-
-  // Budget check before submission (NEW)
+  cancel: (id, reason) => api.post(`/trip-tickets/${id}/cancel`, { reason }),
+  getMyRequests: (params) => api.get("/trip-tickets/my-requests", { params }),
   checkBudgetBeforeSubmit: (data) =>
     api.post("/trip-tickets/check-budget", data),
-
-  // Get user's requests
-  getMyRequests: (params) => api.get("/trip-tickets/my-requests", { params }),
-
-  // Resubmit after revision
-  resubmit: (id, data) => api.post(`/trip-tickets/${id}/resubmit`, data),
-
-  // Cancel trip
-  cancel: (id, reason) => api.post(`/trip-tickets/${id}/cancel`, { reason }),
-
-  // Dashboard
-  getDashboard: () => api.get("/dashboard"),
 };
-
-// ============ HEAD OF OFFICE API ============
-export const headOfficeAPI = {
-  // Dashboard & Monitoring
-  getDashboard: () => api.get("/head/dashboard"),
-  getPendingTickets: () => api.get("/head/tickets/pending"),
-  getApprovedTickets: () => api.get("/head/tickets/approved"),
-  getRejectedTickets: () => api.get("/head/tickets/rejected"),
-  getReturnedTickets: () => api.get("/head/tickets/returned"),
-
-  // Approval Actions
-  approveTicket: (id, note) =>
-    api.post(`/head/tickets/${id}/approve`, { note: note }),
-  rejectTicket: (id, note) =>
-    api.post(`/head/tickets/${id}/reject`, { note: note }),
-
-  // OIC Management
-  getOICStatus: () => api.get("/head/oic/status"),
-  activateOIC: (data) => api.post("/head/oic/activate", data),
-  deactivateOIC: () => api.post("/head/oic/deactivate"),
-
-  // Head Status
-  toggleHeadStatus: (data) => api.post("/head/status/toggle", data),
-
-  // Monitoring
-  getActiveTrips: () => api.get("/head/monitoring/active-trips"),
-  getFuelConsumption: (params) =>
-    api.get("/head/monitoring/fuel-consumption", { params }),
-  getLiveTracking: (tripId) =>
-    api.get(`/head/monitoring/live-tracking/${tripId}`),
-  getTripHistory: (params) =>
-    api.get("/head/monitoring/trip-history", { params }),
-
-  // ✅ Trip ticket vehicles and drivers
-  getAvailableVehicles: (params = {}) =>
-    api.get("/head/vehicles", { params }),
-  getActiveDrivers: (params = {}) =>
-    api.get("/head/drivers", { params }),
-
-  // ✅ ADD THIS - Submit trip ticket from Head
-  submitTripTicket: (data) => api.post("/head/trip-tickets/submit", data),
-};
-
-// ============ GSO API ============
+// ============ GSO API (Superadmin Equivalent) ============
 export const gsoAPI = {
-  //dashboard
+  // Dashboard
   getDashboard: () => api.get("/gso/dashboard"),
 
-  // Ticket Management
-  getPendingTickets: (params) => api.get("/gso/pending", { params }),
-  getVerifiedTickets: (params) => api.get("/gso/verified", { params }),
+  // Trip Management
+  getPendingMO: (params) => api.get("/gso/pending", { params }),
   getReturnedTickets: (params) => api.get("/gso/returned", { params }),
-  getRejectedTickets: (params) => api.get("/gso/rejected", { params }),
-  getForwardQueue: (params) => api.get("/gso/forward", { params }),
-  getForwardedTickets: (params) => api.get("/gso/forwarded", { params }),
-
-  // Single ticket
+  getAllTrips: (params) => api.get("/gso/all-trips", { params }),
   getTicketById: (id) => api.get(`/gso/tickets/${id}`),
 
-  // Review Actions
-  approveTicket: (id, note) =>
-    api.post(`/gso/tickets/${id}/approve`, { gso_note: note }),
-  rejectTicket: (id, note) =>
-    api.post(`/gso/tickets/${id}/reject`, { verification_note: note }),
-
-  // Forward to Mayor's Office
-  forwardToMO: (ticketIds) =>
-    api.post("/gso/tickets/forward-to-mo", { trip_ticket_ids: ticketIds }),
+  // ✅ GSO Creates Trip Directly
+  createTrip: (data) => api.post("/gso/create-trip", data),
 
   // Reconciliation
   getPendingReconciliation: (params) =>
-    api.get("/gso/reconciliation/pending", { params }),
+    api.get("/gso/pending-reconciliation", { params }),
   reconcileTrip: (id, data) =>
-    api.post(`/gso/reconciliation/${id}/reconcile`, data),
+    api.post(`/gso/tickets/${id}/reconcile`, data),
 
   // Reports
   getReports: (params) => api.get("/gso/reports", { params }),
   exportReport: (type, params) =>
     api.get(`/gso/reports/export/${type}`, { params, responseType: "blob" }),
+    
+  // Signature for GSO
+  getSignature: (id) => api.get(`/gso/users/${id}/signature`),
+
+  // ✅ FIXED: Fuel Receipts (now under admin prefix)
+  getFuelReceipts: (params) => api.get("/admin/fuel-receipts", { params }),
+  getFuelReceipt: (id) => api.get(`/admin/fuel-receipts/${id}`),
+  recordReceipt: (data) => {
+    const formData = new FormData();
+    Object.keys(data).forEach(key => {
+      if (data[key] !== null && data[key] !== undefined) {
+        formData.append(key, data[key]);
+      }
+    });
+    return api.post("/admin/fuel-receipts/record", formData, {
+      headers: { "Content-Type": "multipart/form-data" },
+    });
+  },
+
+  // ✅ FIXED: Completed Trips (now under admin prefix)
+  getCompletedTrips: (params) => api.get("/admin/completed-trips", { params }),
 };
+
+
 
 // ============ MAYOR'S OFFICE API ============
 export const mayorsOfficeAPI = {
@@ -184,112 +134,100 @@ export const mayorsOfficeAPI = {
 
   // Ticket Management
   getPendingTickets: (params) => api.get("/mayors-office/pending", { params }),
-  getApprovedTickets: (params) =>
-    api.get("/mayors-office/approved", { params }),
+  getApprovedTickets: (params) => api.get("/mayors-office/approved", { params }),
   getTicketById: (id) => api.get(`/mayors-office/tickets/${id}`),
 
   // Review Actions
   approveTicket: (id, data) => api.post(`/mayors-office/tickets/${id}/approve`, data),
-
   rejectTicket: (id, note) =>
     api.post(`/mayors-office/tickets/${id}/reject`, { review_note: note }),
 
-  // Budget Overview
+  // Budget
   getBudgetOverview: () => api.get("/mayors-office/budget-overview"),
-
-  // ============ NEW: BUDGET ASSISTANCE METHODS ============
-  // Get all pending budget assistance requests
-  getBudgetAssistanceRequests: () =>
-    api.get("/mayors-office/budget-assistance/requests"),
-
-  // Get single budget assistance request details
-  getBudgetAssistanceRequest: (requestId) =>
-    api.get(`/mayors-office/budget-assistance/request/${requestId}`),
-
-  // Create MO-funded trip ticket from request
-  createMoFundedTicket: (data) =>
-    api.post("/mayors-office/budget-assistance/create-ticket", data),
-      getAllDepartments: () => api.get('/mayors-office/departments/all'),
-
   getDepartmentBudget: (departmentId) =>
     api.get(`/mayors-office/departments/${departmentId}/budget`),
-   getAllDepartmentsForSelector: () => api.get("/mayors-office/departments/selector"),
+  getAllDepartmentsWithBudget: () =>
+    api.get("/mayors-office/departments/all-with-budget"),
+  getAllDepartmentsForSelector: () =>
+    api.get("/mayors-office/departments/selector"),
 
+  // Budget Assistance
+  getBudgetAssistanceRequests: () =>
+    api.get("/mayors-office/budget-assistance/requests"),
+  getBudgetAssistanceRequest: (requestId) =>
+    api.get(`/mayors-office/budget-assistance/request/${requestId}`),
+  createMoFundedTicket: (data) =>
+    api.post("/mayors-office/budget-assistance/create-ticket", data),
+  removeMORequest: (requestId) =>
+    api.delete(`/mayors-office/budget-assistance/request/${requestId}`),
+
+  // Budget Policies (Mayor's Office can manage)
+  getBudgetPolicies: (params) => api.get('/mayors-office/budget-policies', { params }),
+  getBudgetPolicy: (departmentId) => api.get(`/mayors-office/budget-policies/${departmentId}`),
+  createBudgetPolicy: (data) => api.post('/mayors-office/budget-policies', data),
+  updateBudgetPolicy: (departmentId, data) => api.put(`/mayors-office/budget-policies/${departmentId}`, data),
+  deleteBudgetPolicy: (departmentId) => api.delete(`/mayors-office/budget-policies/${departmentId}`),
+  forceActivateBudget: (data) => api.post('/mayors-office/budget-periods/force-activate', data),
+
+    getReceiptsForVerification: (params) => 
+        api.get("/mayors-office/receipts/for-verification", { params }),
+ verifyReceipt: (receiptId) => 
+        api.post(`/mayors-office/receipts/${receiptId}/verify`),
 };
 
-// ============ DRIVER API ============
+// ============ DRIVER API (Merged with Staff) ============
 export const driverAPI = {
-  // Trip Management
-  getAssignedTrips: (params) => api.get("/driver/trips", { params }),
+  // Trip Management (Driver execution)
+  getTrips: (params) => api.get("/driver/trips", { params }),
   getActiveTrip: () => api.get("/driver/trips/active"),
-  getTripHistory: (params) => api.get("/driver/trips/history", { params }),
+  getGasSlip: (id) => api.get(`/driver/trips/${id}/gas-slip`),
 
-  // Trip Actions
+  // Trip Actions (Driver execution)
+  acknowledgeFunds: (id) => api.post(`/driver/trips/${id}/acknowledge`),
   startTrip: (id, data) => api.post(`/driver/trips/${id}/start`, data),
   completeTrip: (id, data) => api.post(`/driver/trips/${id}/complete`, data),
-
-  // Fuel Log
-  uploadFuelReceipt: (id, formData) =>
-    api.post(`/driver/trips/${id}/fuel-receipt`, formData, {
+  uploadReceipt: (id, formData) =>
+    api.post(`/driver/trips/${id}/receipt`, formData, {
       headers: { "Content-Type": "multipart/form-data" },
     }),
+  updateOdometer: (id, data) =>
+    api.post(`/driver/trips/${id}/odometer`, data),
 
   // Dashboard
   getDashboard: () => api.get("/driver/dashboard"),
-  getMyInfo: () => api.get("/driver/my-info"),
-};
 
-// ============ DEPARTMENT STAFF API ============
-export const departmentStaffAPI = {
-  // Trip Tickets - Using existing tripTicketAPI endpoints
-  getMyTickets: (params) => tripTicketAPI.getMyRequests(params),
-  getTicketById: (id) => tripTicketAPI.getById(id),
-  createDraft: (data) => tripTicketAPI.saveDraft(data),
-  updateDraft: (id, data) => tripTicketAPI.updateDraft(id, data),
-  submitTicket: (data) => tripTicketAPI.submit(data),
-  cancelTicket: (id, reason) => tripTicketAPI.cancel(id, reason),
-
-  // Resources - Pass department_id as parameter
+  // ✅ NEW: Staff functionality merged into Driver
+  // Trip Requests (formerly staff)
+  getMyRequests: (params) => api.get("/driver/trips/my-requests", { params }),
+  getTripById: (id) => api.get(`/driver/tickets/${id}`),
+  checkBudget: (data) => api.post("/driver/tickets/check-budget", data),
+  
+  // Resources
   getAvailableVehicles: (params = {}) =>
-    api.get("/vehicles/available", { params }),
-  getActiveDrivers: (params = {}) => api.get("/drivers/active", { params }),
-
+    api.get("/driver/vehicles/available", { params }),
+  getActiveDrivers: (params = {}) =>
+    api.get("/driver/drivers/active", { params }),
+  
   // Budget
-  getDepartmentBudget: () => api.get("/departments/budget/current"),
-  getBudgetHistory: (params) =>
-    api.get("/departments/budget/history", { params }),
-
-  // Dashboard
-  getDashboard: () => tripTicketAPI.getDashboard(),
-
-  // Department Requests
-  submitRequest: (data) => api.post("/department-requests", data),
-  getMyRequests: (params) =>
-    api.get("/department-requests/my-requests", { params }),
-
-  // ============ NEW: BUDGET CHECK METHOD ============
-  checkBudgetAndRequestMO: (data) =>
-    tripTicketAPI.checkBudgetBeforeSubmit(data),
+  getDepartmentBudget: () => api.get("/driver/departments/budget/current"),
+  
+  // Reports
+  getTripReport: (params) => api.get("/driver/reports/trips", { params }),
+  getFuelReport: (params) => api.get("/driver/reports/fuel", { params }),
+  getReportSummary: (params) => api.get("/driver/reports/summary", { params }),
 };
 
-// ============ SUPERADMIN API ============
-// Department Management
+// ============ ADMIN API (GSO Only) ============
+// ============ DEPARTMENT API (Mayor's Office) ============
 export const departmentAPI = {
-  getAll: (params) => api.get("/admin/departments", { params }),
-  getById: (id) => api.get(`/admin/departments/${id}`),
-  create: (data) => api.post("/admin/departments", data),
-  update: (id, data) => api.put(`/admin/departments/${id}`, data),
-  delete: (id) => api.delete(`/admin/departments/${id}`),
+  getAll: (params) => api.get("/mayors-office/departments", { params }),
+  getById: (id) => api.get(`/mayors-office/departments/${id}`),
+  create: (data) => api.post("/mayors-office/departments", data),
+  update: (id, data) => api.put(`/mayors-office/departments/${id}`, data),
+  delete: (id) => api.delete(`/mayors-office/departments/${id}`),
 
-  // Leadership Management
-  assignHeadOfOffice: (id, userId) =>
-    api.post(`/admin/departments/${id}/assign-head`, { user_id: userId }),
-  removeHeadOfOffice: (id) =>
-    api.delete(`/admin/departments/${id}/remove-head`),
-  assignOIC: (id, userId) =>
-    api.post(`/admin/departments/${id}/assign-oic`, { user_id: userId }),
-  removeOIC: (id) => api.delete(`/admin/departments/${id}/remove-oic`),
-  getLeadershipInfo: (id) => api.get(`/admin/departments/${id}/leadership`),
+  toggleStatus: (id, isActive) => 
+    api.patch(`/mayors-office/departments/${id}/toggle-status`, { is_active: isActive }),
 };
 
 // User Management
@@ -314,7 +252,7 @@ export const userAPI = {
     api.post(`/admin/users/${id}/signature`, formData, {
       headers: { "Content-Type": "multipart/form-data" },
     }),
-  getSignature: (id) => api.get(`/gso/users/${id}/signature`), // Uses GSO endpoint for viewing
+  getSignature: (id) => api.get(`/admin/users/${id}/signature`),
   deleteSignature: (id) => api.delete(`/admin/users/${id}/signature`),
 };
 
@@ -326,42 +264,25 @@ export const vehicleAPI = {
   update: (id, data) => api.put(`/admin/vehicles/${id}`, data),
   delete: (id) => api.delete(`/admin/vehicles/${id}`),
   updateStatus: (id, status, reason = null) =>
-    api.patch(`/admin/vehicles/${id}/status`, {
-      status,
-      deactivation_reason: reason,
-    }),
+    api.patch(`/admin/vehicles/${id}/status`, { status, deactivation_reason: reason }),
   updateMaintenance: (id, maintenanceFlag) =>
-    api.patch(`/admin/vehicles/${id}/maintenance`, {
-      maintenance_flag: maintenanceFlag,
-    }),
+    api.patch(`/admin/vehicles/${id}/maintenance`, { maintenance_flag: maintenanceFlag }),
   updateOdometerStatus: (id, status) =>
-    api.patch(`/admin/vehicles/${id}/odometer-status`, {
-      odometer_status: status,
-    }),
-
-  // For department staff
+    api.patch(`/admin/vehicles/${id}/odometer-status`, { odometer_status: status }),
   getAvailableVehicles: (params = {}) =>
-    api.get("/vehicles/available", { params }),
+    api.get("/admin/vehicles/available", { params }),
 };
 
-// Driver Management
+// Driver Management (Admin)
 export const driverManagementAPI = {
   getAll: (params) => api.get("/admin/drivers", { params }),
   getById: (id) => api.get(`/admin/drivers/${id}`),
   registerDriver: (userId, departmentId) =>
-    api.post("/admin/drivers", {
-      user_id: userId,
-      department_id: departmentId,
-    }),
+    api.post("/admin/drivers", { user_id: userId, department_id: departmentId }),
   updateStatus: (id, status, reason = null) =>
-    api.patch(`/admin/drivers/${id}/status`, {
-      status,
-      deactivation_reason: reason,
-    }),
+    api.patch(`/admin/drivers/${id}/status`, { status, deactivation_reason: reason }),
   delete: (id) => api.delete(`/admin/drivers/${id}`),
-
-  // For department staff
-  getActiveDrivers: (params = {}) => api.get("/drivers/active", { params }),
+  getActiveDrivers: (params = {}) => api.get("/admin/drivers", { params }),
 };
 
 // Budget Policy Management
@@ -375,20 +296,14 @@ export const budgetPolicyAPI = {
   delete: (departmentId) =>
     api.delete(`/admin/budget-policies/${departmentId}`),
 
-  // Budget Periods
   getPeriods: (params) => api.get("/admin/budget-periods", { params }),
   getPeriodById: (id) => api.get(`/admin/budget-periods/${id}`),
   closePeriod: (id) => api.post(`/admin/budget-periods/${id}/close`),
   createPeriods: (data) => api.post("/admin/budget-periods/create", data),
 
-  // Budget Status
   getBudgetStatus: (params) => api.get("/admin/budget-status", { params }),
   getEventLogs: (params) => api.get("/admin/budget-event-logs", { params }),
-  //force reset
-  forceActivate: (data) =>
-    api.post("/admin/budget-policies/force-activate", data),
-
-  //run weekly
+  forceActivate: (data) => api.post("/admin/budget-policies/force-activate", data),
   runWeeklyReset: () => api.post("/admin/budget-policies/run-weekly-reset"),
 };
 
@@ -401,26 +316,6 @@ export const settingsAPI = {
   updateMultiple: (settings) => api.post("/admin/settings/bulk", { settings }),
 };
 
-// Request Management (Department Requests & CRUD Requests)
-export const requestAPI = {
-  // Department Requests
-  getDepartmentRequests: (params) =>
-    api.get("/admin/requests/department", { params }),
-  getDepartmentRequestById: (id) => api.get(`/admin/requests/department/${id}`),
-  approveDepartmentRequest: (id, note) =>
-    api.post(`/admin/requests/department/${id}/approve`, { review_note: note }),
-  rejectDepartmentRequest: (id, note) =>
-    api.post(`/admin/requests/department/${id}/reject`, { review_note: note }),
-
-  // CRUD Requests
-  getCrudRequests: (params) => api.get("/admin/requests/crud", { params }),
-  getCrudRequestById: (id) => api.get(`/admin/requests/crud/${id}`),
-  approveCrudRequest: (id, note) =>
-    api.post(`/admin/requests/crud/${id}/approve`, { review_note: note }),
-  rejectCrudRequest: (id, note) =>
-    api.post(`/admin/requests/crud/${id}/reject`, { review_note: note }),
-};
-
 // Notifications
 export const notificationAPI = {
   getAll: (params) => api.get("/notifications", { params }),
@@ -430,39 +325,29 @@ export const notificationAPI = {
   getPreferences: () => api.get("/notifications/preferences"),
   updatePreferences: (preferences) =>
     api.put("/notifications/preferences", preferences),
+  
+  send: (data) => api.post("/notifications/send", data),
+  
+  // Test broadcast
+  testBroadcast: () => api.post("/notifications/test"),
 };
 
 // Reports
 export const reportsAPI = {
-  // Trip Reports
   getTripReport: (params) => api.get("/reports/trips", { params }),
   exportTripReport: (format, params) =>
-    api.get(`/reports/trips/export/${format}`, {
-      params,
-      responseType: "blob",
-    }),
-
-  // Fuel Reports
+    api.get(`/reports/trips/export/${format}`, { params, responseType: "blob" }),
   getFuelReport: (params) => api.get("/reports/fuel", { params }),
   exportFuelReport: (format, params) =>
     api.get(`/reports/fuel/export/${format}`, { params, responseType: "blob" }),
-
-  // Budget Reports
   getBudgetReport: (params) => api.get("/reports/budget", { params }),
   exportBudgetReport: (format, params) =>
-    api.get(`/reports/budget/export/${format}`, {
-      params,
-      responseType: "blob",
-    }),
-
-  // Vehicle Reports
+    api.get(`/reports/budget/export/${format}`, { params, responseType: "blob" }),
   getVehicleReport: (params) => api.get("/reports/vehicles", { params }),
-
-  // Dashboard Summary
   getReportSummary: (params) => api.get("/reports/summary", { params }),
 };
 
-// Lookup Tables (for dropdowns)
+// Lookup Tables
 export const lookupAPI = {
   getTripStatuses: () => api.get("/lookup/trip-statuses"),
   getUserRoles: () => api.get("/lookup/user-roles"),

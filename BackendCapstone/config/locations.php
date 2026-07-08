@@ -12,9 +12,9 @@ return [
     
     // Origin point (LGU Building Laguindingan - Poblacion)
     'origin' => [
-        'name' => 'LGU Building Laguindingan',
+        'name' => 'LGU  Laguindingan',
         'address' => 'Poblacion, Laguindingan, Misamis Oriental',
-        'coordinates' => [124.4432, 8.5731], // [longitude, latitude]
+        'coordinates' => [124.4432, 8.5731], 
         'lat' => 8.5731,
         'lng' => 124.4432,
     ],

@@ -1,8 +1,9 @@
 // src/pages/gso/GsoDashboard.jsx
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
-import { gsoAPI } from '../../services/api';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { gsoAPI, userAPI, vehicleAPI, departmentAPI } from '../../services/api';
 import {
   LayoutDashboard,
   Clock,
@@ -17,16 +18,17 @@ import {
   RefreshCw,
   Check,
   X,
-  Send,
-  Printer,
   Search,
-  Filter,
   Building2,
   FileCheck,
+  PlusCircle,
+  Users,
+  Car,
+  DollarSign,
   TrendingUp,
-  ChevronRight,
-  ChevronDown,
-  ChevronUp
+  TrendingDown,
+  Wallet,
+  Fuel,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -50,274 +52,374 @@ import {
 import { Textarea } from '@/components/ui/textarea';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Input } from '@/components/ui/input';
+import {
+  AreaChart,
+  Area,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+} from 'recharts';
 import { toast } from 'react-hot-toast';
+
+// ============================================
+// CONSTANTS & HELPERS
+// ============================================
+
+// Status configuration for workflow
+const getStatusConfig = (status) => {
+  const configs = {
+    'pending_mayors_office': {
+      color: 'bg-yellow-500',
+      label: 'Pending MO',
+      icon: Clock,
+    },
+    'funds_issued': {
+      color: 'bg-blue-500',
+      label: 'Funds Issued',
+      icon: DollarSign,
+    },
+    'acknowledged': {
+      color: 'bg-cyan-500',
+      label: 'Acknowledged',
+      icon: CheckCircle,
+    },
+    'in_transit': {
+      color: 'bg-indigo-500',
+      label: 'In Transit',
+      icon: Truck,
+    },
+    'pending_reconciliation': {
+      color: 'bg-orange-500',
+      label: 'Pending Reconciliation',
+      icon: FileCheck,
+    },
+    'closed': {
+      color: 'bg-green-600',
+      label: 'Closed',
+      icon: CheckCircle,
+    },
+    'rejected': {
+      color: 'bg-red-500',
+      label: 'Rejected',
+      icon: XCircle,
+    },
+    'cancelled': {
+      color: 'bg-slate-500',
+      label: 'Cancelled',
+      icon: XCircle,
+    },
+    'returned_for_revision': {
+      color: 'bg-purple-500',
+      label: 'Returned',
+      icon: AlertCircle,
+    },
+    'draft': {
+      color: 'bg-slate-400',
+      label: 'Draft',
+      icon: AlertCircle,
+    },
+  };
+  return configs[status] || { color: 'bg-slate-500', label: status || 'Unknown', icon: Clock };
+};
+
+const formatDateShort = (dateString) => {
+  if (!dateString) return 'N/A';
+  try {
+    return new Date(dateString).toLocaleDateString('en-US', { 
+      month: 'short', 
+      day: 'numeric', 
+      year: 'numeric' 
+    });
+  } catch {
+    return 'N/A';
+  }
+};
+
+const getTicketId = (ticket) => {
+  return ticket?.trip_ticket_id || ticket?.id || ticket?.ticket_id;
+};
+
+const getTicketNumber = (ticket) => {
+  return ticket?.trip_ticket_number || ticket?.ticket_number || 'N/A';
+};
+
+// ============================================
+// COMPONENT
+// ============================================
 
 const GsoDashboard = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
-  const [pendingTickets, setPendingTickets] = useState([]);
-  const [filteredPending, setFilteredPending] = useState([]);
-  const [forwardableTickets, setForwardableTickets] = useState([]);
-  const [filteredForwardable, setFilteredForwardable] = useState([]);
-  const [forwardedTickets, setForwardedTickets] = useState([]);
-  const [filteredForwarded, setFilteredForwarded] = useState([]);
-  const [returnedCount, setReturnedCount] = useState(0);
-  const [withMayorsOffice, setWithMayorsOffice] = useState(0);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
+  const queryClient = useQueryClient();
   const [selectedTicket, setSelectedTicket] = useState(null);
-  const [showApproveDialog, setShowApproveDialog] = useState(false);
-  const [showRejectDialog, setShowRejectDialog] = useState(false);
-  const [rejectionNote, setRejectionNote] = useState('');
-  const [submitting, setSubmitting] = useState(false);
+  const [showReconcileDialog, setShowReconcileDialog] = useState(false);
   const [activeTab, setActiveTab] = useState('pending');
   const [searchQuery, setSearchQuery] = useState('');
 
   const departmentName = user?.department_name?.replace('Philippine National Police - ', '').replace('PNP - ', '') || 'General Services Office';
 
-  useEffect(() => {
-    fetchAllData();
-  }, []);
+  // ============================================
+  // QUERIES
+  // ============================================
 
-  useEffect(() => {
-    filterTickets();
-  }, [searchQuery, pendingTickets, forwardableTickets, forwardedTickets]);
+  // Trip Queries
+  const { data: pendingTickets = [], isLoading: pendingLoading, refetch: refetchPending } = useQuery({
+    queryKey: ['gso-pending-mo'],
+    queryFn: async () => {
+      try {
+        const response = await gsoAPI.getPendingMO();
+        // ✅ Handle different response structures
+        const data = response?.data?.data || response?.data || [];
+        return Array.isArray(data) ? data : [];
+      } catch (error) {
+        console.error('Error fetching pending tickets:', error);
+        return [];
+      }
+    },
+  });
 
-  const filterTickets = () => {
+  const { data: returnedTickets = [], isLoading: returnedLoading, refetch: refetchReturned } = useQuery({
+    queryKey: ['gso-returned'],
+    queryFn: async () => {
+      try {
+        const response = await gsoAPI.getReturnedTickets();
+        const data = response?.data?.data || response?.data || [];
+        return Array.isArray(data) ? data : [];
+      } catch (error) {
+        console.error('Error fetching returned tickets:', error);
+        return [];
+      }
+    },
+  });
+
+  const { data: reconciliationTickets = [], isLoading: reconciliationLoading, refetch: refetchReconciliation } = useQuery({
+    queryKey: ['gso-reconciliation'],
+    queryFn: async () => {
+      try {
+        const response = await gsoAPI.getPendingReconciliation();
+        const data = response?.data?.data || response?.data || [];
+        return Array.isArray(data) ? data : [];
+      } catch (error) {
+        console.error('Error fetching reconciliation tickets:', error);
+        return [];
+      }
+    },
+  });
+
+  const { data: allTrips = [], isLoading: allTripsLoading, refetch: refetchAllTrips } = useQuery({
+    queryKey: ['gso-all-trips'],
+    queryFn: async () => {
+      try {
+        const response = await gsoAPI.getAllTrips();
+        const data = response?.data?.data || response?.data || [];
+        return Array.isArray(data) ? data : [];
+      } catch (error) {
+        console.error('Error fetching all trips:', error);
+        return [];
+      }
+    },
+  });
+
+  // Admin Stats Queries
+  const { data: users = [], isLoading: usersLoading } = useQuery({
+    queryKey: ['admin-users-stats'],
+    queryFn: async () => {
+      try {
+        const response = await userAPI.getAll();
+        return response?.data?.data || [];
+      } catch {
+        return [];
+      }
+    },
+  });
+
+  const { data: vehicles = [], isLoading: vehiclesLoading } = useQuery({
+    queryKey: ['admin-vehicles-stats'],
+    queryFn: async () => {
+      try {
+        const response = await vehicleAPI.getAll();
+        return response?.data?.data || [];
+      } catch {
+        return [];
+      }
+    },
+  });
+
+  const { data: departments = [], isLoading: departmentsLoading } = useQuery({
+    queryKey: ['admin-departments-stats'],
+    queryFn: async () => {
+      try {
+        const response = await departmentAPI.getAll();
+        return response?.data?.data || [];
+      } catch {
+        return [];
+      }
+    },
+  });
+
+  // ============================================
+  // MUTATIONS
+  // ============================================
+
+  const reconcileMutation = useMutation({
+    mutationFn: async ({ ticketId, data }) => {
+      const response = await gsoAPI.reconcileTrip(ticketId, data);
+      return response.data;
+    },
+    onSuccess: () => {
+      toast.success('Trip reconciled successfully!');
+      queryClient.invalidateQueries({ queryKey: ['gso-reconciliation'] });
+      queryClient.invalidateQueries({ queryKey: ['gso-all-trips'] });
+      setShowReconcileDialog(false);
+      setSelectedTicket(null);
+    },
+    onError: (error) => {
+      toast.error(error?.response?.data?.message || 'Failed to reconcile trip');
+    },
+  });
+
+  // ============================================
+  // COMPUTED STATS
+  // ============================================
+
+  const stats = useMemo(() => {
+    const totalUsers = Array.isArray(users) ? users.length : 0;
+    const activeUsers = Array.isArray(users) ? users.filter(u => u?.status === 'active').length : 0;
+    const totalVehicles = Array.isArray(vehicles) ? vehicles.length : 0;
+    const activeVehicles = Array.isArray(vehicles) ? vehicles.filter(v => v?.status === 'active').length : 0;
+    const totalDepartments = Array.isArray(departments) ? departments.length : 0;
+
+    return [
+      {
+        title: 'Total Trips',
+        value: allTrips.length,
+        icon: Truck,
+        gradient: 'from-blue-500 to-blue-600',
+        subtitle: 'All time',
+        onClick: () => setActiveTab('all'),
+      },
+      {
+        title: 'Pending MO',
+        value: pendingTickets.length,
+        icon: Clock,
+        gradient: 'from-yellow-500 to-yellow-600',
+        subtitle: 'Awaiting fund release',
+        onClick: () => setActiveTab('pending'),
+      },
+      {
+        title: 'Users',
+        value: activeUsers,
+        icon: Users,
+        gradient: 'from-purple-500 to-purple-600',
+        subtitle: `${totalUsers} total users`,
+        onClick: () => navigate('/admin/users'),
+      },
+      {
+        title: 'Vehicles',
+        value: activeVehicles,
+        icon: Car,
+        gradient: 'from-emerald-500 to-emerald-600',
+        subtitle: `${totalVehicles} total vehicles`,
+        onClick: () => navigate('/admin/vehicles'),
+      },
+      {
+        title: 'Departments',
+        value: totalDepartments,
+        icon: Building2,
+        gradient: 'from-cyan-500 to-cyan-600',
+        subtitle: 'Active departments',
+        onClick: () => navigate('/admin/departments'),
+      },
+    ];
+  }, [allTrips, pendingTickets, users, vehicles, departments, navigate]);
+
+  // ============================================
+  // FILTER FUNCTIONS
+  // ============================================
+
+  const filterTickets = (tickets) => {
+    if (!searchQuery || !Array.isArray(tickets)) return tickets || [];
     const query = searchQuery.toLowerCase();
-    
-    if (!query) {
-      setFilteredPending(pendingTickets);
-      setFilteredForwardable(forwardableTickets);
-      setFilteredForwarded(forwardedTickets);
-      return;
-    }
-    
-    setFilteredPending(pendingTickets.filter(ticket => 
-      (ticket.trip_ticket_number || ticket.ticket_number || '').toLowerCase().includes(query) ||
-      (ticket.destination || '').toLowerCase().includes(query) ||
-      (ticket.department_name || '').toLowerCase().includes(query) ||
-      (ticket.vehicle?.plate_number || '').toLowerCase().includes(query)
-    ));
-    
-    setFilteredForwardable(forwardableTickets.filter(ticket => 
-      (ticket.trip_ticket_number || ticket.ticket_number || '').toLowerCase().includes(query) ||
-      (ticket.destination || '').toLowerCase().includes(query) ||
-      (ticket.department_name || '').toLowerCase().includes(query)
-    ));
-    
-    setFilteredForwarded(forwardedTickets.filter(ticket => 
-      (ticket.trip_ticket_number || ticket.ticket_number || '').toLowerCase().includes(query) ||
-      (ticket.destination || '').toLowerCase().includes(query) ||
-      (ticket.department_name || '').toLowerCase().includes(query)
-    ));
+    return tickets.filter(ticket =>
+      (getTicketNumber(ticket) || '').toLowerCase().includes(query) ||
+      (ticket?.destination || '').toLowerCase().includes(query) ||
+      (ticket?.department_name || '').toLowerCase().includes(query) ||
+      (ticket?.vehicle?.plate_number || '').toLowerCase().includes(query)
+    );
   };
 
-  const fetchAllData = useCallback(async (isRefresh = false) => {
-    if (isRefresh) {
-      setRefreshing(true);
-      toast.loading('Refreshing dashboard...', { id: 'refresh' });
-    } else {
-      setLoading(true);
+  const filteredPending = useMemo(() => filterTickets(pendingTickets), [pendingTickets, searchQuery]);
+  const filteredReturned = useMemo(() => filterTickets(returnedTickets), [returnedTickets, searchQuery]);
+  const filteredReconciliation = useMemo(() => filterTickets(reconciliationTickets), [reconciliationTickets, searchQuery]);
+  const filteredAllTrips = useMemo(() => filterTickets(allTrips), [allTrips, searchQuery]);
+
+  // ============================================
+  // CHART DATA
+  // ============================================
+
+  const chartData = useMemo(() => {
+    if (!Array.isArray(allTrips) || allTrips.length === 0) {
+      return [
+        { month: 'Jan', trips: 0 },
+        { month: 'Feb', trips: 0 },
+        { month: 'Mar', trips: 0 },
+        { month: 'Apr', trips: 0 },
+        { month: 'May', trips: 0 },
+        { month: 'Jun', trips: 0 },
+      ];
     }
+
+    const monthlyMap = new Map();
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
     
-    try {
-      await Promise.all([
-        fetchPendingTickets(),
-        fetchForwardableTickets(),
-        fetchForwardedTickets(),
-        fetchStats(),
-      ]);
-      
-      if (isRefresh) {
-        toast.success('Dashboard refreshed successfully', { id: 'refresh' });
+    // Initialize all months with 0
+    months.forEach(m => monthlyMap.set(m, 0));
+
+    allTrips.forEach(trip => {
+      if (trip?.trip_date) {
+        try {
+          const date = new Date(trip.trip_date);
+          const monthKey = months[date.getMonth()];
+          if (monthKey) {
+            monthlyMap.set(monthKey, (monthlyMap.get(monthKey) || 0) + 1);
+          }
+        } catch {
+          // Skip invalid dates
+        }
       }
-    } catch (error) {
-      console.error('Error fetching dashboard data:', error);
-      if (isRefresh) {
-        toast.error('Failed to refresh dashboard', { id: 'refresh' });
-      }
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  }, []);
+    });
 
-  const fetchStats = async () => {
-    try {
-      const response = await gsoAPI.getDashboard();
-      const statsData = response.data?.data || response.data?.stats || {};
-      setReturnedCount(statsData.returned || 0);
-      setWithMayorsOffice(statsData.with_mayors_office || 0);
-    } catch (error) {
-      console.error('Failed to fetch stats:', error);
-    }
-  };
+    return Array.from(monthlyMap.entries())
+      .map(([month, trips]) => ({ month, trips }))
+      .slice(-6);
+  }, [allTrips]);
 
-  const fetchPendingTickets = async () => {
-    try {
-      const response = await gsoAPI.getPendingTickets();
-      const ticketsData = response.data?.data || response.data?.tickets || [];
-      const tickets = Array.isArray(ticketsData) ? ticketsData : [];
-      setPendingTickets(tickets);
-      setFilteredPending(tickets);
-    } catch (error) {
-      console.error('Failed to fetch pending tickets:', error);
-      setPendingTickets([]);
-      setFilteredPending([]);
-    }
-  };
+  // ============================================
+  // COMPONENTS
+  // ============================================
 
-  const fetchForwardableTickets = async () => {
-    try {
-      const response = await gsoAPI.getVerifiedTickets();
-      let ticketsData = response.data?.data || response.data?.tickets || [];
-      ticketsData = Array.isArray(ticketsData) ? ticketsData : [];
-      
-      const forwardable = ticketsData.filter(ticket => 
-        ticket.status === 'pending_mayors_office'
-      );
-      
-      setForwardableTickets(forwardable);
-      setFilteredForwardable(forwardable);
-    } catch (error) {
-      console.error('Failed to fetch forwardable tickets:', error);
-      setForwardableTickets([]);
-      setFilteredForwardable([]);
-    }
-  };
-
-  const fetchForwardedTickets = async () => {
-    try {
-      const response = await gsoAPI.getVerifiedTickets();
-      let ticketsData = response.data?.data || response.data?.tickets || [];
-      ticketsData = Array.isArray(ticketsData) ? ticketsData : [];
-      
-      const forwarded = ticketsData.filter(ticket => 
-        ticket.status === 'with_mayors_office' ||
-        ticket.status === 'funds_issued' ||
-        ticket.status === 'in_transit' ||
-        ticket.status === 'pending_reconciliation'
-      );
-      
-      setForwardedTickets(forwarded);
-      setFilteredForwarded(forwarded);
-    } catch (error) {
-      console.error('Failed to fetch forwarded tickets:', error);
-      setForwardedTickets([]);
-      setFilteredForwarded([]);
-    }
-  };
-
-  const handleApprove = async () => {
-    if (!selectedTicket) return;
-    
-    setSubmitting(true);
-    try {
-      await gsoAPI.approveTicket(selectedTicket.trip_ticket_id || selectedTicket.id);
-      setShowApproveDialog(false);
-      setSelectedTicket(null);
-      toast.success('Ticket verified successfully');
-      fetchAllData(true);
-    } catch (error) {
-      console.error('Failed to approve ticket:', error);
-      toast.error(error.response?.data?.message || 'Failed to approve ticket');
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const handleReject = async () => {
-
-        console.log("selectedTicket:", selectedTicket);  // ← Add this
-    console.log("rejectionNote:", rejectionNote);     // ← Add this
-
-    if (!selectedTicket) return;
-    if (!rejectionNote.trim()) {
-      toast.error('Please provide a reason for rejection');
-      return;
-    }
-    
-    setSubmitting(true);
-    try {
-      await gsoAPI.rejectTicket(selectedTicket.trip_ticket_id || selectedTicket.id, rejectionNote);
-      setShowRejectDialog(false);
-      setSelectedTicket(null);
-      setRejectionNote('');
-      toast.success('Ticket rejected and returned to department');
-      fetchAllData(true);
-    } catch (error) {
-      console.error('Failed to reject ticket:', error);
-      toast.error(error.response?.data?.message || 'Failed to reject ticket');
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const handleForwardToMO = async (ticketId) => {
-    setSubmitting(true);
-    try {
-      await gsoAPI.forwardToMO([ticketId]);
-      
-      const forwardedTicket = forwardableTickets.find(ticket => 
-        (ticket.trip_ticket_id || ticket.id) === ticketId
-      );
-      
-      if (forwardedTicket) {
-        const updatedTicket = { ...forwardedTicket, status: 'with_mayors_office' };
-        setForwardedTickets(prev => [updatedTicket, ...prev]);
-        setFilteredForwarded(prev => [updatedTicket, ...prev]);
-        setForwardableTickets(prev => prev.filter(ticket => 
-          (ticket.trip_ticket_id || ticket.id) !== ticketId
-        ));
-        setFilteredForwardable(prev => prev.filter(ticket => 
-          (ticket.trip_ticket_id || ticket.id) !== ticketId
-        ));
-      }
-      
-      toast.success('Ticket forwarded to Mayor\'s Office');
-      fetchStats();
-    } catch (error) {
-      console.error('Failed to forward ticket:', error);
-      toast.error(error.response?.data?.message || 'Failed to forward ticket');
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const getStatusBadge = (status) => {
-    const config = {
-      pending_gso_review: { color: 'bg-yellow-500', label: 'Pending GSO Review', icon: Clock },
-      pending_mayors_office: { color: 'bg-emerald-500', label: 'Ready for MO', icon: Send },
-      with_mayors_office: { color: 'bg-blue-500', label: 'With Mayor\'s Office', icon: Building2 },
-      funds_issued: { color: 'bg-purple-500', label: 'Funds Issued', icon: CheckCircle },
-      in_transit: { color: 'bg-indigo-500', label: 'In Transit', icon: Truck },
-      pending_reconciliation: { color: 'bg-orange-500', label: 'Pending Reconciliation', icon: FileCheck },
-      returned_for_revision: { color: 'bg-red-500', label: 'Returned', icon: XCircle },
-      rejected: { color: 'bg-red-600', label: 'Rejected', icon: XCircle },
-    };
-    const c = config[status] || { color: 'bg-slate-500', label: status?.replace(/_/g, ' ') || 'Unknown', icon: AlertCircle };
-    const IconComponent = c.icon;
+  const StatusBadge = ({ status }) => {
+    const config = getStatusConfig(status);
+    const Icon = config.icon;
     return (
-      <Badge className={`${c.color} text-white flex items-center gap-1 px-2.5 py-1.5 rounded-lg`}>
-        <IconComponent className="h-3 w-3" />
-        {c.label}
+      <Badge className={`${config.color} text-white flex items-center gap-1 px-2.5 py-1.5 rounded-lg`}>
+        <Icon className="h-3 w-3" />
+        {config.label}
       </Badge>
     );
   };
 
-  const formatDate = (dateString) => {
-    if (!dateString) return 'N/A';
-    return new Date(dateString).toLocaleDateString('en-PH', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric'
-    });
-  };
-
-  // Ticket Table Component
-  const TicketTable = ({ tickets, showForwardButton = false, onForward, onView, onVerify, onReject, isLoading }) => {
-    if (isLoading) {
+  const TicketTable = ({ 
+    tickets, 
+    showReconcile = false, 
+    onView, 
+    onReconcile, 
+    isLoading: tableLoading,
+    showActions = true,
+  }) => {
+    if (tableLoading) {
       return (
         <div className="flex justify-center py-16">
           <div className="text-center">
@@ -327,8 +429,8 @@ const GsoDashboard = () => {
         </div>
       );
     }
-    
-    if (tickets.length === 0) {
+
+    if (!Array.isArray(tickets) || tickets.length === 0) {
       return (
         <div className="text-center py-16">
           <div className="w-16 h-16 bg-slate-100 dark:bg-slate-800 rounded-2xl flex items-center justify-center mx-auto mb-4">
@@ -339,7 +441,7 @@ const GsoDashboard = () => {
         </div>
       );
     }
-    
+
     return (
       <div className="overflow-x-auto">
         <Table>
@@ -350,135 +452,159 @@ const GsoDashboard = () => {
               <TableHead className="font-semibold text-slate-600 dark:text-slate-400">Destination</TableHead>
               <TableHead className="font-semibold text-slate-600 dark:text-slate-400">Department</TableHead>
               <TableHead className="font-semibold text-slate-600 dark:text-slate-400">Status</TableHead>
-              <TableHead className="font-semibold text-slate-600 dark:text-slate-400 text-right">Actions</TableHead>
+              {showActions && (
+                <TableHead className="font-semibold text-slate-600 dark:text-slate-400 text-right">Actions</TableHead>
+              )}
             </TableRow>
           </TableHeader>
           <TableBody>
-            {tickets.map((ticket, index) => (
-              <TableRow key={ticket.id || ticket.trip_ticket_id} className="hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors animate-fade-in" style={{ animationDelay: `${index * 30}ms` }}>
-                <TableCell className="font-medium">
-                  <span className="font-mono text-sm font-semibold text-slate-800 dark:text-white">
-                    {ticket.ticket_number || ticket.trip_ticket_number}
-                  </span>
-                </TableCell>
-                <TableCell>
-                  <div className="flex items-center gap-1.5">
-                    <Calendar className="h-3.5 w-3.5 text-slate-400" />
-                    <span className="text-sm text-slate-600 dark:text-slate-400">{formatDate(ticket.trip_date)}</span>
-                  </div>
-                </TableCell>
-                <TableCell>
-                  <div className="flex items-center gap-1.5">
-                    <MapPin className="h-3.5 w-3.5 text-slate-400" />
-                    <span className="text-sm text-slate-600 dark:text-slate-400 truncate max-w-[200px]">{ticket.destination}</span>
-                  </div>
-                </TableCell>
-                <TableCell>
-                  <div className="flex items-center gap-1.5">
-                    <Building2 className="h-3.5 w-3.5 text-slate-400" />
-                    <span className="text-sm text-slate-600 dark:text-slate-400">{ticket.department_name || 'N/A'}</span>
-                  </div>
-                </TableCell>
-                <TableCell>{getStatusBadge(ticket.status)}</TableCell>
-                <TableCell className="text-right">
-                  <div className="flex items-center justify-end gap-2">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => onView(ticket.id || ticket.trip_ticket_id)}
-                      className="text-blue-600 hover:text-blue-700 hover:bg-blue-50 dark:text-blue-400 dark:hover:text-blue-300 dark:hover:bg-blue-950/30 h-8 w-8 p-0"
-                      title="View Details"
-                    >
-                      <Eye className="h-4 w-4" />
-                    </Button>
-                    {showForwardButton && (
-                      <Button
-                        size="sm"
-                        className="bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm h-8 px-3"
-                        onClick={() => onForward(ticket.id || ticket.trip_ticket_id)}
-                        disabled={submitting}
-                      >
-                        <Send className="h-3.5 w-3.5 mr-1" />
-                        Forward
-                      </Button>
-                    )}
-                    {!showForwardButton && onVerify && (
-                      <>
-                        <Button
-                          size="sm"
-                          className="bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm h-8 px-3"
-                          onClick={() => onVerify(ticket)}
-                        >
-                          <Check className="h-3.5 w-3.5 mr-1" />
-                          Verify
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="text-red-600 border-red-300 hover:bg-red-50 dark:text-red-400 dark:border-red-800 dark:hover:bg-red-950/30 h-8 px-3"
-                          onClick={() => onReject(ticket)}
-                        >
-                          <X className="h-3.5 w-3.5 mr-1" />
-                          Reject
-                        </Button>
-                      </>
-                    )}
-                  </div>
-                </TableCell>
-              </TableRow>
-            ))}
+            {tickets.map((ticket, index) => {
+              const ticketId = getTicketId(ticket);
+              return (
+                <TableRow 
+                  key={ticketId || index} 
+                  className="hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors"
+                >
+                  <TableCell className="font-medium">
+                    <span className="font-mono text-sm font-semibold text-slate-800 dark:text-white">
+                      {getTicketNumber(ticket)}
+                    </span>
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex items-center gap-1.5">
+                      <Calendar className="h-3.5 w-3.5 text-slate-400" />
+                      <span className="text-sm text-slate-600 dark:text-slate-400">
+                        {formatDateShort(ticket?.trip_date)}
+                      </span>
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex items-center gap-1.5">
+                      <MapPin className="h-3.5 w-3.5 text-slate-400" />
+                      <span className="text-sm text-slate-600 dark:text-slate-400 truncate max-w-[200px]">
+                        {ticket?.destination || 'N/A'}
+                      </span>
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex items-center gap-1.5">
+                      <Building2 className="h-3.5 w-3.5 text-slate-400" />
+                      <span className="text-sm text-slate-600 dark:text-slate-400">
+                        {ticket?.department_name || ticket?.department?.name || 'N/A'}
+                      </span>
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <StatusBadge status={ticket?.status} />
+                  </TableCell>
+                  {showActions && (
+                    <TableCell className="text-right">
+                      <div className="flex items-center justify-end gap-2">
+                        {onView && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => onView(ticketId)}
+                            className="text-blue-600 hover:text-blue-700 hover:bg-blue-50 dark:text-blue-400 dark:hover:text-blue-300 dark:hover:bg-blue-950/30 h-8 w-8 p-0"
+                            title="View Details"
+                          >
+                            <Eye className="h-4 w-4" />
+                          </Button>
+                        )}
+                        {showReconcile && ticket?.status === 'pending_reconciliation' && (
+                          <Button
+                            size="sm"
+                            className="bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm h-8 px-3"
+                            onClick={() => onReconcile?.(ticket)}
+                          >
+                            <Check className="h-3.5 w-3.5 mr-1" />
+                            Reconcile
+                          </Button>
+                        )}
+                      </div>
+                    </TableCell>
+                  )}
+                </TableRow>
+              );
+            })}
           </TableBody>
         </Table>
       </div>
     );
   };
 
-  if (loading && !refreshing) {
+  // ============================================
+  // LOADING STATE
+  // ============================================
+
+  const isLoading = pendingLoading || returnedLoading || reconciliationLoading || allTripsLoading;
+
+  if (isLoading && allTrips.length === 0) {
     return (
       <div className="flex items-center justify-center h-96">
         <div className="text-center">
           <Loader2 className="h-12 w-12 animate-spin text-blue-600 dark:text-blue-400 mx-auto mb-4" />
-          <p className="text-slate-500 dark:text-slate-400">Loading dashboard...</p>
+          <p className="text-slate-500 dark:text-slate-400">Loading dashboard data...</p>
         </div>
       </div>
     );
   }
 
+  // ============================================
+  // RENDER
+  // ============================================
+
   return (
     <div className="space-y-6 p-6 bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-900 dark:to-slate-800 min-h-screen">
-      {/* Header Section - Premium Gradient */}
+      {/* Header Section */}
       <div className="relative overflow-hidden bg-gradient-to-r from-slate-900 via-slate-800 to-blue-900 rounded-2xl p-6 text-white shadow-xl">
         <div className="absolute top-0 right-0 w-64 h-64 bg-blue-500/20 rounded-full blur-3xl" />
         <div className="absolute bottom-0 left-0 w-64 h-64 bg-emerald-500/20 rounded-full blur-3xl" />
-        
+
         <div className="relative z-10 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
           <div>
-            <div className="flex items-center gap-2 mb-3">
+            <div className="flex items-center gap-2 mb-3 flex-wrap">
               <Badge className="bg-emerald-500/20 text-emerald-300 border-emerald-500/30 rounded-full px-3 py-1">
                 <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 mr-1.5 animate-pulse" />
-                GSO Staff
+                GSO Office
               </Badge>
               <Badge className="bg-blue-500/20 text-blue-300 border-blue-500/30 rounded-full px-3 py-1">
                 {departmentName}
               </Badge>
+              <Badge className="bg-purple-500/20 text-purple-300 border-purple-500/30 rounded-full px-3 py-1">
+                Super Admin
+              </Badge>
             </div>
-            <h1 className="text-3xl font-bold bg-gradient-to-r from-white to-slate-300 bg-clip-text text-transparent">GSO Dashboard</h1>
+            <h1 className="text-3xl font-bold bg-gradient-to-r from-white to-slate-300 bg-clip-text text-transparent">
+              GSO Dashboard
+            </h1>
             <p className="text-slate-300 mt-1">
-              Review and verify trip tickets forwarded by Department Heads
+              Manage trip tickets, users, departments, and vehicles
             </p>
           </div>
-          <div className="flex gap-3">
-            <Button 
-              variant="outline" 
-              onClick={() => fetchAllData(true)} 
-              disabled={refreshing}
+          <div className="flex gap-3 flex-wrap">
+            <Button
+              onClick={() => navigate('/gso/create-trip')}
+              className="bg-white text-slate-900 hover:bg-slate-100 rounded-xl shadow-lg"
+            >
+              <PlusCircle className="h-4 w-4 mr-2" />
+              Create Trip
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => {
+                refetchPending();
+                refetchReturned();
+                refetchReconciliation();
+                refetchAllTrips();
+                queryClient.invalidateQueries({ queryKey: ['admin-users-stats'] });
+                queryClient.invalidateQueries({ queryKey: ['admin-vehicles-stats'] });
+                queryClient.invalidateQueries({ queryKey: ['admin-departments-stats'] });
+                toast.success('Dashboard refreshed');
+              }}
               className="bg-white/10 border-white/20 text-white hover:bg-white/20 rounded-xl"
             >
-              {refreshing ? (
-                <Loader2 className="h-4 w-4 animate-spin mr-2" />
-              ) : (
-                <RefreshCw className="h-4 w-4 mr-2" />
-              )}
+              <RefreshCw className="h-4 w-4 mr-2" />
               Refresh
             </Button>
           </div>
@@ -486,63 +612,88 @@ const GsoDashboard = () => {
       </div>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
-        <Card className="hover:shadow-lg transition-all duration-300 hover:-translate-y-1 dark:bg-slate-800/80 dark:border-slate-700">
-          <CardContent className="pt-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-slate-500 dark:text-slate-400 text-sm font-medium">Pending Review</p>
-                <p className="text-3xl font-bold text-yellow-600 dark:text-yellow-400 mt-1">{pendingTickets.length}</p>
-                <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">Awaiting verification</p>
-              </div>
-              <div className="h-12 w-12 bg-yellow-100 dark:bg-yellow-950/50 rounded-2xl flex items-center justify-center">
-                <Clock className="h-6 w-6 text-yellow-600 dark:text-yellow-400" />
-              </div>
-            </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-5">
+        {stats.map((stat, index) => (
+          <div
+            key={index}
+            className="cursor-pointer transform transition-all duration-300 hover:scale-105 hover:shadow-xl"
+            onClick={stat.onClick}
+          >
+            <Card className="relative overflow-hidden group dark:bg-slate-800/80 dark:border-slate-700">
+              <div className={`absolute top-0 right-0 w-32 h-32 bg-gradient-to-br ${stat.gradient} opacity-10 rounded-full -translate-y-1/2 translate-x-1/2 group-hover:scale-150 transition-transform duration-500`} />
+              <CardContent className="p-5">
+                <div className="flex items-start justify-between mb-3">
+                  <div className={`p-2 rounded-xl bg-gradient-to-br ${stat.gradient} shadow-lg`}>
+                    <stat.icon className="h-5 w-5 text-white" />
+                  </div>
+                </div>
+                <div>
+                  <p className="text-3xl font-bold text-slate-900 dark:text-white">{stat.value}</p>
+                  <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">{stat.title}</p>
+                  <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">{stat.subtitle}</p>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        ))}
+      </div>
+
+      {/* Trip Trend Chart */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <Card className="lg:col-span-2 dark:bg-slate-800/80 dark:border-slate-700">
+          <CardHeader>
+            <CardTitle className="text-slate-800 dark:text-white">Trip Trends</CardTitle>
+            <CardDescription className="dark:text-slate-400">Monthly trip activity</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <ResponsiveContainer width="100%" height={200}>
+              <AreaChart data={chartData}>
+                <defs>
+                  <linearGradient id="colorTrips" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3} />
+                    <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" className="dark:stroke-slate-700" />
+                <XAxis dataKey="month" stroke="#9ca3af" className="dark:stroke-slate-500" />
+                <YAxis stroke="#9ca3af" className="dark:stroke-slate-500" />
+                <Tooltip
+                  contentStyle={{ 
+                    backgroundColor: 'white', 
+                    borderRadius: '8px', 
+                    border: 'none', 
+                    boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' 
+                  }}
+                />
+                <Area type="monotone" dataKey="trips" stroke="#3b82f6" fill="url(#colorTrips)" name="Trips" />
+              </AreaChart>
+            </ResponsiveContainer>
           </CardContent>
         </Card>
-        
-        <Card className="hover:shadow-lg transition-all duration-300 hover:-translate-y-1 dark:bg-slate-800/80 dark:border-slate-700">
-          <CardContent className="pt-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-slate-500 dark:text-slate-400 text-sm font-medium">Ready to Forward</p>
-                <p className="text-3xl font-bold text-emerald-600 dark:text-emerald-400 mt-1">{forwardableTickets.length}</p>
-                <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">Verified tickets</p>
-              </div>
-              <div className="h-12 w-12 bg-emerald-100 dark:bg-emerald-950/50 rounded-2xl flex items-center justify-center">
-                <FileCheck className="h-6 w-6 text-emerald-600 dark:text-emerald-400" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        
-        <Card className="hover:shadow-lg transition-all duration-300 hover:-translate-y-1 dark:bg-slate-800/80 dark:border-slate-700">
-          <CardContent className="pt-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-slate-500 dark:text-slate-400 text-sm font-medium">With Mayor's Office</p>
-                <p className="text-3xl font-bold text-blue-600 dark:text-blue-400 mt-1">{withMayorsOffice}</p>
-                <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">Awaiting fund release</p>
-              </div>
-              <div className="h-12 w-12 bg-blue-100 dark:bg-blue-950/50 rounded-2xl flex items-center justify-center">
-                <Send className="h-6 w-6 text-blue-600 dark:text-blue-400" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        
-        <Card className="hover:shadow-lg transition-all duration-300 hover:-translate-y-1 dark:bg-slate-800/80 dark:border-slate-700">
-          <CardContent className="pt-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-slate-500 dark:text-slate-400 text-sm font-medium">Returned</p>
-                <p className="text-3xl font-bold text-red-600 dark:text-red-400 mt-1">{returnedCount}</p>
-                <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">Needs revision</p>
-              </div>
-              <div className="h-12 w-12 bg-red-100 dark:bg-red-950/50 rounded-2xl flex items-center justify-center">
-                <XCircle className="h-6 w-6 text-red-600 dark:text-red-400" />
-              </div>
+
+        {/* Quick Actions */}
+        <Card className="dark:bg-slate-800/80 dark:border-slate-700">
+          <CardHeader>
+            <CardTitle className="text-slate-800 dark:text-white">Quick Actions</CardTitle>
+            <CardDescription className="dark:text-slate-400">Common tasks and shortcuts</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 gap-3">
+              {[
+                { title: 'Users', icon: Users, color: 'bg-purple-50 text-purple-700 hover:bg-purple-100 dark:bg-purple-900/20 dark:text-purple-400 dark:hover:bg-purple-900/30', href: '/admin/users' },
+                { title: 'Departments', icon: Building2, color: 'bg-blue-50 text-blue-700 hover:bg-blue-100 dark:bg-blue-900/20 dark:text-blue-400 dark:hover:bg-blue-900/30', href: '/admin/departments' },
+                { title: 'Vehicles', icon: Car, color: 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100 dark:bg-emerald-900/20 dark:text-emerald-400 dark:hover:bg-emerald-900/30', href: '/admin/vehicles' },
+                { title: 'Reports', icon: FileCheck, color: 'bg-orange-50 text-orange-700 hover:bg-orange-100 dark:bg-orange-900/20 dark:text-orange-400 dark:hover:bg-orange-900/30', href: '/gso/reports' },
+              ].map((action, index) => (
+                <button
+                  key={index}
+                  onClick={() => navigate(action.href)}
+                  className={`flex items-center gap-3 px-3 py-3 rounded-xl transition-all ${action.color} hover:shadow-md transform hover:scale-105`}
+                >
+                  <action.icon className="h-5 w-5" />
+                  <span className="text-sm font-medium">{action.title}</span>
+                </button>
+              ))}
             </div>
           </CardContent>
         </Card>
@@ -561,170 +712,199 @@ const GsoDashboard = () => {
 
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid w-full max-w-md grid-cols-3 bg-slate-100 dark:bg-slate-800 p-1 rounded-xl">
+        <TabsList className="grid w-full max-w-2xl grid-cols-4 bg-slate-100 dark:bg-slate-800 p-1 rounded-xl">
           <TabsTrigger value="pending" className="rounded-lg data-[state=active]:bg-white dark:data-[state=active]:bg-slate-900 data-[state=active]:shadow-sm">
             <Clock className="h-4 w-4 mr-2" />
-            Pending ({pendingTickets.length})
+            Pending MO ({pendingTickets.length})
           </TabsTrigger>
-          <TabsTrigger value="ready" className="rounded-lg data-[state=active]:bg-white dark:data-[state=active]:bg-slate-900 data-[state=active]:shadow-sm">
-            <Send className="h-4 w-4 mr-2" />
-            Ready ({forwardableTickets.length})
+          <TabsTrigger value="reconciliation" className="rounded-lg data-[state=active]:bg-white dark:data-[state=active]:bg-slate-900 data-[state=active]:shadow-sm">
+            <FileCheck className="h-4 w-4 mr-2" />
+            Reconcile ({reconciliationTickets.length})
           </TabsTrigger>
-          <TabsTrigger value="forwarded" className="rounded-lg data-[state=active]:bg-white dark:data-[state=active]:bg-slate-900 data-[state=active]:shadow-sm">
-            <Printer className="h-4 w-4 mr-2" />
-            Forwarded ({forwardedTickets.length})
+          <TabsTrigger value="returned" className="rounded-lg data-[state=active]:bg-white dark:data-[state=active]:bg-slate-900 data-[state=active]:shadow-sm">
+            <AlertCircle className="h-4 w-4 mr-2" />
+            Returned ({returnedTickets.length})
+          </TabsTrigger>
+          <TabsTrigger value="all" className="rounded-lg data-[state=active]:bg-white dark:data-[state=active]:bg-slate-900 data-[state=active]:shadow-sm">
+            <Truck className="h-4 w-4 mr-2" />
+            All Trips ({allTrips.length})
           </TabsTrigger>
         </TabsList>
 
-        {/* Pending Review Tab */}
+        {/* Pending MO Tab - NO REJECT BUTTON */}
         <TabsContent value="pending" className="space-y-4 mt-6">
           <Card className="dark:bg-slate-800/80 dark:border-slate-700">
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-slate-800 dark:text-white">
                 <Clock className="h-5 w-5 text-yellow-500" />
-                Trip Tickets Awaiting Review
+                Trip Tickets Awaiting Fund Release
               </CardTitle>
               <CardDescription className="dark:text-slate-400">
-                Verify the details of each trip ticket before forwarding
+                These trips are pending approval from Mayor's Office
               </CardDescription>
             </CardHeader>
             <CardContent>
               <TicketTable
                 tickets={filteredPending}
-                onView={(id) => navigate(`/gso/tickets/${id}`)}
-                onVerify={(ticket) => {
-                  setSelectedTicket(ticket);
-                  setShowApproveDialog(true);
-                }}
-                onReject={(ticket) => {
-                  setSelectedTicket(ticket);
-                  setShowRejectDialog(true);
-                }}
-                isLoading={loading}
+                onView={(id) => navigate(`/gso/trip/${id}`)}
+                isLoading={pendingLoading}
+                showActions={true}
               />
             </CardContent>
           </Card>
         </TabsContent>
 
-        {/* Ready to Forward Tab */}
-        <TabsContent value="ready" className="space-y-4 mt-6">
+        {/* Reconciliation Tab */}
+        <TabsContent value="reconciliation" className="space-y-4 mt-6">
           <Card className="dark:bg-slate-800/80 dark:border-slate-700">
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-slate-800 dark:text-white">
-                <Send className="h-5 w-5 text-emerald-500" />
-                Ready to Forward to Mayor's Office
+                <FileCheck className="h-5 w-5 text-orange-500" />
+                Pending Reconciliation
               </CardTitle>
               <CardDescription className="dark:text-slate-400">
-                These tickets are verified and ready for fund release
+                These trips are completed and need to be closed
               </CardDescription>
             </CardHeader>
             <CardContent>
               <TicketTable
-                tickets={filteredForwardable}
-                showForwardButton={true}
-                onForward={handleForwardToMO}
-                onView={(id) => navigate(`/gso/tickets/${id}`)}
-                isLoading={loading}
+                tickets={filteredReconciliation}
+                showReconcile={true}
+                onView={(id) => navigate(`/gso/trip/${id}`)}
+                onReconcile={(ticket) => {
+                  setSelectedTicket(ticket);
+                  setShowReconcileDialog(true);
+                }}
+                isLoading={reconciliationLoading}
+                showActions={true}
               />
             </CardContent>
           </Card>
         </TabsContent>
 
-        {/* Forwarded Tab */}
-        <TabsContent value="forwarded" className="space-y-4 mt-6">
+        {/* Returned Tab */}
+        <TabsContent value="returned" className="space-y-4 mt-6">
           <Card className="dark:bg-slate-800/80 dark:border-slate-700">
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-slate-800 dark:text-white">
-                <Printer className="h-5 w-5 text-blue-500" />
-                Forwarded to Mayor's Office
+                <AlertCircle className="h-5 w-5 text-purple-500" />
+                Returned for Revision
               </CardTitle>
               <CardDescription className="dark:text-slate-400">
-                Tickets awaiting fund release or in progress
+                These trips were rejected and need revision
               </CardDescription>
             </CardHeader>
             <CardContent>
               <TicketTable
-                tickets={filteredForwarded}
-                onView={(id) => navigate(`/gso/tickets/${id}`)}
-                isLoading={loading}
+                tickets={filteredReturned}
+                onView={(id) => navigate(`/gso/trip/${id}`)}
+                isLoading={returnedLoading}
+                showActions={true}
+              />
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* All Trips Tab - ✅ FIXED NAVIGATION */}
+        <TabsContent value="all" className="space-y-4 mt-6">
+          <Card className="dark:bg-slate-800/80 dark:border-slate-700">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-slate-800 dark:text-white">
+                <Truck className="h-5 w-5 text-blue-500" />
+                All Trip Tickets
+              </CardTitle>
+              <CardDescription className="dark:text-slate-400">
+                Complete history of all trips
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <TicketTable
+                tickets={filteredAllTrips}
+                onView={(id) => {
+                  // ✅ FIXED: Proper navigation with fallback
+                  if (id) {
+                    navigate(`/gso/trip/${id}`);
+                  } else {
+                    toast.error('Invalid ticket ID');
+                  }
+                }}
+                isLoading={allTripsLoading}
+                showActions={true}
               />
             </CardContent>
           </Card>
         </TabsContent>
       </Tabs>
 
-      {/* Approve Dialog */}
-      <Dialog open={showApproveDialog} onOpenChange={setShowApproveDialog}>
+      {/* Reconcile Dialog */}
+      <Dialog open={showReconcileDialog} onOpenChange={setShowReconcileDialog}>
         <DialogContent className="sm:max-w-md dark:bg-slate-800 dark:border-slate-700">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-slate-800 dark:text-white">
               <FileCheck className="h-5 w-5 text-emerald-600" />
-              Verify Trip Ticket
+              Reconcile Trip
             </DialogTitle>
             <DialogDescription className="dark:text-slate-400">
-              Are you sure you want to verify this trip ticket? 
-              It will be marked as verified and ready for Mayor's Office approval.
+              Confirm that this trip is complete and ready to be closed.
             </DialogDescription>
           </DialogHeader>
-          <div className="bg-yellow-50 dark:bg-yellow-950/30 rounded-xl p-4 space-y-2 border border-yellow-200 dark:border-yellow-800">
-            <p className="text-sm font-medium text-yellow-800 dark:text-yellow-400">Ticket Details</p>
+          <div className="bg-blue-50 dark:bg-blue-950/30 rounded-xl p-4 space-y-2 border border-blue-200 dark:border-blue-800">
+            <p className="text-sm font-medium text-blue-800 dark:text-blue-400">Trip Details</p>
             <div className="space-y-1 text-sm">
-              <p><span className="text-slate-600 dark:text-slate-400">Number:</span> <span className="font-mono font-semibold dark:text-white">{selectedTicket?.ticket_number || selectedTicket?.trip_ticket_number}</span></p>
-              <p><span className="text-slate-600 dark:text-slate-400">Destination:</span> <span className="dark:text-white">{selectedTicket?.destination}</span></p>
-              <p><span className="text-slate-600 dark:text-slate-400">Department:</span> <span className="dark:text-white">{selectedTicket?.department_name}</span></p>
-              <p><span className="text-slate-600 dark:text-slate-400">Est. Fuel:</span> <span className="dark:text-white">{selectedTicket?.estimated_fuel_liters || 'N/A'} L</span></p>
+              <p>
+                <span className="text-slate-600 dark:text-slate-400">Number:</span> 
+                <span className="font-mono font-semibold dark:text-white ml-2">
+                  {getTicketNumber(selectedTicket)}
+                </span>
+              </p>
+              <p>
+                <span className="text-slate-600 dark:text-slate-400">Destination:</span> 
+                <span className="dark:text-white ml-2">{selectedTicket?.destination || 'N/A'}</span>
+              </p>
+              <p>
+                <span className="text-slate-600 dark:text-slate-400">Department:</span> 
+                <span className="dark:text-white ml-2">{selectedTicket?.department_name || 'N/A'}</span>
+              </p>
+              <p>
+                <span className="text-slate-600 dark:text-slate-400">Amount Released:</span> 
+                <span className="font-semibold dark:text-white ml-2">
+                  ₱{selectedTicket?.amount_released || selectedTicket?.gas_slip?.amount_released || 0}
+                </span>
+              </p>
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowApproveDialog(false)} className="dark:border-slate-700 dark:text-slate-300">
+            <Button 
+              variant="outline" 
+              onClick={() => {
+                setShowReconcileDialog(false);
+                setSelectedTicket(null);
+              }} 
+              className="dark:border-slate-700 dark:text-slate-300"
+            >
               Cancel
             </Button>
-            <Button className="bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm" onClick={handleApprove} disabled={submitting}>
-              {submitting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Check className="h-4 w-4 mr-2" />}
-              Verify Ticket
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Reject Dialog */}
-      <Dialog open={showRejectDialog} onOpenChange={setShowRejectDialog}>
-        <DialogContent className="sm:max-w-md dark:bg-slate-800 dark:border-slate-700">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-slate-800 dark:text-white">
-              <XCircle className="h-5 w-5 text-red-600" />
-              Reject Trip Ticket
-            </DialogTitle>
-            <DialogDescription className="dark:text-slate-400">
-              Please provide a reason for rejection. This will be sent back to the department.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="bg-yellow-50 dark:bg-yellow-950/30 rounded-xl p-4 space-y-2 border border-yellow-200 dark:border-yellow-800">
-            <p className="text-sm font-medium text-yellow-800 dark:text-yellow-400">Ticket Details</p>
-            <div className="space-y-1 text-sm">
-              <p><span className="text-slate-600 dark:text-slate-400">Number:</span> <span className="font-mono font-semibold dark:text-white">{selectedTicket?.ticket_number || selectedTicket?.trip_ticket_number}</span></p>
-              <p><span className="text-slate-600 dark:text-slate-400">Destination:</span> <span className="dark:text-white">{selectedTicket?.destination}</span></p>
-              <p><span className="text-slate-600 dark:text-slate-400">Department:</span> <span className="dark:text-white">{selectedTicket?.department_name}</span></p>
-            </div>
-          </div>
-          <div className="space-y-2">
-            <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Rejection Reason</label>
-            <Textarea
-              placeholder="Enter rejection reason..."
-              value={rejectionNote}
-              onChange={(e) => setRejectionNote(e.target.value)}
-              rows={4}
-              className="resize-none dark:bg-slate-900 dark:border-slate-700 dark:text-white"
-            />
-            <p className="text-xs text-slate-500 dark:text-slate-400">This reason will be visible to the department staff</p>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowRejectDialog(false)} className="dark:border-slate-700 dark:text-slate-300">
-              Cancel
-            </Button>
-            <Button className="bg-red-600 hover:bg-red-700 text-white shadow-sm" onClick={handleReject} disabled={submitting}>
-              {submitting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <X className="h-4 w-4 mr-2" />}
-              Reject Ticket
+            <Button
+              className="bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm"
+              onClick={() => {
+                const ticketId = getTicketId(selectedTicket);
+                if (!ticketId) {
+                  toast.error('Invalid ticket');
+                  return;
+                }
+                reconcileMutation.mutate({
+                  ticketId: ticketId,
+                  data: { status: 'closed' },
+                });
+              }}
+              disabled={reconcileMutation.isPending}
+            >
+              {reconcileMutation.isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin mr-2" />
+              ) : (
+                <Check className="h-4 w-4 mr-2" />
+              )}
+              Reconcile & Close
             </Button>
           </DialogFooter>
         </DialogContent>

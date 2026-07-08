@@ -1,8 +1,13 @@
-// src/pages/department/DepartmentDashboard.jsx
-import React, { useState, useEffect } from 'react';
+// src/pages/department/DepartmentDashboard.jsx - TanStack Query Version
+import React, { useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
-import { tripTicketAPI, departmentStaffAPI } from '../../services/api';
+import { 
+  useTripRequests, 
+  useDepartmentBudget, 
+  useRefreshDashboard,
+  getStatusConfig 
+} from '../../hooks/useDepartmentDashboard';
 import { toast } from 'react-hot-toast';
 import {
   FileText,
@@ -16,14 +21,13 @@ import {
   TrendingUp,
   Calendar,
   Loader2,
-  BarChart3,
   Wallet,
   Zap,
   ArrowRight,
   Building2,
   Fuel,
   ChevronRight,
-  Shield,
+  RefreshCw,
   TrendingDown,
   PieChart
 } from 'lucide-react';
@@ -35,110 +39,64 @@ import { Progress } from '@/components/ui/progress';
 const DepartmentDashboard = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
-  const [stats, setStats] = useState({
-    total: 0,
-    pending: 0,
-    approved: 0,
-    completed: 0,
-    returned: 0,
-    inTransit: 0
-  });
-  const [recentTickets, setRecentTickets] = useState([]);
-  const [budget, setBudget] = useState(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-
-  useEffect(() => {
-    fetchDashboardData();
-  }, []);
-
-  const fetchDashboardData = async () => {
-    setIsLoading(true);
-    try {
-      const ticketsRes = await tripTicketAPI.getMyRequests();
-      let tickets = ticketsRes.data?.data || ticketsRes.data || [];
-      tickets = Array.isArray(tickets) ? tickets : [];
-      
-      const pendingStatuses = ['pending_head_approval', 'pending_gso_review', 'pending_mayors_office', 'with_mayors_office'];
-      const approvedStatuses = ['funds_issued'];
-      const inTransitStatuses = ['in_transit'];
-      const completedStatuses = ['closed'];
-const returnedStatuses = ["returned_for_revision", "rejected", "cancelled", "returned"];
-      setStats({
-        total: tickets.length,
-        pending: tickets.filter(t => pendingStatuses.includes(t.status)).length,
-        approved: tickets.filter(t => approvedStatuses.includes(t.status)).length,
-        inTransit: tickets.filter(t => inTransitStatuses.includes(t.status)).length,
-        completed: tickets.filter(t => completedStatuses.includes(t.status)).length,
-        returned: tickets.filter(t => returnedStatuses.includes(t.status)).length
-      });
-      
-      setRecentTickets(tickets.slice(0, 5));
-      
-      try {
-        const budgetRes = await departmentStaffAPI.getDepartmentBudget();
-        const budgetData = budgetRes.data?.data || budgetRes.data;
-        if (budgetData) {
-          const remaining = budgetData.remaining_amount || budgetData.remaining_budget || 0;
-          const allocated = budgetData.allocated_amount || 0;
-          const spent = budgetData.spent_amount || 0;
-          const utilization = allocated > 0 ? (spent / allocated) * 100 : 0;
-          
-          setBudget({
-            remaining_budget: remaining,
-            allocated_amount: allocated,
-            spent_amount: spent,
-            period_start: budgetData.week_start || budgetData.period_start,
-            period_end: budgetData.week_end || budgetData.period_end,
-            utilization_percentage: budgetData.utilization_percentage || utilization.toFixed(1),
-            isLow: remaining < allocated * 0.2,
-            isCritical: remaining < allocated * 0.1
-          });
-        }
-      } catch (error) {
-        console.error('Error fetching budget:', error);
-      }
-      
-    } catch (error) {
-      console.error('Error fetching dashboard data:', error);
-      toast.error('Failed to load dashboard data');
-    } finally {
-      setIsLoading(false);
-      setRefreshing(false);
-    }
-  };
-
-  const handleRefresh = () => {
-    setRefreshing(true);
-    fetchDashboardData();
-    toast.success('Dashboard refreshed');
-  };
-
-  const getStatusBadge = (status) => {
-    const config = {
-      draft: { color: 'bg-gray-500', label: 'Draft', icon: '📝' },
-      pending_head_approval: { color: 'bg-yellow-500', label: 'Pending Head', icon: '⏳' },
-      pending_gso_review: { color: 'bg-orange-500', label: 'Pending GSO', icon: '📋' },
-      returned_for_revision: { color: 'bg-red-500', label: 'Returned', icon: '↩️' },
-      with_mayors_office: { color: 'bg-purple-500', label: 'With Mayor', icon: '🏛️' },
-      pending_mayors_office: { color: 'bg-purple-500', label: 'Pending Mayor', icon: '🏛️' },
-      funds_issued: { color: 'bg-green-500', label: 'Funds Issued', icon: '💰' },
-      acknowledged: { color: 'bg-blue-500', label: 'Acknowledged', icon: '✓' },
-      in_transit: { color: 'bg-indigo-500', label: 'In Transit', icon: '🚗' },
-      pending_reconciliation: { color: 'bg-cyan-500', label: 'Pending Recon', icon: '📊' },
-      closed: { color: 'bg-emerald-600', label: 'Closed', icon: '✅' },
-      rejected: { color: 'bg-red-600', label: 'Rejected', icon: '❌' },
-      cancelled: { color: 'bg-gray-600', label: 'Cancelled', icon: '🚫' }
+  
+  // ✅ TanStack Query hooks
+  const { 
+    data: tickets = [], 
+    isLoading: ticketsLoading,
+    isFetching: isRefreshingTickets,
+    refetch: refetchTickets
+  } = useTripRequests();
+  
+  const { 
+    data: budget, 
+    isLoading: budgetLoading,
+    isFetching: isRefreshingBudget,
+    refetch: refetchBudget
+  } = useDepartmentBudget();
+  
+  const refreshDashboard = useRefreshDashboard();
+  
+  // Calculate stats from tickets data
+  const stats = useMemo(() => {
+    const pendingStatuses = ['pending_head_approval', 'pending_gso_review', 'pending_mayors_office', 'with_mayors_office'];
+    const approvedStatuses = ['funds_issued'];
+    const inTransitStatuses = ['in_transit'];
+    const completedStatuses = ['closed'];
+    const returnedStatuses = ["returned_for_revision", "rejected", "cancelled", "returned"];
+    
+    return {
+      total: tickets.length,
+      pending: tickets.filter(t => pendingStatuses.includes(t.status)).length,
+      approved: tickets.filter(t => approvedStatuses.includes(t.status)).length,
+      inTransit: tickets.filter(t => inTransitStatuses.includes(t.status)).length,
+      completed: tickets.filter(t => completedStatuses.includes(t.status)).length,
+      returned: tickets.filter(t => returnedStatuses.includes(t.status)).length
     };
-    const c = config[status] || { color: 'bg-gray-500', label: status?.replace(/_/g, ' ') || 'Unknown', icon: '📄' };
+  }, [tickets]);
+  
+  // Get recent tickets (last 5)
+  const recentTickets = useMemo(() => {
+    return tickets.slice(0, 5);
+  }, [tickets]);
+  
+  const isLoading = ticketsLoading || budgetLoading;
+  const isRefreshing = isRefreshingTickets || isRefreshingBudget;
+  
+  const handleRefresh = () => {
+    refreshDashboard.mutate();
+  };
+  
+  const getStatusBadge = (status) => {
+    const config = getStatusConfig(status);
     return (
-      <Badge className={`${c.color} text-white flex items-center gap-1 w-fit px-2 py-1 rounded-lg text-xs font-medium`}>
-        <span>{c.icon}</span>
-        {c.label}
+      <Badge className={`${config.color} text-white flex items-center gap-1 w-fit px-2 py-1 rounded-lg text-xs font-medium`}>
+        <span>{config.icon}</span>
+        {config.label}
       </Badge>
     );
   };
-
+  
   const formatCurrency = (amount) => {
     if (!amount && amount !== 0) return '₱0.00';
     return new Intl.NumberFormat('en-PH', {
@@ -147,21 +105,21 @@ const returnedStatuses = ["returned_for_revision", "rejected", "cancelled", "ret
       minimumFractionDigits: 2
     }).format(amount);
   };
-
+  
   const getBudgetStatusColor = () => {
     if (!budget) return 'text-emerald-600 dark:text-emerald-400';
     if (budget.isCritical) return 'text-red-600 dark:text-red-400';
     if (budget.isLow) return 'text-amber-600 dark:text-amber-400';
     return 'text-emerald-600 dark:text-emerald-400';
   };
-
+  
   const getBudgetProgressColor = () => {
     if (!budget) return 'bg-emerald-500';
     if (budget.utilization_percentage >= 90) return 'bg-red-500';
     if (budget.utilization_percentage >= 70) return 'bg-amber-500';
     return 'bg-emerald-500';
   };
-
+  
   if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-900 dark:to-slate-800">
@@ -172,7 +130,7 @@ const returnedStatuses = ["returned_for_revision", "rejected", "cancelled", "ret
       </div>
     );
   }
-
+  
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-900 dark:to-slate-800 p-4 md:p-8 animate-fade-in-up">
       <div className="max-w-7xl mx-auto">
@@ -204,9 +162,9 @@ const returnedStatuses = ["returned_for_revision", "rejected", "cancelled", "ret
                 onClick={handleRefresh} 
                 variant="outline" 
                 className="bg-white/10 border-white/20 text-white hover:bg-white/20 backdrop-blur-sm"
-                disabled={refreshing}
+                disabled={refreshDashboard.isPending || isRefreshing}
               >
-                {refreshing ? (
+                {refreshDashboard.isPending ? (
                   <Loader2 className="h-4 w-4 animate-spin mr-2" />
                 ) : (
                   <RefreshCw className="h-4 w-4 mr-2" />
@@ -223,7 +181,7 @@ const returnedStatuses = ["returned_for_revision", "rejected", "cancelled", "ret
             </div>
           </div>
         </div>
-
+        
         {/* Stats Grid - Premium Cards */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-5 mb-8">
           <Card className="hover:shadow-xl transition-all duration-300 hover:-translate-y-1 border-0 bg-gradient-to-br from-white to-slate-50 dark:from-slate-800 dark:to-slate-800/80">
@@ -304,7 +262,7 @@ const returnedStatuses = ["returned_for_revision", "rejected", "cancelled", "ret
             </CardContent>
           </Card>
         </div>
-
+        
         {/* Budget Card - Premium Design */}
         {budget && (
           <Card className="mb-8 overflow-hidden border-0 shadow-xl bg-gradient-to-r from-white to-slate-50 dark:from-slate-800 dark:to-slate-800/90">
@@ -343,8 +301,11 @@ const returnedStatuses = ["returned_for_revision", "rejected", "cancelled", "ret
                   <div className="relative">
                     <Progress 
                       value={budget.utilization_percentage} 
-                      className={`h-3 rounded-full bg-slate-200 dark:bg-slate-700 ${getBudgetProgressColor()}`}
-                      indicatorClassName={getBudgetProgressColor()}
+                      className={`h-3 rounded-full bg-slate-200 dark:bg-slate-700`}
+                    />
+                    <div 
+                      className={`absolute top-0 left-0 h-3 rounded-full transition-all duration-500 ${getBudgetProgressColor()}`}
+                      style={{ width: `${Math.min(budget.utilization_percentage, 100)}%` }}
                     />
                   </div>
                   {budget.isLow && (
@@ -376,7 +337,7 @@ const returnedStatuses = ["returned_for_revision", "rejected", "cancelled", "ret
             </CardContent>
           </Card>
         )}
-
+        
         {/* Recent Tickets Table */}
         <Card className="border-0 shadow-xl bg-white dark:bg-slate-800/90 overflow-hidden">
           <CardHeader className="flex flex-row items-center justify-between border-b border-slate-100 dark:border-slate-700 pb-4">
@@ -469,7 +430,7 @@ const returnedStatuses = ["returned_for_revision", "rejected", "cancelled", "ret
             )}
           </CardContent>
         </Card>
-
+        
         {/* Quick Tips */}
         <div className="mt-6 grid grid-cols-1 md:grid-cols-3 gap-4">
           <Card className="bg-gradient-to-r from-blue-50 to-blue-100 dark:from-blue-950/30 dark:to-blue-900/30 border-0 shadow-md">
@@ -516,8 +477,5 @@ const returnedStatuses = ["returned_for_revision", "rejected", "cancelled", "ret
     </div>
   );
 };
-
-// Add RefreshCw import
-import { RefreshCw } from 'lucide-react';
 
 export default DepartmentDashboard;

@@ -1,15 +1,23 @@
-// src/pages/department/CreateTripTicket.jsx
-import React, {
-  useState,
-  useEffect,
-  useCallback,
-  useRef,
-  useMemo,
-} from "react";
+// src/pages/department/CreateTripTicket.jsx - TanStack Query Version (FULL CODE)
+import React, { useState, useCallback, useRef, useMemo, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "../../contexts/AuthContext";
-import { tripTicketAPI, departmentStaffAPI } from "../../services/api";
-import api from "../../services/api";
+import {
+  useDrivers,
+  useAvailableVehicles,
+  useDepartmentBudgetForForm,
+  useFuelPrices,
+  useLocationSearch,
+  useCalculateDistance,
+  useSubmitTripTicket,
+  useResubmitTripTicket,
+  useSaveDraft,
+  useCheckBudgetAndRequestMO,
+  isWithinCurrentWeek,
+  isPastDate,
+  getFuelPriceByType,
+} from "../../hooks/useTripTicket";
+import { useEditTicketData } from "../../hooks/useEditTicketData";
 import { debounce } from "lodash";
 import {
   FileText,
@@ -29,11 +37,8 @@ import {
   X,
   Phone,
   Info,
-  XCircle,
-  RefreshCw,
   RotateCcw,
-  ChevronDown,
-  ChevronRight,
+  RefreshCw,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -67,7 +72,26 @@ const CreateTripTicket = () => {
   const searchParams = new URLSearchParams(location.search);
   const isEditMode = searchParams.get("mode") === "edit";
   const editTicketId = searchParams.get("id");
-  const [isResubmitMode, setIsResubmitMode] = useState(false);
+
+  // Get department ID and name
+  const departmentId = user?.department_id || user?.department?.department_id;
+  const departmentName = user?.department_name || user?.department?.department_name || "";
+
+  // ✅ TanStack Query hooks
+  const { data: drivers = [], isLoading: driversLoading } = useDrivers(departmentId);
+  const { data: vehicles = [], isLoading: vehiclesLoading } = useAvailableVehicles(departmentId);
+  const { data: departmentBudget, isLoading: budgetLoading } = useDepartmentBudgetForForm();
+  const { data: fuelPrices, isLoading: fuelPricesLoading } = useFuelPrices();
+  
+  // Mutations
+  const submitTrip = useSubmitTripTicket();
+  const resubmitTrip = useResubmitTripTicket();
+  const saveDraft = useSaveDraft();
+  const checkBudget = useCheckBudgetAndRequestMO();
+  const calculateDistanceMutation = useCalculateDistance();
+
+  // Use edit ticket data hook
+  const { isResubmitMode, editFormData } = useEditTicketData(isEditMode, editTicketId, departmentName);
 
   // Form state
   const [formData, setFormData] = useState({
@@ -76,137 +100,83 @@ const CreateTripTicket = () => {
     trip_date: "",
     destination: "",
     purpose: "",
-    charge_to: user?.department_name || user?.department?.department_name || "",
+    charge_to: departmentName,
     passenger_name: "",
     estimated_fuel_liters: "",
     estimated_distance_km: "",
   });
 
+  // Local UI state
   const [errors, setErrors] = useState({});
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isSavingDraft, setIsSavingDraft] = useState(false);
-  const [isCheckingBudget, setIsCheckingBudget] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
-  const [drivers, setDrivers] = useState([]);
-  const [vehicles, setVehicles] = useState([]);
-  const [departmentBudget, setDepartmentBudget] = useState(null);
+  const [locationQuery, setLocationQuery] = useState("");
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [distanceInfo, setDistanceInfo] = useState(null);
+  const [calculatingDistance, setCalculatingDistance] = useState(false);
   const [selectedVehicle, setSelectedVehicle] = useState(null);
   const [selectedDriver, setSelectedDriver] = useState(null);
-  const [fuelPrice, setFuelPrice] = useState(0);
-  const [isLoadingFuelPrices, setIsLoadingFuelPrices] = useState(true);
-  const [fuelPrices, setFuelPrices] = useState({
-    diesel: 50.0,
-    premium: 65.0,
-    regular: 55.0,
-  });
-
-  // Distance & Location State
-  const [locationSuggestions, setLocationSuggestions] = useState([]);
-  const [showSuggestions, setShowSuggestions] = useState(false);
-  const [calculatingDistance, setCalculatingDistance] = useState(false);
-  const [distanceInfo, setDistanceInfo] = useState(null);
-  const [originAddress] = useState("LGU Building Laguindingan");
-  const suggestionsRef = useRef(null);
-
-  // MO Assistance Modal State
   const [showMOAssistanceModal, setShowMOAssistanceModal] = useState(false);
   const [moAssistanceData, setMoAssistanceData] = useState(null);
+  
+  const suggestionsRef = useRef(null);
+  const originAddress = "LGU Building Laguindingan";
 
-  // Get department name
-  const departmentName =
-    user?.department_name || user?.department?.department_name || "";
-
-  // Helper functions for date validation
-  const isWithinCurrentWeek = (date) => {
-    const today = new Date();
-    const currentDate = new Date(today);
-
-    const startOfWeek = new Date(currentDate);
-    const dayOfWeek = currentDate.getDay();
-    const daysToMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
-    startOfWeek.setDate(currentDate.getDate() - daysToMonday);
-    startOfWeek.setHours(0, 0, 0, 0);
-
-    const endOfWeek = new Date(startOfWeek);
-    endOfWeek.setDate(startOfWeek.getDate() + 6);
-    endOfWeek.setHours(23, 59, 59, 999);
-
-    const tripDate = new Date(date);
-    tripDate.setHours(0, 0, 0, 0);
-
-    return tripDate >= startOfWeek && tripDate <= endOfWeek;
-  };
-
-  const isPastDate = (date) => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const tripDate = new Date(date);
-    tripDate.setHours(0, 0, 0, 0);
-    return tripDate < today;
-  };
-
-  // Load edit data if in resubmit mode
+  // Load edit data into form
   useEffect(() => {
-    if (isEditMode && editTicketId) {
-      const savedData = sessionStorage.getItem("edit_ticket_data");
-      if (savedData) {
-        try {
-          const ticketData = JSON.parse(savedData);
-          setIsResubmitMode(true);
-
-          setFormData({
-            driver_id: ticketData.driver_id || "",
-            vehicle_id: ticketData.vehicle_id || "",
-            trip_date: ticketData.trip_date || "",
-            destination: ticketData.destination || "",
-            purpose: ticketData.purpose || "",
-            charge_to: ticketData.charge_to || departmentName,
-            passenger_name: ticketData.passenger_name || "",
-            estimated_fuel_liters: ticketData.estimated_fuel_liters || "",
-            estimated_distance_km: ticketData.estimated_distance_km || "",
-          });
-
-          toast.info(
-            "Editing returned ticket. Please make corrections and resubmit.",
-            { duration: 5000 }
-          );
-
-          sessionStorage.removeItem("edit_ticket_data");
-        } catch (error) {
-          console.error("Error loading edit data:", error);
-        }
-      }
+    if (editFormData) {
+      setFormData(prev => ({ ...prev, ...editFormData }));
     }
-  }, [isEditMode, editTicketId, departmentName]);
+  }, [editFormData]);
 
-  // Debounced search function for locations
+  // Set charge_to when department name loads
+  useEffect(() => {
+    if (departmentName && !formData.charge_to) {
+      setFormData(prev => ({ ...prev, charge_to: departmentName }));
+    }
+  }, [departmentName]);
+
+  // Update selected vehicle when vehicle_id changes
+  useEffect(() => {
+    if (formData.vehicle_id && vehicles.length > 0) {
+      const vehicle = vehicles.find(
+        (v) => (v.vehicle_id || v.id) === parseInt(formData.vehicle_id)
+      );
+      setSelectedVehicle(vehicle);
+    } else {
+      setSelectedVehicle(null);
+    }
+  }, [formData.vehicle_id, vehicles]);
+
+  // Update selected driver when driver_id changes
+  useEffect(() => {
+    if (formData.driver_id && drivers.length > 0) {
+      const driver = drivers.find(
+        (d) => (d.driver_id || d.id) === parseInt(formData.driver_id)
+      );
+      setSelectedDriver(driver);
+    } else {
+      setSelectedDriver(null);
+    }
+  }, [formData.driver_id, drivers]);
+
+  // Debounced location search
   const searchLocations = useCallback(
-    debounce(async (query) => {
-      if (query.length < 2) {
-        setLocationSuggestions([]);
-        return;
-      }
-
-      try {
-        const response = await api.get("/location/search", {
-          params: { query },
-        });
-        setLocationSuggestions(response.data?.data || []);
-        setShowSuggestions(true);
-      } catch (error) {
-        console.error("Error searching locations:", error);
-      }
+    debounce((query) => {
+      setLocationQuery(query);
     }, 500),
     []
   );
 
-  useEffect(() => {
-    return () => {
-      searchLocations.cancel();
-    };
-  }, [searchLocations]);
+  // Location search query
+  const { data: locationSuggestions = [] } = useLocationSearch(locationQuery);
 
-  // Calculate distance
+  const handleDestinationChange = (value) => {
+    setFormData((prev) => ({ ...prev, destination: value }));
+    searchLocations(value);
+    if (errors.destination) {
+      setErrors((prev) => ({ ...prev, destination: "" }));
+    }
+  };
+
   const calculateDistance = async (destinationName, coordinates = null) => {
     if (!destinationName || destinationName.length < 3) return;
 
@@ -215,7 +185,7 @@ const CreateTripTicket = () => {
       const params = {
         name: destinationName,
         vehicle_type: selectedVehicle?.fuel_type === "diesel" ? "truck" : "car",
-        fuel_price: fuelPrice || 55.0,
+        fuel_price: fuelPrices ? getFuelPriceByType(selectedVehicle?.fuel_type, fuelPrices) : 55.0,
       };
 
       if (coordinates && Array.isArray(coordinates) && coordinates.length === 2) {
@@ -223,17 +193,15 @@ const CreateTripTicket = () => {
         params.lat = coordinates[1];
       }
 
-      const response = await api.get("/location/distance", { params });
-      const data = response.data?.data;
+      const data = await calculateDistanceMutation.mutateAsync(params);
 
       if (data) {
         setDistanceInfo(data);
 
         if (data.estimated_fuel_liters && !isNaN(data.estimated_fuel_liters)) {
-          const fuelLiters =
-            typeof data.estimated_fuel_liters === "number"
-              ? data.estimated_fuel_liters
-              : parseFloat(data.estimated_fuel_liters);
+          const fuelLiters = typeof data.estimated_fuel_liters === "number"
+            ? data.estimated_fuel_liters
+            : parseFloat(data.estimated_fuel_liters);
           setFormData((prev) => ({
             ...prev,
             estimated_fuel_liters: fuelLiters.toFixed(1),
@@ -241,7 +209,6 @@ const CreateTripTicket = () => {
         }
 
         let distanceValue = null;
-
         if (data.round_trip_km) {
           distanceValue = data.round_trip_km;
         } else if (data.total_distance_km) {
@@ -251,10 +218,9 @@ const CreateTripTicket = () => {
         }
 
         if (distanceValue && !isNaN(distanceValue)) {
-          const distanceNum =
-            typeof distanceValue === "number"
-              ? distanceValue
-              : parseFloat(distanceValue);
+          const distanceNum = typeof distanceValue === "number"
+            ? distanceValue
+            : parseFloat(distanceValue);
           setFormData((prev) => ({
             ...prev,
             estimated_distance_km: distanceNum.toFixed(1),
@@ -271,14 +237,11 @@ const CreateTripTicket = () => {
           toast.success(`📍 Approximate distance: ${data.distance_text}`);
         } else {
           const roundTrip = data.round_trip_km || data.distance_km * 2;
-          toast.success(
-            `📍 ${data.distance_text} (${roundTrip.toFixed(1)} km round trip)`
-          );
+          toast.success(`📍 ${data.distance_text} (${roundTrip.toFixed(1)} km round trip)`);
         }
       }
     } catch (error) {
       console.error("Error calculating distance:", error);
-      toast.error("Unable to calculate distance. Please enter manually.");
       setFormData((prev) => ({
         ...prev,
         estimated_distance_km: "",
@@ -289,136 +252,12 @@ const CreateTripTicket = () => {
     }
   };
 
-  // Handle destination change with autocomplete
-  const handleDestinationChange = (value) => {
-    setFormData((prev) => ({ ...prev, destination: value }));
-    searchLocations(value);
-    if (errors.destination) {
-      setErrors((prev) => ({ ...prev, destination: "" }));
-    }
-  };
-
   const selectSuggestion = async (suggestion) => {
     setFormData((prev) => ({ ...prev, destination: suggestion.name }));
     setShowSuggestions(false);
-    setLocationSuggestions([]);
+    setLocationQuery("");
     await calculateDistance(suggestion.name, suggestion.coordinates);
   };
-
-  // Fetch initial data
-  useEffect(() => {
-    fetchInitialData();
-    fetchFuelPrices();
-  }, []);
-
-  // Update charge_to when user loads
-  useEffect(() => {
-    if (departmentName && !formData.charge_to) {
-      setFormData((prev) => ({ ...prev, charge_to: departmentName }));
-    }
-  }, [departmentName]);
-
-  // Fetch fuel price when vehicle changes
-  useEffect(() => {
-    if (selectedVehicle?.fuel_type && fuelPrices) {
-      const price = getFuelPriceByType(selectedVehicle.fuel_type);
-      setFuelPrice(price);
-    }
-  }, [selectedVehicle, fuelPrices]);
-
-  const fetchFuelPrices = async () => {
-    setIsLoadingFuelPrices(true);
-    try {
-      const response = await api.get("/public/fuel-prices");
-      const data = response.data;
-
-      setFuelPrices({
-        diesel: parseFloat(data.diesel) || 50.0,
-        premium: parseFloat(data.premium) || 65.0,
-        regular: parseFloat(data.regular) || 55.0,
-      });
-    } catch (error) {
-      console.log("Using default fuel prices");
-    } finally {
-      setIsLoadingFuelPrices(false);
-    }
-  };
-
-  const getFuelPriceByType = (fuelType) => {
-    switch (fuelType) {
-      case "diesel":
-        return fuelPrices.diesel;
-      case "premium":
-        return fuelPrices.premium;
-      case "regular":
-        return fuelPrices.regular;
-      default:
-        return 55.0;
-    }
-  };
-
-  const fetchInitialData = async () => {
-    setIsLoading(true);
-    try {
-      const departmentId = user?.department_id || user?.department?.department_id;
-
-      const [driversRes, vehiclesRes, budgetRes] = await Promise.all([
-        departmentStaffAPI.getActiveDrivers({ department_id: departmentId }).catch(() => ({ data: { data: [] } })),
-        departmentStaffAPI.getAvailableVehicles({ department_id: departmentId }).catch(() => ({ data: { data: [] } })),
-        departmentStaffAPI.getDepartmentBudget().catch(() => ({ data: null })),
-      ]);
-
-      let driversData = driversRes.data?.data || driversRes.data || [];
-      let vehiclesData = vehiclesRes.data?.data || vehiclesRes.data || [];
-
-      setDrivers(Array.isArray(driversData) ? driversData : []);
-      setVehicles(Array.isArray(vehiclesData) ? vehiclesData : []);
-
-      const budgetData = budgetRes.data?.data || budgetRes.data;
-      if (budgetData) {
-        setDepartmentBudget({
-          remaining_budget: budgetData.remaining_amount || budgetData.remaining_budget || 0,
-          allocated_amount: budgetData.allocated_amount || 0,
-          spent_amount: budgetData.total_spent_amount || budgetData.spent_amount || 0,
-          week_start: budgetData.week_start,
-          week_end: budgetData.week_end,
-        });
-      }
-    } catch (error) {
-      console.error("Error fetching initial data:", error);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  // Fetch vehicle details when selected
-  useEffect(() => {
-    if (formData.vehicle_id && vehicles.length > 0) {
-      const vehicle = vehicles.find(
-        (v) =>
-          v.vehicle_id === parseInt(formData.vehicle_id) ||
-          v.id === parseInt(formData.vehicle_id)
-      );
-      setSelectedVehicle(vehicle);
-    } else {
-      setSelectedVehicle(null);
-      setFuelPrice(0);
-    }
-  }, [formData.vehicle_id, vehicles]);
-
-  // Fetch driver details when selected
-  useEffect(() => {
-    if (formData.driver_id && drivers.length > 0) {
-      const driver = drivers.find(
-        (d) =>
-          d.driver_id === parseInt(formData.driver_id) ||
-          d.id === parseInt(formData.driver_id)
-      );
-      setSelectedDriver(driver);
-    } else {
-      setSelectedDriver(null);
-    }
-  }, [formData.driver_id, drivers]);
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
@@ -444,7 +283,6 @@ const CreateTripTicket = () => {
     if (!formData.destination) newErrors.destination = "Please enter destination";
     if (!formData.purpose) newErrors.purpose = "Please enter trip purpose";
 
-    // ✅ Updated date validation - no weekday restriction, only check past dates and within current week
     if (formData.trip_date && typeof formData.trip_date === "string" && formData.trip_date.trim() !== "") {
       const tripDateObj = new Date(formData.trip_date);
 
@@ -453,8 +291,7 @@ const CreateTripTicket = () => {
       } else if (isPastDate(formData.trip_date)) {
         newErrors.trip_date = "Trip date cannot be in the past";
       } else if (!isWithinCurrentWeek(formData.trip_date)) {
-        newErrors.trip_date =
-          "Trip tickets can only be created for dates within the current week (Monday to Sunday).";
+        newErrors.trip_date = "Trip tickets can only be created for dates within the current week (Monday to Sunday).";
       }
     }
 
@@ -486,51 +323,38 @@ const CreateTripTicket = () => {
       return;
     }
 
-    setIsSubmitting(true);
-    setIsCheckingBudget(true);
+    const payload = createPayload();
+    let budgetWarningData = null;
+
+    // Check budget for warning purposes only
+    try {
+      const checkResponse = await checkBudget.mutateAsync(payload);
+      if (checkResponse.data && !checkResponse.data.can_proceed) {
+        budgetWarningData = {
+          budget: checkResponse.data.budget,
+          estimated_cost: checkResponse.data.estimated_cost,
+          shortage: checkResponse.data.shortage,
+          request_id: checkResponse.data.request_id,
+          message: checkResponse.data.message,
+        };
+      }
+    } catch (budgetError) {
+      console.warn("Budget check failed, but continuing with submission:", budgetError);
+    }
 
     try {
-      const payload = createPayload();
-      console.log("🚀 Submitting payload:", payload);
-
       let submitResponse;
-      let budgetWarningData = null;
-
-      // Check budget for warning purposes only (does NOT block submission)
-      try {
-        const checkResponse = await departmentStaffAPI.checkBudgetAndRequestMO(payload);
-
-        if (!checkResponse.data.can_proceed) {
-          budgetWarningData = {
-            budget: checkResponse.data.budget,
-            estimated_cost: checkResponse.data.estimated_cost,
-            shortage: checkResponse.data.shortage,
-            request_id: checkResponse.data.request_id,
-            message: checkResponse.data.message,
-          };
-          console.log("⚠️ Budget insufficient, but continuing with submission");
-        } else {
-          console.log("✅ Budget sufficient");
-        }
-      } catch (budgetError) {
-        console.warn("Budget check failed, but continuing with submission:", budgetError);
-      }
-
-      // If in resubmit mode, use the resubmit endpoint
+      
       if (isResubmitMode && editTicketId) {
-        console.log("📤 Resubmitting ticket:", editTicketId);
-        submitResponse = await tripTicketAPI.resubmit(editTicketId, payload);
+        submitResponse = await resubmitTrip.mutateAsync({ id: editTicketId, payload });
       } else {
-        submitResponse = await tripTicketAPI.submit(payload);
+        submitResponse = await submitTrip.mutateAsync(payload);
       }
-
-      console.log("📥 Submit response:", submitResponse.data);
 
       if (submitResponse.data.success) {
         if (budgetWarningData) {
           setMoAssistanceData(budgetWarningData);
           setShowMOAssistanceModal(true);
-
           toast.success(
             "⚠️ Trip ticket submitted with INSUFFICIENT BUDGET warning.\n" +
               "The ticket will still proceed through the approval workflow.\n" +
@@ -543,72 +367,43 @@ const CreateTripTicket = () => {
               ? "✓ Trip ticket resubmitted successfully! It has been sent to your Department Head for approval."
               : "✓ Trip ticket submitted successfully! It has been sent to your Department Head for approval."
           );
-
-          setTimeout(() => {
-            navigate("/department/requests");
-          }, 1500);
+          setTimeout(() => navigate("/department/requests"), 1500);
         }
-      } else {
-        toast.error(submitResponse.data.message || "Error submitting trip ticket");
       }
     } catch (error) {
-      console.error("❌ Error submitting:", error);
-      const errorMessage = error.response?.data?.message ||
-        error.response?.data?.error ||
-        "Error submitting trip ticket. Please try again.";
-      toast.error(errorMessage);
-    } finally {
-      setIsSubmitting(false);
-      setIsCheckingBudget(false);
+      // Error already handled by mutation onError
     }
   };
 
   const handleSaveDraft = async () => {
+    // Validation checks
     if (!formData.driver_id) {
       toast.error("Please select a driver before saving draft");
       return;
     }
-
     if (!formData.vehicle_id) {
       toast.error("Please select a vehicle before saving draft");
       return;
     }
-
     if (!formData.trip_date) {
       toast.error("Please select a trip date before saving draft");
       return;
     }
-
     if (!formData.destination) {
       toast.error("Please enter a destination before saving draft");
       return;
     }
-
     if (!formData.purpose) {
       toast.error("Please enter a purpose before saving draft");
       return;
     }
 
-    setIsSavingDraft(true);
-    try {
-      const payload = createPayload();
-      const response = await tripTicketAPI.saveDraft(payload);
-
-      if (response.data.success) {
-        toast.success("✓ Trip ticket saved as draft!");
-        navigate("/department/requests");
-      } else {
-        toast.error(response.data.message || "Error saving draft");
-      }
-    } catch (error) {
-      console.error("Error saving draft:", error);
-      toast.error(error.response?.data?.message || "Error saving draft. Please try again.");
-    } finally {
-      setIsSavingDraft(false);
-    }
+    const payload = createPayload();
+    await saveDraft.mutateAsync(payload);
+    navigate("/department/requests");
   };
 
-  const getBudgetStatus = () => {
+  const budgetStatus = useMemo(() => {
     if (!departmentBudget) return null;
     const remaining = departmentBudget.remaining_budget || 0;
     const allocated = departmentBudget.allocated_amount || 0;
@@ -624,15 +419,19 @@ const CreateTripTicket = () => {
       isLow: remainingPercentage < 20,
       isCritical: remainingPercentage < 10,
     };
-  };
-
-  const budgetStatus = getBudgetStatus();
+  }, [departmentBudget]);
 
   const estimatedCost = useMemo(() => {
     if (!formData.estimated_fuel_liters || parseFloat(formData.estimated_fuel_liters) <= 0) return 0;
+    const fuelPrice = selectedVehicle?.fuel_type && fuelPrices 
+      ? getFuelPriceByType(selectedVehicle.fuel_type, fuelPrices) 
+      : 55.0;
     return parseFloat(formData.estimated_fuel_liters) * fuelPrice;
-  }, [formData.estimated_fuel_liters, fuelPrice]);
+  }, [formData.estimated_fuel_liters, selectedVehicle, fuelPrices]);
 
+  const isLoading = driversLoading || vehiclesLoading || budgetLoading || fuelPricesLoading;
+
+  // MO Assistance Modal Component
   const MOAssistanceModal = () => {
     const handleClose = () => {
       setShowMOAssistanceModal(false);
@@ -1050,7 +849,7 @@ const CreateTripTicket = () => {
                   Purpose of Trip <span className="text-red-500">*</span>
                 </Label>
                 <Textarea
-                  name='purpose'
+                  name="purpose"
                   placeholder="Describe the official purpose of this trip..."
                   rows={3}
                   className={errors.purpose ? "border-red-500 dark:bg-slate-900 dark:border-slate-700" : "dark:bg-slate-900 dark:border-slate-700"}
@@ -1083,6 +882,7 @@ const CreateTripTicket = () => {
                     Passenger Name (Optional)
                   </Label>
                   <Input
+                    name="passenger_name"
                     placeholder="Name of passenger if applicable"
                     value={formData.passenger_name}
                     onChange={handleInputChange}
@@ -1182,12 +982,12 @@ const CreateTripTicket = () => {
                       </Badge>
                     </div>
                   </div>
-                  {fuelPrice > 0 && (
+                  {fuelPrices && selectedVehicle?.fuel_type && (
                     <div className="mt-2 pt-2 border-t border-blue-200 dark:border-blue-700">
                       <div className="flex items-center gap-1 text-xs text-blue-600 dark:text-blue-400">
                         <Info className="h-3 w-3" />
                         <span>
-                          Current {selectedVehicle.fuel_type} price: ₱{fuelPrice.toFixed(2)}/L
+                          Current {selectedVehicle.fuel_type} price: ₱{getFuelPriceByType(selectedVehicle.fuel_type, fuelPrices).toFixed(2)}/L
                         </span>
                       </div>
                     </div>
@@ -1272,7 +1072,7 @@ const CreateTripTicket = () => {
               {selectedVehicle &&
                 formData.estimated_fuel_liters &&
                 parseFloat(formData.estimated_fuel_liters) > 0 &&
-                fuelPrice > 0 && (
+                fuelPrices && (
                   <div className="p-4 bg-slate-50 dark:bg-slate-800 rounded-xl">
                     <h4 className="font-semibold mb-2 text-slate-800 dark:text-slate-200">Estimated Fuel Cost</h4>
                     <div className="grid grid-cols-2 gap-4 text-sm">
@@ -1291,7 +1091,7 @@ const CreateTripTicket = () => {
                           })}
                         </p>
                         <p className="text-xs text-slate-400 mt-1">
-                          *Based on {selectedVehicle.fuel_type} fuel at ₱{fuelPrice.toFixed(2)}/L
+                          *Based on {selectedVehicle.fuel_type} fuel at ₱{getFuelPriceByType(selectedVehicle.fuel_type, fuelPrices).toFixed(2)}/L
                         </p>
                       </div>
                     </div>
@@ -1303,37 +1103,35 @@ const CreateTripTicket = () => {
               <Button
                 variant="outline"
                 onClick={handleSaveDraft}
-                disabled={isSavingDraft || isSubmitting || isCheckingBudget}
+                disabled={saveDraft.isPending || submitTrip.isPending || resubmitTrip.isPending || checkBudget.isPending}
                 className="gap-2 dark:border-slate-700 dark:text-slate-300"
               >
-                {isSavingDraft ? (
+                {saveDraft.isPending ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
                 ) : (
                   <Save className="h-4 w-4" />
                 )}
-                {isSavingDraft ? "Saving..." : "Save as Draft"}
+                {saveDraft.isPending ? "Saving..." : "Save as Draft"}
               </Button>
               <Button
                 onClick={handleSubmit}
-                disabled={isSavingDraft || isSubmitting || isCheckingBudget}
+                disabled={saveDraft.isPending || submitTrip.isPending || resubmitTrip.isPending || checkBudget.isPending}
                 className={`gap-2 ${
                   isResubmitMode
                     ? "bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-700 hover:to-amber-800"
                     : "bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800"
                 } shadow-md hover:shadow-lg transition-all duration-200`}
               >
-                {isCheckingBudget ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : isSubmitting ? (
+                {(checkBudget.isPending || submitTrip.isPending || resubmitTrip.isPending) ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
                 ) : isResubmitMode ? (
                   <RotateCcw className="h-4 w-4" />
                 ) : (
                   <Send className="h-4 w-4" />
                 )}
-                {isCheckingBudget
+                {checkBudget.isPending
                   ? "Checking Budget..."
-                  : isSubmitting
+                  : submitTrip.isPending || resubmitTrip.isPending
                     ? "Submitting..."
                     : isResubmitMode
                       ? "Resubmit Ticket"

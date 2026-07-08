@@ -4,7 +4,7 @@ import { storage } from '../utils/storage';
 import { Platform } from 'react-native';
 
 // ============================================
-// DYNAMIC API URL - Works for both Web and Mobile
+// API URL Configuration
 // ============================================
 
 const getApiUrl = () => {
@@ -13,12 +13,8 @@ const getApiUrl = () => {
     return 'http://localhost:8000/api';
   }
   
-  // For Mobile (iOS/Android) - uses your computer's IP
-  // ⚠️ CHANGE THIS TO YOUR COMPUTER'S ACTUAL IP ADDRESS
-  // To find your IP: 
-  //   Windows: ipconfig | findstr "IPv4"
-  //   Mac/Linux: ifconfig | grep "inet "
-  return 'http://192.168.1.16:8000/api';
+  // For physical device - use your machine's IP
+  return 'http://192.168.1.5:8000/api';
 };
 
 const API_URL = getApiUrl();
@@ -125,6 +121,75 @@ export const driverAPI = {
       odometer_out: odometerOut, 
       odometer_in: odometerIn 
     }),
+};
+
+// ============================================
+// NOTIFICATION API ✅ NEW
+// ============================================
+export const notificationAPI = {
+  /**
+   * Get all notifications (paginated)
+   */
+  getAll: (page: number = 1, limit: number = 20) =>
+    api.get('/notifications', { params: { page, limit } }),
+
+  /**
+   * Get driver-specific notifications (for mobile)
+   */
+  getDriverNotifications: (unreadOnly: boolean = false, type?: string) =>
+    api.get('/driver/notifications', { params: { unread_only: unreadOnly, type } }),
+
+  /**
+   * Get unread notification count
+   */
+  getUnreadCount: () =>
+    api.get('/notifications/unread-count'),
+
+  /**
+   * Mark a notification as read
+   */
+  markAsRead: (id: number) =>
+    api.post(`/notifications/${id}/read`),
+
+  /**
+   * Mark all notifications as read
+   */
+  markAllAsRead: () =>
+    api.post('/notifications/mark-all-read'),
+
+  /**
+   * Register device for push notifications
+   */
+  registerDevice: (pushToken: string, platform: string, deviceName?: string) =>
+    api.post('/notifications/register-device', {
+      push_token: pushToken,
+      platform,
+      device_name: deviceName || 'Unknown Device',
+    }),
+
+  /**
+   * Unregister device from push notifications
+   */
+  unregisterDevice: (pushToken: string) =>
+    api.post('/notifications/unregister-device', {
+      push_token: pushToken,
+    }),
+
+  /**
+   * Get notification preferences
+   */
+  getPreferences: () =>
+    api.get('/notifications/preferences'),
+
+  /**
+   * Update notification preferences
+   */
+  updatePreferences: (preferences: {
+    push_enabled?: boolean;
+    email_enabled?: boolean;
+    types?: string[];
+  }) =>
+    api.put('/notifications/preferences', preferences),
 };
 
 // ============================================

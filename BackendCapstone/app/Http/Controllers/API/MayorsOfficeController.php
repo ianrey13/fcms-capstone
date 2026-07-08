@@ -3,10 +3,10 @@
 namespace App\Http\Controllers\API;
 
 use Illuminate\Support\Facades\Cache;
-
 use App\Http\Controllers\Controller;
 use App\Models\TripTicket;
 use App\Models\GasSlip;
+use App\Models\FuelLog;
 use App\Models\DeptBudgetPeriod;
 use App\Models\Notification;
 use App\Models\User;
@@ -23,28 +23,50 @@ class MayorsOfficeController extends Controller
 {
     /**
      * Get Mayor's Office dashboard statistics
+     * ✅ Updated for new schema
      */
     public function getDashboard(Request $request)
     {
         $user = $request->user();
 
-        if (!$user->isMayorsOffice() && !$user->isSuperAdmin()) {
+        // ✅ Only Mayor's Office can access
+        if (!$user->isMayorsOffice()) {
             return response()->json(['message' => 'Unauthorized'], 403);
         }
 
-        // ✅ FIXED: Use GasSlip instead of FundIssuance
         $stats = [
             'pending_fund_release' => TripTicket::where('status', 'pending_mayors_office')->count(),
             'funds_issued' => TripTicket::where('status', TripTicket::STATUS_FUNDS_ISSUED)->count(),
             'total_amount_released' => GasSlip::sum('amount_released'),
             'pending_reconciliation' => TripTicket::where('status', TripTicket::STATUS_PENDING_RECONCILIATION)->count(),
             'pending_budget_assistance' => $this->getPendingBudgetAssistanceCount(),
+            'total_budget_allocated' => DeptBudgetPeriod::where('status', 'active')->sum('allocated_amount'),
+            'total_budget_remaining' => $this->getTotalRemainingBudget(),
+            'pending_receipts' => FuelLog::whereHas('gasSlip', function($q) {
+                $q->where('reconciliation_status', 'pending');
+            })->count(),
         ];
 
         return response()->json([
             'success' => true,
             'data' => $stats
         ]);
+    }
+
+    /**
+     * Get total remaining budget across all active periods
+     */
+    private function getTotalRemainingBudget()
+    {
+        $periods = DeptBudgetPeriod::where('status', 'active')->get();
+        $total = 0;
+        foreach ($periods as $period) {
+            $spent = GasSlip::where('period_id', $period->period_id)
+                ->whereNotNull('acknowledged_at')
+                ->sum('amount_released');
+            $total += ($period->allocated_amount - $spent);
+        }
+        return $total;
     }
 
     /**
@@ -57,22 +79,23 @@ class MayorsOfficeController extends Controller
     }
 
     /**
-     * Get pending tickets for fund release (pending_mayors_office status) - WITH BUDGET WARNING
+     * Get pending tickets for fund release (pending_mayors_office status)
      */
     public function getPendingTickets(Request $request)
     {
         try {
             $user = $request->user();
 
-            if (!$user->isMayorsOffice() && !$user->isSuperAdmin()) {
+            if (!$user->isMayorsOffice()) {
                 return response()->json(['message' => 'Unauthorized'], 403);
             }
 
-            $tickets = TripTicket::with(['vehicle', 'department', 'driver.user'])
+            $tickets = TripTicket::with(['vehicle', 'department', 'driver.user', 'gasSlip.fuelLog'])
                 ->where('status', 'pending_mayors_office')
                 ->orderBy('submitted_at', 'asc')
                 ->get()
                 ->map(function ($ticket) {
+                    $fuelLog = $ticket->gasSlip?->fuelLog;
                     return [
                         'id' => $ticket->trip_ticket_id,
                         'ticket_number' => $ticket->trip_ticket_number,
@@ -85,8 +108,11 @@ class MayorsOfficeController extends Controller
                         'submitted_at' => $ticket->submitted_at,
                         'has_insufficient_budget' => $ticket->has_insufficient_budget ?? false,
                         'budget_shortage' => $ticket->budget_shortage ?? 0,
-                        'original_department_id' => $ticket->original_department_id,
+                        'estimated_cost' => $ticket->estimated_fuel_liters ? 
+                            ($ticket->estimated_fuel_liters * 88) : null,
                         'department_id' => $ticket->department_id,
+                        'has_receipt' => $fuelLog && ($fuelLog->liters_availed > 0 || $fuelLog->amount_on_receipt > 0),
+                        'receipt_status' => $ticket->gasSlip?->reconciliation_status ?? 'none',
                         'vehicle' => $ticket->vehicle ? [
                             'plate_number' => $ticket->vehicle->plate_number,
                             'vehicle_model' => $ticket->vehicle->vehicle_model,
@@ -122,16 +148,12 @@ class MayorsOfficeController extends Controller
         try {
             $user = $request->user();
 
-              Log::info('getApprovedTickets called', [
-            'user_id' => $user->user_id,
-            'user_role' => $user->role]);
-
-            if (!$user->isMayorsOffice() && !$user->isSuperAdmin()) {
+            if (!$user->isMayorsOffice()) {
                 return response()->json(['message' => 'Unauthorized'], 403);
             }
 
-            $tickets = TripTicket::with(['vehicle', 'department', 'gasSlip','driver.user'])
-            ->whereIn('status', ['funds_issued', 'acknowledged'])
+            $tickets = TripTicket::with(['vehicle', 'department', 'gasSlip', 'driver.user'])
+                ->whereIn('status', ['funds_issued', 'acknowledged', 'pending_reconciliation', 'in_transit', 'closed'])
                 ->orderBy('submitted_at', 'desc')
                 ->get()
                 ->map(function ($ticket) {
@@ -146,7 +168,6 @@ class MayorsOfficeController extends Controller
                         ] : null,
                         'department_name' => $ticket->department ? $ticket->department->department_name : null,
                         'amount_released' => $ticket->gasSlip ? $ticket->gasSlip->amount_released : 0,
-                        'gas_slip_number' => $ticket->gasSlip ? $ticket->gasSlip->gas_slip_number : null,
                         'is_mo_funded' => $ticket->created_by_mo_user_id !== null,
                         'charged_to_department' => $ticket->charge_to_department_id ?
                             Department::find($ticket->charge_to_department_id)?->department_name : null,
@@ -167,181 +188,181 @@ class MayorsOfficeController extends Controller
     }
 
     /**
-     * Approve ticket and release funds - WITH DEPARTMENT SELECTION FOR BUDGET CHARGE
-     * ✅ FIXED: Removed MoReview and FundIssuance
+     * Approve ticket and release funds
+     * ✅ Updated: Removed MoReview, uses GasSlip directly
      */
-  public function approveTicket(Request $request, $id)
-{
-    try {
-        $validator = Validator::make($request->all(), [
-            'amount_released' => 'required|numeric|min:0.01',
-            'charge_to_department_id' => 'nullable|exists:departments,department_id',
-        ]);
+    public function approveTicket(Request $request, $id)
+    {
+        try {
+            $validator = Validator::make($request->all(), [
+                'amount_released' => 'required|numeric|min:0.01',
+                'charge_to_department_id' => 'nullable|exists:departments,department_id',
+            ]);
 
-        if ($validator->fails()) {
-            return response()->json(['errors' => $validator->errors()], 422);
-        }
+            if ($validator->fails()) {
+                return response()->json(['errors' => $validator->errors()], 422);
+            }
 
-        $user = $request->user();
+            $user = $request->user();
 
-        if (!$user->isMayorsOffice() && !$user->isSuperAdmin()) {
-            return response()->json(['message' => 'Unauthorized'], 403);
-        }
+            if (!$user->isMayorsOffice()) {
+                return response()->json(['message' => 'Unauthorized'], 403);
+            }
 
-        $ticket = TripTicket::where('trip_ticket_id', $id)
-            ->where('status', 'pending_mayors_office')
-            ->first();
-
-        if (!$ticket) {
-            return response()->json(['message' => 'Ticket not found or not eligible for fund release'], 404);
-        }
-
-        $amountToRelease = $request->amount_released;
-        $chargeDepartmentId = $request->charge_to_department_id ?? $ticket->department_id;
-        $chargeDepartment = Department::find($chargeDepartmentId);
-
-        $hasInsufficientBudget = $ticket->has_insufficient_budget ?? false;
-        $budgetShortage = $ticket->budget_shortage ?? 0;
-        $isMoFundedTicket = $ticket->created_by_mo_user_id !== null;
-
-        $budgetBefore = 0;
-        $budgetAfter = 0;
-        $periodId = null;
-
-        if (!$isMoFundedTicket) {
-            $currentPeriod = DeptBudgetPeriod::where('department_id', $chargeDepartmentId)
-                ->where('status', 'active')
+            $ticket = TripTicket::where('trip_ticket_id', $id)
+                ->where('status', 'pending_mayors_office')
                 ->first();
 
-            if (!$currentPeriod) {
-                $departments = Department::all();
-
-                return response()->json([
-                    'success' => false,
-                    'message' => "No active budget period found for {$chargeDepartment->department_name}",
-                    'budget_info' => [
-                        'has_period' => false,
-                        'department_id' => $chargeDepartmentId,
-                        'department_name' => $chargeDepartment->department_name,
-                    ],
-                    'available_departments' => $departments,
-                    'has_insufficient_budget' => $hasInsufficientBudget,
-                    'budget_shortage' => $budgetShortage,
-                ], 422);
+            if (!$ticket) {
+                return response()->json(['message' => 'Ticket not found or not eligible for fund release'], 404);
             }
 
-            // Calculate budget before and after
-            $totalSpent = GasSlip::where('period_id', $currentPeriod->period_id)
-                ->whereNotNull('acknowledged_at')
-                ->sum('amount_released');
-            
-            $budgetBefore = $currentPeriod->allocated_amount - $totalSpent;
-            $budgetAfter = $budgetBefore - $amountToRelease;
-            $periodId = $currentPeriod->period_id;
+            $amountToRelease = $request->amount_released;
+            $chargeDepartmentId = $request->charge_to_department_id ?? $ticket->department_id;
+            $chargeDepartment = Department::find($chargeDepartmentId);
 
-            if ($budgetBefore < $amountToRelease) {
-                $shortage = $amountToRelease - $budgetBefore;
-                $departments = Department::all();
+            $hasInsufficientBudget = $ticket->has_insufficient_budget ?? false;
+            $budgetShortage = $ticket->budget_shortage ?? 0;
+            $isMoFundedTicket = $ticket->created_by_mo_user_id !== null;
 
-                return response()->json([
-                    'success' => false,
-                    'message' => "Insufficient budget in {$chargeDepartment->department_name}",
-                    'budget_info' => [
-                        'allocated' => $currentPeriod->allocated_amount,
-                        'spent' => $totalSpent,
-                        'remaining' => $budgetBefore,
-                        'requested' => $amountToRelease,
-                        'shortage' => $shortage,
-                        'department_id' => $chargeDepartmentId,
-                        'department_name' => $chargeDepartment->department_name,
-                        'is_negative' => $budgetBefore < 0,
-                    ],
-                    'available_departments' => $departments,
-                    'has_insufficient_budget' => $hasInsufficientBudget,
-                    'budget_shortage' => $budgetShortage,
-                    'suggestions' => [
-                        'select_other_department' => 'Select a different department to charge',
-                        'reduce_amount' => "Reduce the amount to ₱" . number_format($budgetBefore, 2),
-                        'use_mo_funded' => 'Or mark as MO-funded trip',
-                    ]
-                ], 422);
+            $budgetBefore = 0;
+            $budgetAfter = 0;
+            $periodId = null;
+
+            // ✅ Check budget if NOT MO-funded
+            if (!$isMoFundedTicket) {
+                $currentPeriod = DeptBudgetPeriod::where('department_id', $chargeDepartmentId)
+                    ->where('status', 'active')
+                    ->first();
+
+                if (!$currentPeriod) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => "No active budget period found for {$chargeDepartment->department_name}",
+                        'budget_info' => [
+                            'has_period' => false,
+                            'department_id' => $chargeDepartmentId,
+                            'department_name' => $chargeDepartment->department_name,
+                        ],
+                        'available_departments' => Department::all(),
+                        'has_insufficient_budget' => $hasInsufficientBudget,
+                        'budget_shortage' => $budgetShortage,
+                    ], 422);
+                }
+
+                $totalSpent = GasSlip::where('period_id', $currentPeriod->period_id)
+                    ->whereNotNull('acknowledged_at')
+                    ->sum('amount_released');
+
+                $budgetBefore = $currentPeriod->allocated_amount - $totalSpent;
+                $budgetAfter = $budgetBefore - $amountToRelease;
+                $periodId = $currentPeriod->period_id;
+
+                if ($budgetBefore < $amountToRelease) {
+                    $shortage = $amountToRelease - $budgetBefore;
+
+                    return response()->json([
+                        'success' => false,
+                        'message' => "Insufficient budget in {$chargeDepartment->department_name}",
+                        'budget_info' => [
+                            'allocated' => $currentPeriod->allocated_amount,
+                            'spent' => $totalSpent,
+                            'remaining' => $budgetBefore,
+                            'requested' => $amountToRelease,
+                            'shortage' => $shortage,
+                            'department_id' => $chargeDepartmentId,
+                            'department_name' => $chargeDepartment->department_name,
+                            'is_negative' => $budgetBefore < 0,
+                        ],
+                        'available_departments' => Department::all(),
+                        'has_insufficient_budget' => $hasInsufficientBudget,
+                        'budget_shortage' => $budgetShortage,
+                        'suggestions' => [
+                            'select_other_department' => 'Select a different department to charge',
+                            'reduce_amount' => "Reduce the amount to ₱" . number_format($budgetBefore, 2),
+                            'use_mo_funded' => 'Or mark as MO-funded trip',
+                        ]
+                    ], 422);
+                }
             }
-        }
 
-        DB::beginTransaction();
+            DB::beginTransaction();
 
-        // ✅ Create gas slip with ALL required fields
-        $gasSlipData = [
-            'trip_ticket_id' => $id,
-            'created_by' => $user->user_id,
-            'amount_released' => $amountToRelease,
-            'reconciliation_status' => 'pending',
-            'created_at' => now(),
-            'updated_at' => now(),
-        ];
+            // ✅ Create gas slip
+            $gasSlipData = [
+                'trip_ticket_id' => $id,
+                'created_by' => $user->user_id,
+                'amount_released' => $amountToRelease,
+                'reconciliation_status' => 'pending',
+                'created_at' => now(),
+                'updated_at' => now(),
+            ];
 
-        // ✅ Add budget fields if not MO-funded
-        if (!$isMoFundedTicket && $periodId) {
-            $gasSlipData['budget_before'] = $budgetBefore;
-            $gasSlipData['budget_after'] = $budgetAfter;
-            $gasSlipData['period_id'] = $periodId;
-        } else {
-            // For MO-funded tickets, set default values
-            $gasSlipData['budget_before'] = 0;
-            $gasSlipData['budget_after'] = 0;
-            $gasSlipData['period_id'] = 1; // Default period ID
-        }
+            if (!$isMoFundedTicket && $periodId) {
+                $gasSlipData['budget_before'] = $budgetBefore;
+                $gasSlipData['budget_after'] = $budgetAfter;
+                $gasSlipData['period_id'] = $periodId;
+            } else {
+                $gasSlipData['budget_before'] = 0;
+                $gasSlipData['budget_after'] = 0;
+                $gasSlipData['period_id'] = $this->getDefaultPeriodId($ticket->department_id);
+            }
 
-        $gasSlip = GasSlip::create($gasSlipData);
+            $gasSlip = GasSlip::create($gasSlipData);
 
-        if (!$isMoFundedTicket) {
-            if ($chargeDepartmentId != $ticket->department_id) {
+            // Update ticket
+            $ticket->has_insufficient_budget = false;
+            $ticket->status = TripTicket::STATUS_FUNDS_ISSUED;
+            if (!$isMoFundedTicket && $chargeDepartmentId != $ticket->department_id) {
                 $ticket->charge_to_department_id = $chargeDepartmentId;
             }
+            $ticket->save();
+
+            DB::commit();
+
+            $fundingSource = $isMoFundedTicket ? 'MO Funded' : "Charged to: {$chargeDepartment->department_name}";
+            $this->sendFundIssuedNotification($ticket, $amountToRelease, $fundingSource);
+
+            return response()->json([
+                'success' => true,
+                'message' => $isMoFundedTicket 
+                    ? "Funds released successfully (MO Funded - No department budget deduction)"
+                    : "Funds released successfully from {$chargeDepartment->department_name} budget",
+                'data' => [
+                    'ticket_id' => $ticket->trip_ticket_id,
+                    'ticket_number' => $ticket->trip_ticket_number,
+                    'amount_released' => $amountToRelease,
+                    'gas_slip_id' => $gasSlip->gas_slip_id,
+                    'status' => $ticket->status,
+                    'funding_source' => $fundingSource,
+                    'charged_to_department' => $chargeDepartment->department_name,
+                    'is_mo_funded' => $isMoFundedTicket,
+                ]
+            ]);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            Log::error('Approve ticket error: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to release funds: ' . $e->getMessage()
+            ], 500);
         }
-
-        $ticket->has_insufficient_budget = false;
-        $ticket->status = TripTicket::STATUS_FUNDS_ISSUED;
-        $ticket->save();
-
-        DB::commit();
-
-        $fundingSource = $isMoFundedTicket ? 'MO Funded' : "Charged to: {$chargeDepartment->department_name}";
-        $this->sendFundIssuedNotification($ticket, $amountToRelease, $fundingSource);
-
-        $responseMessage = $isMoFundedTicket
-            ? "Funds released successfully (MO Funded - No department budget deduction)"
-            : "Funds released successfully from {$chargeDepartment->department_name} budget";
-
-        return response()->json([
-            'success' => true,
-            'message' => $responseMessage,
-            'data' => [
-                'ticket_id' => $ticket->trip_ticket_id,
-                'ticket_number' => $ticket->trip_ticket_number,
-                'amount_released' => $amountToRelease,
-                'gas_slip_id' => $gasSlip->gas_slip_id,
-                'status' => $ticket->status,
-                'funding_source' => $fundingSource,
-                'charged_to_department' => $chargeDepartment->department_name,
-                'charged_to_department_id' => $chargeDepartmentId,
-                'is_mo_funded' => $isMoFundedTicket,
-                'original_department' => $ticket->department?->department_name,
-            ]
-        ]);
-    } catch (\Exception $e) {
-        DB::rollBack();
-        Log::error('Approve ticket error: ' . $e->getMessage());
-        return response()->json([
-            'success' => false,
-            'message' => 'Failed to release funds: ' . $e->getMessage()
-        ], 500);
     }
-}
+
+    /**
+     * Get default period ID for a department
+     */
+    private function getDefaultPeriodId($departmentId)
+    {
+        $period = DeptBudgetPeriod::where('department_id', $departmentId)
+            ->where('status', 'active')
+            ->first();
+        return $period ? $period->period_id : 1;
+    }
 
     /**
      * Reject ticket
-     * ✅ FIXED: Removed MoReview
+     * ✅ Updated: Removed MoReview
      */
     public function rejectTicket(Request $request, $id)
     {
@@ -356,7 +377,7 @@ class MayorsOfficeController extends Controller
         try {
             $user = $request->user();
 
-            if (!$user->isMayorsOffice() && !$user->isSuperAdmin()) {
+            if (!$user->isMayorsOffice()) {
                 return response()->json(['message' => 'Unauthorized'], 403);
             }
 
@@ -370,11 +391,9 @@ class MayorsOfficeController extends Controller
 
             DB::beginTransaction();
 
-            // ✅ REMOVED: MoReview creation - just update ticket status
             $ticket->status = TripTicket::STATUS_RETURNED_FOR_REVISION;
             $ticket->save();
 
-            // Record rejection in returns table
             DB::table('trip_ticket_return')->insert([
                 'trip_ticket_id' => $id,
                 'return_type' => 'rejected_by_mo',
@@ -408,13 +427,14 @@ class MayorsOfficeController extends Controller
 
     /**
      * Get single ticket details
+     * ✅ Updated: Removed head/gso approval references
      */
     public function show(Request $request, $id)
     {
         try {
             $user = $request->user();
 
-            if (!$user->isMayorsOffice() && !$user->isSuperAdmin()) {
+            if (!$user->isMayorsOffice()) {
                 return response()->json(['message' => 'Unauthorized'], 403);
             }
 
@@ -423,24 +443,69 @@ class MayorsOfficeController extends Controller
                 'driver.user',
                 'department',
                 'submittedBy',
-                'latestHeadApproval.approvedBy',
-                'latestGsoVerification.verifiedBy',
                 'gasSlip',
+                'gasSlip.fuelLog',
                 'vehicleSnapshot'
             ])->findOrFail($id);
 
             $budgetInfo = $this->getDepartmentBudgetInfo($ticket->department_id);
-
-            $ticketData = $ticket->toArray();
-            $ticketData['is_mo_funded'] = $ticket->created_by_mo_user_id !== null;
-            $ticketData['budget_info'] = $budgetInfo;
-            $ticketData['has_insufficient_budget'] = $ticket->has_insufficient_budget ?? false;
-            $ticketData['budget_shortage'] = $ticket->budget_shortage ?? 0;
-            $ticketData['all_departments'] = Department::select('department_id', 'department_name', 'department_code')->get();
+            $fuelLog = $ticket->gasSlip?->fuelLog;
 
             return response()->json([
                 'success' => true,
-                'data' => $ticketData
+                'data' => [
+                    'trip_ticket_id' => $ticket->trip_ticket_id,
+                    'ticket_number' => $ticket->trip_ticket_number,
+                    'trip_date' => $ticket->trip_date,
+                    'destination' => $ticket->destination,
+                    'purpose' => $ticket->purpose,
+                    'charge_to' => $ticket->charge_to,
+                    'passenger_name' => $ticket->passenger_name,
+                    'status' => $ticket->status,
+                    'submitted_at' => $ticket->submitted_at,
+                    'submitted_by_staff' => $ticket->submitted_by_staff ?? false,
+                    'is_mo_funded' => $ticket->created_by_mo_user_id !== null,
+                    'has_insufficient_budget' => $ticket->has_insufficient_budget ?? false,
+                    'budget_shortage' => $ticket->budget_shortage ?? 0,
+                    'estimated_distance_km' => $ticket->estimated_distance_km,
+                    'estimated_fuel_liters' => $ticket->estimated_fuel_liters,
+                    'odometer_exception' => $ticket->odometer_exception ?? false,
+                    'budget_info' => $budgetInfo,
+                    // ✅ Receipt Info
+                    'has_receipt' => $fuelLog && ($fuelLog->liters_availed > 0 || $fuelLog->amount_on_receipt > 0),
+                    'receipt' => $fuelLog ? [
+                        'fuel_log_id' => $fuelLog->fuel_log_id,
+                        'liters_availed' => $fuelLog->liters_availed,
+                        'amount_on_receipt' => $fuelLog->amount_on_receipt,
+                        'receipt_photo_path' => $fuelLog->receipt_photo_path,
+                        'receipt_url' => $fuelLog->receipt_photo_path ? asset('storage/' . $fuelLog->receipt_photo_path) : null,
+                        'odometer_start' => $fuelLog->odometer_start,
+                        'odometer_end' => $fuelLog->odometer_end,
+                        'gps_distance_km' => $fuelLog->gps_distance_km,
+                        'distance_calculation_method' => $fuelLog->distance_calculation_method,
+                        'reconciliation_status' => $ticket->gasSlip?->reconciliation_status,
+                    ] : null,
+                    'vehicle' => $ticket->vehicle ? [
+                        'plate_number' => $ticket->vehicle->plate_number,
+                        'vehicle_model' => $ticket->vehicle->vehicle_model,
+                        'fuel_type' => $ticket->vehicle->fuel_type,
+                    ] : null,
+                    'driver' => $ticket->driver && $ticket->driver->user ? [
+                        'full_name' => $ticket->driver->user->full_name,
+                    ] : null,
+                    'department' => $ticket->department ? [
+                        'name' => $ticket->department->department_name,
+                        'code' => $ticket->department->department_code,
+                    ] : null,
+                    'gas_slip' => $ticket->gasSlip ? [
+                        'gas_slip_id' => $ticket->gasSlip->gas_slip_id,
+                        'amount_released' => $ticket->gasSlip->amount_released,
+                        'reconciliation_status' => $ticket->gasSlip->reconciliation_status,
+                        'budget_before' => $ticket->gasSlip->budget_before,
+                        'budget_after' => $ticket->gasSlip->budget_after,
+                    ] : null,
+                    'all_departments' => Department::select('department_id', 'department_name', 'department_code')->get(),
+                ]
             ]);
         } catch (\Exception $e) {
             Log::error('Show ticket error: ' . $e->getMessage());
@@ -450,14 +515,13 @@ class MayorsOfficeController extends Controller
 
     /**
      * Get budget overview
-     * ✅ FIXED: Use GasSlip instead of fundIssuances relationship
      */
     public function getBudgetOverview(Request $request)
     {
         try {
             $user = $request->user();
 
-            if (!$user->isMayorsOffice() && !$user->isSuperAdmin()) {
+            if (!$user->isMayorsOffice()) {
                 return response()->json(['message' => 'Unauthorized'], 403);
             }
 
@@ -493,8 +557,8 @@ class MayorsOfficeController extends Controller
             ], 500);
         }
     }
-    
-    // ============ BUDGET ASSISTANCE / MO FUNDED TRIP METHODS ============
+
+    // ============ BUDGET ASSISTANCE METHODS ============
 
     /**
      * Get all pending budget assistance requests
@@ -504,10 +568,10 @@ class MayorsOfficeController extends Controller
         try {
             $user = $request->user();
 
-            if ($user->role !== 'mayors_office' && $user->role !== 'superadmin') {
+            if (!$user->isMayorsOffice()) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'Unauthorized. Only Mayor\'s Office and Super Admin can access this.'
+                    'message' => 'Unauthorized. Only Mayor\'s Office can access this.'
                 ], 403);
             }
 
@@ -561,7 +625,7 @@ class MayorsOfficeController extends Controller
         try {
             $user = auth()->user();
 
-            if ($user->role !== 'mayors_office' && $user->role !== 'superadmin') {
+            if (!$user->isMayorsOffice()) {
                 return response()->json([
                     'success' => false,
                     'message' => 'Unauthorized'
@@ -625,7 +689,7 @@ class MayorsOfficeController extends Controller
         try {
             $user = $request->user();
 
-            if ($user->role !== 'mayors_office' && $user->role !== 'superadmin') {
+            if (!$user->isMayorsOffice()) {
                 return response()->json([
                     'success' => false,
                     'message' => 'Unauthorized'
@@ -655,6 +719,7 @@ class MayorsOfficeController extends Controller
 
             DB::beginTransaction();
 
+            // Generate ticket number
             $yearMonth = date('Y-m');
             $lastTicket = TripTicket::where('trip_ticket_number', 'like', $yearMonth . '-%')
                 ->orderBy('trip_ticket_id', 'desc')
@@ -676,7 +741,7 @@ class MayorsOfficeController extends Controller
                 'vehicle_id' => $ticketData['vehicle_id'],
                 'submitted_by' => $user->user_id,
                 'created_by_mo_user_id' => $user->user_id,
-                'submitted_by_head' => true,
+                'submitted_by_staff' => false,
                 'trip_date' => $ticketData['trip_date'],
                 'purpose' => $ticketData['purpose'],
                 'destination' => $ticketData['destination'],
@@ -704,6 +769,9 @@ class MayorsOfficeController extends Controller
                 'created_by' => $user->user_id,
                 'amount_released' => $estimatedCost,
                 'reconciliation_status' => 'pending',
+                'budget_before' => 0,
+                'budget_after' => 0,
+                'period_id' => $this->getDefaultPeriodId($requestData['department_id']),
                 'created_at' => now(),
             ]);
 
@@ -741,32 +809,142 @@ class MayorsOfficeController extends Controller
         }
     }
 
-    /**
-     * Notify driver of MO-funded trip
-     */
-    private function notifyDriverOfMOTrip($tripTicket, $amount, $chargeTo)
-    {
-        $driver = $tripTicket->driver && $tripTicket->driver->user ? $tripTicket->driver->user : null;
+    // ============ ✅ NEW: RECEIPT VERIFICATION METHODS ============
 
-        if ($driver) {
-            Notification::create([
-                'recipient_user_id' => $driver->user_id,
-                'notification_type' => 'fund_issued',
-                'entity_type' => 'trip_ticket',
-                'entity_id' => $tripTicket->trip_ticket_id,
-                'message' => "Funds of ₱{$amount} have been released for trip ticket {$tripTicket->trip_ticket_number} (MO Funded)\n\n" .
-                    "Charge To: {$chargeTo}\n" .
-                    "You may start your trip.",
-                'channel' => 'in_app',
-                'created_at' => now(),
+    /**
+     * Get receipts for verification
+     */
+    public function getReceiptsForVerification(Request $request)
+    {
+        try {
+            $user = $request->user();
+            if (!$user->isMayorsOffice()) {
+                return response()->json(['message' => 'Unauthorized'], 403);
+            }
+
+            $receipts = DB::table('fuel_log as fl')
+                ->join('gas_slip as gs', 'fl.gas_slip_id', '=', 'gs.gas_slip_id')
+                ->join('trip_ticket as tt', 'gs.trip_ticket_id', '=', 'tt.trip_ticket_id')
+                ->join('vehicles as v', 'tt.vehicle_id', '=', 'v.vehicle_id')
+                ->join('users as u_driver', 'tt.driver_id', '=', 'u_driver.user_id')
+                ->join('departments as d', 'tt.department_id', '=', 'd.department_id')
+                ->select(
+                    'fl.fuel_log_id as id',
+                    'tt.trip_ticket_number as ticket_number',
+                    'u_driver.first_name',
+                    'u_driver.last_name',
+                    DB::raw("CONCAT(u_driver.first_name, ' ', u_driver.last_name) as driver_name"),
+                    'v.plate_number',
+                    'd.department_name',
+                    'fl.liters_availed as liters',
+                    'fl.amount_on_receipt as amount',
+                    'fl.receipt_photo_path as receipt_url',
+                    'fl.receipt_uploaded_at as uploaded_at',
+                    'fl.odometer_start',
+                    'fl.odometer_end',
+                    'fl.gps_distance_km',
+                    'fl.distance_calculation_method',
+                    'gs.reconciliation_status as status',
+                    'tt.trip_date',
+                    'v.fuel_type'
+                )
+                ->where('fl.liters_availed', '>', 0)
+                ->orWhere('fl.amount_on_receipt', '>', 0)
+                ->orderBy('fl.created_at', 'desc')
+                ->get()
+                ->map(function ($receipt) {
+                    if ($receipt->receipt_url && !str_starts_with($receipt->receipt_url, 'http')) {
+                        $receipt->receipt_url = asset('storage/' . $receipt->receipt_url);
+                    }
+                    return $receipt;
+                });
+
+            return response()->json([
+                'success' => true,
+                'data' => $receipts,
+                'total' => $receipts->count()
             ]);
+        } catch (\Exception $e) {
+            Log::error('Get receipts for verification error: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to fetch receipts: ' . $e->getMessage()
+            ], 500);
         }
     }
 
     /**
-     * Get department budget info helper
-     * ✅ FIXED: Use GasSlip instead of FundIssuance
+     * Verify a receipt
      */
+    public function verifyReceipt(Request $request, $id)
+    {
+        try {
+            $user = $request->user();
+            if (!$user->isMayorsOffice()) {
+                return response()->json(['message' => 'Unauthorized'], 403);
+            }
+
+            $fuelLog = FuelLog::findOrFail($id);
+            $gasSlip = GasSlip::findOrFail($fuelLog->gas_slip_id);
+
+            if ($gasSlip->reconciliation_status === 'verified') {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'This receipt has already been verified'
+                ], 400);
+            }
+
+            $gasSlip->reconciliation_status = 'verified';
+            $gasSlip->reconciled_by = $user->user_id;
+            $gasSlip->reconciled_at = now();
+            $gasSlip->save();
+
+            Log::info('Receipt verified', [
+                'receipt_id' => $id,
+                'verified_by' => $user->user_id,
+                'gas_slip_id' => $gasSlip->gas_slip_id,
+                'trip_ticket_id' => $gasSlip->trip_ticket_id,
+            ]);
+
+            // Send notification to GSO that receipt was verified
+            $gsoStaff = User::where('role', 'gso_office')
+                ->where('status', 'active')
+                ->get();
+
+            foreach ($gsoStaff as $staff) {
+                Notification::create([
+                    'recipient_user_id' => $staff->user_id,
+                    'notification_type' => 'reconciliation_closed',
+                    'entity_type' => 'gas_slip',
+                    'entity_id' => $gasSlip->gas_slip_id,
+                    'message' => "Receipt for trip {$gasSlip->tripTicket?->trip_ticket_number} has been verified by Mayor's Office",
+                    'channel' => 'in_app',
+                    'created_at' => now(),
+                ]);
+            }
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Receipt verified successfully',
+                'data' => [
+                    'receipt_id' => $id,
+                    'gas_slip_id' => $gasSlip->gas_slip_id,
+                    'status' => $gasSlip->reconciliation_status,
+                ]
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Verify receipt error: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to verify receipt: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    // ============ END RECEIPT VERIFICATION METHODS ============
+
+    // ============ HELPER METHODS (continued) ============
+
     private function getDepartmentBudgetInfo($departmentId)
     {
         $currentPeriod = DeptBudgetPeriod::where('department_id', $departmentId)
@@ -795,13 +973,29 @@ class MayorsOfficeController extends Controller
         ];
     }
 
-    /**
-     * Notify department that MO created the ticket
-     */
+    private function notifyDriverOfMOTrip($tripTicket, $amount, $chargeTo)
+    {
+        $driver = $tripTicket->driver && $tripTicket->driver->user ? $tripTicket->driver->user : null;
+
+        if ($driver) {
+            Notification::create([
+                'recipient_user_id' => $driver->user_id,
+                'notification_type' => 'fund_issued',
+                'entity_type' => 'trip_ticket',
+                'entity_id' => $tripTicket->trip_ticket_id,
+                'message' => "Funds of ₱{$amount} have been released for trip ticket {$tripTicket->trip_ticket_number} (MO Funded)\n\n" .
+                    "Charge To: {$chargeTo}\n" .
+                    "You may start your trip.",
+                'channel' => 'in_app',
+                'created_at' => now(),
+            ]);
+        }
+    }
+
     private function notifyDepartmentOfMOTicket($tripTicket, $chargeTo, $moNote)
     {
         $departmentStaff = User::where('department_id', $tripTicket->department_id)
-            ->where('role', 'dept_office')
+            ->where('role', 'driver')
             ->where('status', 'active')
             ->get();
 
@@ -827,10 +1021,7 @@ class MayorsOfficeController extends Controller
         }
     }
 
-    /**
-     * Send fund issued notification to driver
-     */
-    private function sendFundIssuedNotification($ticket, $amount, $fundingSource = 'Department Budget')
+    private function sendFundIssuedNotification($ticket, $amount, $fundingSource)
     {
         $driver = $ticket->driver && $ticket->driver->user ? $ticket->driver->user : null;
 
@@ -847,9 +1038,6 @@ class MayorsOfficeController extends Controller
         }
     }
 
-    /**
-     * Send rejection notification to department
-     */
     private function sendRejectionNotification($ticket, $reason)
     {
         $deptOffice = User::find($ticket->submitted_by);
@@ -867,15 +1055,12 @@ class MayorsOfficeController extends Controller
         }
     }
 
-    /**
-     * Remove MO request from cache after processing
-     */
     public function removeMORequest($requestId)
     {
         try {
             $user = auth()->user();
 
-            if ($user->role !== 'mayors_office' && $user->role !== 'superadmin') {
+            if (!$user->isMayorsOffice()) {
                 return response()->json([
                     'success' => false,
                     'message' => 'Unauthorized'
@@ -901,16 +1086,12 @@ class MayorsOfficeController extends Controller
         }
     }
 
-    /**
-     * Get budget for a specific department
-     * ✅ FIXED: Use GasSlip instead of FundIssuance
-     */
     public function getDepartmentBudget(Request $request, $departmentId)
     {
         try {
             $user = $request->user();
 
-            if (!$user->isMayorsOffice() && !$user->isSuperAdmin()) {
+            if (!$user->isMayorsOffice()) {
                 return response()->json(['message' => 'Unauthorized'], 403);
             }
 
@@ -960,16 +1141,12 @@ class MayorsOfficeController extends Controller
         }
     }
 
-    /**
-     * Get ALL departments with their budget status for Mayor's Office
-     * ✅ FIXED: Use GasSlip instead of FundIssuance
-     */
     public function getAllDepartmentsWithBudget(Request $request)
     {
         try {
             $user = $request->user();
 
-            if (!$user->isMayorsOffice() && !$user->isSuperAdmin()) {
+            if (!$user->isMayorsOffice()) {
                 return response()->json(['message' => 'Unauthorized'], 403);
             }
 
@@ -1023,15 +1200,12 @@ class MayorsOfficeController extends Controller
         }
     }
 
-    /**
-     * Get all departments for dropdown selector (Mayor's Office only)
-     */
     public function getAllDepartmentsForSelector(Request $request)
     {
         try {
             $user = $request->user();
 
-            if (!$user->isMayorsOffice() && !$user->isSuperAdmin()) {
+            if (!$user->isMayorsOffice()) {
                 return response()->json(['message' => 'Unauthorized'], 403);
             }
 

@@ -1,9 +1,11 @@
 // src/pages/mayor/MayorDashboard.jsx
-import React, { useState, useEffect, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { useAuth } from '../../contexts/AuthContext';
-import { mayorsOfficeAPI } from '../../services/api';
-import { toast } from 'react-hot-toast';
+import React, { useState, useEffect, useCallback, useRef } from "react";
+import { useNavigate } from "react-router-dom";
+import { useAuth } from "../../contexts/AuthContext";
+import { mayorsOfficeAPI } from "../../services/api";
+import { toast } from "react-hot-toast";
+import echo from "../../services/echo";
+import eventBus from "../../utils/eventBus";
 
 import {
   LayoutDashboard,
@@ -22,20 +24,19 @@ import {
   BarChart3,
   ArrowRight,
   AlertCircle,
-  Printer,
   Zap,
   Shield,
   Target,
   Award,
-  Users,
   Activity,
   PieChart,
-  ChevronRight
-} from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { Progress } from '@/components/ui/progress';
+  ChevronRight,
+  Bell,
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Progress } from "@/components/ui/progress";
 
 const MayorDashboard = () => {
   const { user } = useAuth();
@@ -46,19 +47,120 @@ const MayorDashboard = () => {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [recentReleases, setRecentReleases] = useState([]);
+  const [newNotificationCount, setNewNotificationCount] = useState(0);
+  const [latestNotification, setLatestNotification] = useState(null);
+  const [isMounted, setIsMounted] = useState(true);
+  const [forceUpdate, setForceUpdate] = useState(0);
   const [stats, setStats] = useState({
     pendingCount: 0,
     releasedCount: 0,
     totalAmount: 0,
     avgUtilization: 0,
-    criticalDepartments: 0
+    criticalDepartments: 0,
   });
 
-  useEffect(() => {
-    fetchAllData();
-  }, []);
+  // Use refs to prevent stale closures
+  const fetchAllDataRef = useRef();
+  const fetchPendingTicketsRef = useRef();
+  const fetchDepartmentBudgetsRef = useRef();
 
-  const fetchAllData = async () => {
+  // ✅ FETCH FUNCTIONS - Wrapped with useCallback
+  const fetchPendingTickets = useCallback(async () => {
+    try {
+      const response = await mayorsOfficeAPI.getPendingTickets();
+      const ticketsData = response.data?.data || response.data || [];
+      if (isMounted) {
+        setPendingTickets(Array.isArray(ticketsData) ? ticketsData : []);
+        setStats((prev) => ({
+          ...prev,
+          pendingCount: ticketsData.length || 0,
+        }));
+        console.log("✅ Pending tickets updated:", ticketsData.length);
+      }
+    } catch (error) {
+      console.error("Failed to fetch pending tickets:", error);
+      if (isMounted) setPendingTickets([]);
+    }
+  }, [isMounted]);
+
+  const fetchApprovedTickets = useCallback(async () => {
+    try {
+      const response = await mayorsOfficeAPI.getApprovedTickets();
+      const ticketsData = response.data?.data || response.data || [];
+      if (isMounted) {
+        setApprovedTickets(Array.isArray(ticketsData) ? ticketsData : []);
+
+        const total = ticketsData.reduce((sum, t) => {
+          let amount = 0;
+          if (t.amount_released) amount = parseFloat(t.amount_released);
+          else if (t.gas_slip?.amount_released)
+            amount = parseFloat(t.gas_slip.amount_released);
+          return sum + (isNaN(amount) ? 0 : amount);
+        }, 0);
+
+        setStats((prev) => ({
+          ...prev,
+          releasedCount: ticketsData.length || 0,
+          totalAmount: total,
+        }));
+
+        setRecentReleases(
+          Array.isArray(ticketsData) ? ticketsData.slice(0, 5) : [],
+        );
+        console.log("✅ Approved tickets updated:", ticketsData.length);
+      }
+    } catch (error) {
+      console.error("Failed to fetch approved tickets:", error);
+      if (isMounted) {
+        setApprovedTickets([]);
+        setRecentReleases([]);
+      }
+    }
+  }, [isMounted]);
+
+  const fetchDepartmentBudgets = useCallback(async () => {
+    try {
+      const response = await mayorsOfficeAPI.getBudgetOverview();
+      const budgetData = response.data?.data || response.data || [];
+      if (isMounted) {
+        const formatted = budgetData.map((dept) => ({
+          department_id: dept.department_id,
+          department_name: dept.department_name,
+          allocated: parseFloat(dept.allocated_amount) || 0,
+          spent: parseFloat(dept.spent_amount) || 0,
+          remaining: parseFloat(dept.remaining_amount) || 0,
+          utilization:
+            dept.allocated_amount > 0
+              ? ((dept.spent_amount / dept.allocated_amount) * 100).toFixed(1)
+              : 0,
+        }));
+
+        formatted.sort(
+          (a, b) => parseFloat(b.utilization) - parseFloat(a.utilization),
+        );
+        setDepartmentBudgets(formatted);
+
+        const avgUtil =
+          formatted.reduce((sum, d) => sum + parseFloat(d.utilization), 0) /
+          (formatted.length || 1);
+        setStats((prev) => ({
+          ...prev,
+          avgUtilization: avgUtil.toFixed(1),
+          criticalDepartments: formatted.filter(
+            (d) => parseFloat(d.utilization) >= 80,
+          ).length,
+        }));
+        console.log("✅ Budget data updated:", formatted.length);
+      }
+    } catch (error) {
+      console.error("Failed to fetch department budgets:", error);
+      if (isMounted) setDepartmentBudgets([]);
+    }
+  }, [isMounted]);
+
+  // ✅ MAIN FETCH FUNCTION
+  const fetchAllData = useCallback(async () => {
+    console.log("🔄 Fetching all dashboard data...");
     setLoading(true);
     try {
       await Promise.all([
@@ -66,103 +168,163 @@ const MayorDashboard = () => {
         fetchApprovedTickets(),
         fetchDepartmentBudgets(),
       ]);
+      console.log("✅ All data fetched successfully");
     } catch (error) {
-      console.error('Error fetching dashboard data:', error);
-      toast.error('Failed to load dashboard data');
+      console.error("Error fetching dashboard data:", error);
+      toast.error("Failed to load dashboard data");
     } finally {
-      setLoading(false);
-      setRefreshing(false);
+      if (isMounted) {
+        setLoading(false);
+        setRefreshing(false);
+      }
     }
-  };
+  }, [
+    fetchPendingTickets,
+    fetchApprovedTickets,
+    fetchDepartmentBudgets,
+    isMounted,
+  ]);
 
-  const fetchPendingTickets = async () => {
-    try {
-      const response = await mayorsOfficeAPI.getPendingTickets();
-      const ticketsData = response.data?.data || response.data || [];
-      setPendingTickets(Array.isArray(ticketsData) ? ticketsData : []);
-      setStats(prev => ({ ...prev, pendingCount: ticketsData.length || 0 }));
-    } catch (error) {
-      console.error('Failed to fetch pending tickets:', error);
-      setPendingTickets([]);
-    }
-  };
+  // Store refs for event listeners
+  useEffect(() => {
+    fetchAllDataRef.current = fetchAllData;
+    fetchPendingTicketsRef.current = fetchPendingTickets;
+    fetchDepartmentBudgetsRef.current = fetchDepartmentBudgets;
+  }, [fetchAllData, fetchPendingTickets, fetchDepartmentBudgets]);
 
-  const fetchApprovedTickets = async () => {
-    try {
-      const response = await mayorsOfficeAPI.getApprovedTickets();
-      const ticketsData = response.data?.data || response.data || [];
-      setApprovedTickets(Array.isArray(ticketsData) ? ticketsData : []);
-      
-      const total = ticketsData.reduce((sum, t) => {
-        let amount = 0;
-        if (t.amount_released) amount = parseFloat(t.amount_released);
-        else if (t.gas_slip?.amount_released) amount = parseFloat(t.gas_slip.amount_released);
-        return sum + (isNaN(amount) ? 0 : amount);
-      }, 0);
-      
-      setStats(prev => ({ 
-        ...prev, 
-        releasedCount: ticketsData.length || 0,
-        totalAmount: total 
-      }));
-      
-      setRecentReleases(Array.isArray(ticketsData) ? ticketsData.slice(0, 5) : []);
-    } catch (error) {
-      console.error('Failed to fetch approved tickets:', error);
-      setApprovedTickets([]);
-      setRecentReleases([]);
-    }
-  };
+  // ✅ SETUP - Runs once on mount
+  useEffect(() => {
+    setIsMounted(true);
+    fetchAllData();
+    setupRealtimeNotifications();
 
-  const fetchDepartmentBudgets = async () => {
-    try {
-      const response = await mayorsOfficeAPI.getBudgetOverview();
-      const budgetData = response.data?.data || response.data || [];
+    // ✅ Listen for EventBus notifications (from NotificationBell)
+    const handleNotification = (data) => {
+      console.log("📢 EventBus: Notification received:", data);
+
+      setNewNotificationCount((prev) => prev + 1);
+      setLatestNotification(data);
+
+      // ✅ Auto-refresh based on notification type
+      if (
+        data.notification_type === "trip_created" ||
+        data.notification_type === "trip_submitted"
+      ) {
+        console.log("🔄 Refreshing dashboard due to new trip notification");
+        // Delay to ensure DB commit is complete
+        setTimeout(() => {
+          fetchAllDataRef.current?.();
+          // Force re-render
+          setForceUpdate((prev) => prev + 1);
+        }, 1000);
+      }
+
+      if (data.notification_type === "fund_issued") {
+        console.log("🔄 Refreshing budget data due to fund release");
+        setTimeout(() => {
+          fetchPendingTicketsRef.current?.();
+          fetchDepartmentBudgetsRef.current?.();
+          setForceUpdate((prev) => prev + 1);
+        }, 1000);
+      }
+    };
+
+    eventBus.on("notification-received", handleNotification);
+
+    return () => {
+      setIsMounted(false);
+      eventBus.off("notification-received", handleNotification);
+    };
+  }, []);
+
+  const setupRealtimeNotifications = () => {
+    if (!user) return;
+
+    console.log(
+      "🔔 Setting up real-time notifications for Mayor Dashboard:",
+      user.user_id,
+    );
+
+const subscribeToChannel = () => {
+  try {
+    const channel = echo.channel('notifications');
+    
+    channel.listen('.notification.new', (data) => {
+      console.log('🔔🔔🔔 PUBLIC CHANNEL NOTIFICATION RECEIVED! 🔔🔔🔔');
+      console.log('📦 Data:', data);
       
-      const formatted = budgetData.map(dept => ({
-        department_id: dept.department_id,
-        department_name: dept.department_name,
-        allocated: parseFloat(dept.allocated_amount) || 0,
-        spent: parseFloat(dept.spent_amount) || 0,
-        remaining: parseFloat(dept.remaining_amount) || 0,
-        utilization: dept.allocated_amount > 0 
-          ? ((dept.spent_amount / dept.allocated_amount) * 100).toFixed(1)
-          : 0
-      }));
+      setNewNotificationCount(prev => prev + 1);
+      setLatestNotification(data);
       
-      formatted.sort((a, b) => parseFloat(b.utilization) - parseFloat(a.utilization));
-      setDepartmentBudgets(formatted);
+      // ✅ FIX: Show toast notification
+      toast.success(data.message, {
+        duration: 5000,
+        icon: '🔔',
+        position: 'top-right',
+      });
+
+      if (data.notification_type === 'trip_created' || 
+          data.notification_type === 'trip_submitted') {
+        console.log('🔄 Refreshing dashboard due to new trip');
+        setTimeout(() => fetchAllData(), 500);
+      }
       
-      const avgUtil = formatted.reduce((sum, d) => sum + parseFloat(d.utilization), 0) / (formatted.length || 1);
-      setStats(prev => ({ 
-        ...prev, 
-        avgUtilization: avgUtil.toFixed(1),
-        criticalDepartments: formatted.filter(d => parseFloat(d.utilization) >= 80).length 
-      }));
-    } catch (error) {
-      console.error('Failed to fetch department budgets:', error);
-      setDepartmentBudgets([]);
+      if (data.notification_type === 'fund_issued') {
+        console.log('🔄 Refreshing budget data due to fund release');
+        setTimeout(() => {
+          fetchPendingTickets();
+          fetchDepartmentBudgets();
+        }, 500);
+      }
+    });
+
+    channel.subscribed(() => {
+      console.log('✅ Subscribed to PUBLIC notification channel');
+    });
+
+  } catch (error) {
+    console.error('⚠️ Error subscribing to channel:', error);
+  }
+};
+
+    // Check if echo is available
+    if (echo.connector && echo.connector.pusher) {
+      const connection = echo.connector.pusher.connection;
+
+      if (connection.state === "connected") {
+        console.log("✅ Already connected, subscribing...");
+        subscribeToChannel();
+      } else {
+        connection.bind("connected", () => {
+          console.log("✅ WebSocket connected!");
+          subscribeToChannel();
+        });
+      }
+    } else {
+      console.warn("⚠️ Echo connector not available");
     }
   };
 
   const handleRefresh = () => {
     setRefreshing(true);
+    setNewNotificationCount(0);
     fetchAllData();
-    toast.success('Dashboard refreshed');
+    toast.success("Dashboard refreshed");
   };
 
+  // Rest of the component remains the same...
   const getUtilizationColor = (utilization) => {
     const percent = parseFloat(utilization);
-    if (percent >= 80) return 'text-red-600 dark:text-red-400';
-    if (percent >= 60) return 'text-amber-600 dark:text-amber-400';
-    return 'text-emerald-600 dark:text-emerald-400';
+    if (percent >= 80) return "text-red-600 dark:text-red-400";
+    if (percent >= 60) return "text-amber-600 dark:text-amber-400";
+    return "text-emerald-600 dark:text-emerald-400";
   };
 
   const getProgressColor = (utilization) => {
     const percent = parseFloat(utilization);
-    if (percent >= 80) return 'bg-gradient-to-r from-red-500 to-red-600';
-    if (percent >= 60) return 'bg-gradient-to-r from-amber-500 to-amber-600';
-    return 'bg-gradient-to-r from-emerald-500 to-emerald-600';
+    if (percent >= 80) return "bg-gradient-to-r from-red-500 to-red-600";
+    if (percent >= 60) return "bg-gradient-to-r from-amber-500 to-amber-600";
+    return "bg-gradient-to-r from-emerald-500 to-emerald-600";
   };
 
   const getStatusIcon = (utilization) => {
@@ -173,26 +335,26 @@ const MayorDashboard = () => {
   };
 
   const formatDate = (dateString) => {
-    if (!dateString) return 'N/A';
-    return new Date(dateString).toLocaleDateString('en-PH', {
-      month: 'short',
-      day: 'numeric',
+    if (!dateString) return "N/A";
+    return new Date(dateString).toLocaleDateString("en-PH", {
+      month: "short",
+      day: "numeric",
     });
   };
 
   const formatCurrency = (amount) => {
     const numAmount = parseFloat(amount);
-    if (isNaN(numAmount) || numAmount === 0) return '₱0';
-    return new Intl.NumberFormat('en-PH', {
-      style: 'currency',
-      currency: 'PHP',
+    if (isNaN(numAmount) || numAmount === 0) return "₱0";
+    return new Intl.NumberFormat("en-PH", {
+      style: "currency",
+      currency: "PHP",
       minimumFractionDigits: 0,
     }).format(numAmount);
   };
 
   const formatCompactCurrency = (amount) => {
     const numAmount = parseFloat(amount);
-    if (isNaN(numAmount)) return '₱0';
+    if (isNaN(numAmount)) return "₱0";
     if (numAmount >= 1000000) return `₱${(numAmount / 1000000).toFixed(1)}M`;
     if (numAmount >= 1000) return `₱${(numAmount / 1000).toFixed(1)}K`;
     return `₱${numAmount.toFixed(0)}`;
@@ -200,24 +362,41 @@ const MayorDashboard = () => {
 
   const getGreeting = () => {
     const hour = new Date().getHours();
-    if (hour < 12) return 'Good Morning';
-    if (hour < 18) return 'Good Afternoon';
-    return 'Good Evening';
+    if (hour < 12) return "Good Morning";
+    if (hour < 18) return "Good Afternoon";
+    return "Good Evening";
   };
 
-  const QuickLinkCard = ({ title, description, icon: Icon, href, color, count }) => (
+  const QuickLinkCard = ({
+    title,
+    description,
+    icon: Icon,
+    href,
+    color,
+    count,
+  }) => (
     <button
       onClick={() => navigate(href)}
       className="group relative overflow-hidden rounded-xl bg-white dark:bg-slate-800 p-4 text-left transition-all duration-300 hover:shadow-lg hover:-translate-y-1 border border-slate-100 dark:border-slate-700"
     >
-      <div className={`absolute right-0 top-0 h-20 w-20 -translate-y-8 translate-x-8 rounded-full bg-gradient-to-br ${color} opacity-10 transition-transform duration-300 group-hover:scale-150`} />
+      <div
+        className={`absolute right-0 top-0 h-20 w-20 -translate-y-8 translate-x-8 rounded-full bg-gradient-to-br ${color} opacity-10 transition-transform duration-300 group-hover:scale-150`}
+      />
       <div className="relative flex items-start justify-between">
         <div className="flex-1">
-          <div className={`inline-flex rounded-lg ${color.replace('from-', 'bg-').replace('to-', 'bg-')}/10 p-2.5`}>
-            <Icon className={`h-5 w-5 ${color.replace('from-', 'text-').split(' ')[0]}`} />
+          <div
+            className={`inline-flex rounded-lg ${color.replace("from-", "bg-").replace("to-", "bg-")}/10 p-2.5`}
+          >
+            <Icon
+              className={`h-5 w-5 ${color.replace("from-", "text-").split(" ")[0]}`}
+            />
           </div>
-          <h3 className="mt-3 font-semibold text-slate-900 dark:text-white">{title}</h3>
-          <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{description}</p>
+          <h3 className="mt-3 font-semibold text-slate-900 dark:text-white">
+            {title}
+          </h3>
+          <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+            {description}
+          </p>
           {count !== undefined && (
             <div className="mt-2 flex items-center gap-1 text-xs font-medium text-blue-600 dark:text-blue-400">
               <span>{count} items</span>
@@ -235,13 +414,21 @@ const MayorDashboard = () => {
       <CardContent className="p-6">
         <div className="flex items-start justify-between">
           <div>
-            <p className="text-sm font-medium text-slate-500 dark:text-slate-400">{title}</p>
-            <p className="mt-2 text-3xl font-bold text-slate-900 dark:text-white">{value}</p>
-            {subtitle && <p className="mt-1 text-xs text-slate-400">{subtitle}</p>}
+            <p className="text-sm font-medium text-slate-500 dark:text-slate-400">
+              {title}
+            </p>
+            <p className="mt-2 text-3xl font-bold text-slate-900 dark:text-white">
+              {value}
+            </p>
+            {subtitle && (
+              <p className="mt-1 text-xs text-slate-400">{subtitle}</p>
+            )}
             {trend && (
               <div className="mt-2 flex items-center gap-1">
                 <TrendingUp className="h-3 w-3 text-emerald-500" />
-                <span className="text-xs text-emerald-600 dark:text-emerald-400">{trend}</span>
+                <span className="text-xs text-emerald-600 dark:text-emerald-400">
+                  {trend}
+                </span>
               </div>
             )}
           </div>
@@ -260,8 +447,11 @@ const MayorDashboard = () => {
       <div className="space-y-6 p-6 bg-slate-50 dark:bg-slate-900 min-h-screen">
         <div className="h-32 rounded-2xl bg-gradient-to-r from-slate-800 to-slate-900 animate-pulse" />
         <div className="grid grid-cols-1 md:grid-cols-4 gap-5">
-          {[1,2,3,4].map(i => (
-            <div key={i} className="h-32 bg-slate-200 dark:bg-slate-700 rounded-xl animate-pulse" />
+          {[1, 2, 3, 4].map((i) => (
+            <div
+              key={i}
+              className="h-32 bg-slate-200 dark:bg-slate-700 rounded-xl animate-pulse"
+            />
           ))}
         </div>
         <div className="h-96 bg-slate-200 dark:bg-slate-700 rounded-xl animate-pulse" />
@@ -277,7 +467,7 @@ const MayorDashboard = () => {
           <div className="absolute -top-24 -right-24 h-48 w-48 rounded-full bg-blue-500/20 blur-3xl" />
           <div className="absolute -bottom-24 -left-24 h-48 w-48 rounded-full bg-purple-500/20 blur-3xl" />
           <div className="absolute top-1/2 left-1/2 h-64 w-64 -translate-x-1/2 -translate-y-1/2 rounded-full bg-cyan-500/10 blur-3xl" />
-          
+
           <div className="relative z-10 flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
             <div>
               <div className="mb-2 flex items-center gap-2">
@@ -286,19 +476,29 @@ const MayorDashboard = () => {
                   Mayor's Office
                 </Badge>
                 <Badge className="border-blue-500/30 bg-blue-500/20 text-blue-300">
-                  {new Date().toLocaleDateString('en-PH', { weekday: 'long', month: 'long', day: 'numeric' })}
+                  {new Date().toLocaleDateString("en-PH", {
+                    weekday: "long",
+                    month: "long",
+                    day: "numeric",
+                  })}
                 </Badge>
+                {newNotificationCount > 0 && (
+                  <Badge className="border-red-500/30 bg-red-500/20 text-red-300 animate-pulse">
+                    <Bell className="mr-1 h-3 w-3" />
+                    {newNotificationCount} new
+                  </Badge>
+                )}
               </div>
               <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">
-                {getGreeting()}, {user?.first_name || 'Mayor'}
+                {getGreeting()}, {user?.first_name || "Mayor"}
               </h1>
               <p className="mt-1 text-sm text-slate-300">
                 Monitor fund releases and department budget utilization
               </p>
             </div>
-            <Button 
-              onClick={handleRefresh} 
-              variant="outline" 
+            <Button
+              onClick={handleRefresh}
+              variant="outline"
               className="border-white/20 bg-white/10 text-white backdrop-blur-sm transition-all hover:bg-white/20"
               disabled={refreshing}
             >
@@ -307,7 +507,9 @@ const MayorDashboard = () => {
               ) : (
                 <RefreshCw className="mr-2 h-4 w-4" />
               )}
-              Refresh Data
+              {newNotificationCount > 0
+                ? `Refresh (${newNotificationCount} new)`
+                : "Refresh Data"}
             </Button>
           </div>
         </div>
@@ -354,14 +556,18 @@ const MayorDashboard = () => {
                   <PieChart className="h-5 w-5 text-blue-600 dark:text-blue-400" />
                 </div>
                 <div>
-                  <CardTitle className="text-lg font-semibold text-slate-900 dark:text-white">Department Budget Utilization</CardTitle>
-                  <p className="text-sm text-slate-500 dark:text-slate-400">Real-time budget consumption across departments</p>
+                  <CardTitle className="text-lg font-semibold text-slate-900 dark:text-white">
+                    Department Budget Utilization
+                  </CardTitle>
+                  <p className="text-sm text-slate-500 dark:text-slate-400">
+                    Real-time budget consumption across departments
+                  </p>
                 </div>
               </div>
-              <Button 
-                variant="ghost" 
-                size="sm" 
-                onClick={() => navigate('/mo/reports')}
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => navigate("/mo/reports")}
                 className="text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300"
               >
                 View Detailed Report
@@ -373,7 +579,9 @@ const MayorDashboard = () => {
             {topDepartments.length === 0 ? (
               <div className="py-12 text-center">
                 <Building2 className="mx-auto h-12 w-12 text-slate-300 dark:text-slate-600" />
-                <p className="mt-3 text-slate-500 dark:text-slate-400">No budget data available</p>
+                <p className="mt-3 text-slate-500 dark:text-slate-400">
+                  No budget data available
+                </p>
               </div>
             ) : (
               <div className="space-y-5">
@@ -382,26 +590,33 @@ const MayorDashboard = () => {
                     <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
                       <div className="flex items-center gap-2">
                         <Building2 className="h-4 w-4 text-slate-400" />
-                        <span className="font-medium text-slate-800 dark:text-slate-200">{dept.department_name}</span>
+                        <span className="font-medium text-slate-800 dark:text-slate-200">
+                          {dept.department_name}
+                        </span>
                         {getStatusIcon(dept.utilization)}
                       </div>
                       <div className="flex items-center gap-3">
                         <span className="text-sm text-slate-500 dark:text-slate-400">
-                          ₱{dept.spent.toLocaleString()} / ₱{dept.allocated.toLocaleString()}
+                          ₱{dept.spent.toLocaleString()} / ₱
+                          {dept.allocated.toLocaleString()}
                         </span>
-                        <span className={`text-sm font-semibold ${getUtilizationColor(dept.utilization)}`}>
+                        <span
+                          className={`text-sm font-semibold ${getUtilizationColor(dept.utilization)}`}
+                        >
                           {dept.utilization}%
                         </span>
                       </div>
                     </div>
                     <div className="relative">
-                      <Progress 
-                        value={parseFloat(dept.utilization)} 
+                      <Progress
+                        value={parseFloat(dept.utilization)}
                         className="h-2.5 rounded-full bg-slate-100 dark:bg-slate-700"
                       />
-                      <div 
+                      <div
                         className={`absolute top-0 left-0 h-2.5 rounded-full transition-all duration-500 ${getProgressColor(dept.utilization)}`}
-                        style={{ width: `${Math.min(parseFloat(dept.utilization), 100)}%` }}
+                        style={{
+                          width: `${Math.min(parseFloat(dept.utilization), 100)}%`,
+                        }}
                       />
                     </div>
                     {parseFloat(dept.utilization) >= 80 && (
@@ -414,9 +629,9 @@ const MayorDashboard = () => {
                 ))}
                 {departmentBudgets.length > 6 && (
                   <div className="pt-3 text-center">
-                    <Button 
-                      variant="link" 
-                      onClick={() => navigate('/mo/reports')}
+                    <Button
+                      variant="link"
+                      onClick={() => navigate("/mo/reports")}
                       className="text-blue-600 dark:text-blue-400"
                     >
                       View all {departmentBudgets.length} departments
@@ -439,8 +654,12 @@ const MayorDashboard = () => {
                   <Zap className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
                 </div>
                 <div>
-                  <CardTitle className="text-lg font-semibold text-slate-900 dark:text-white">Recent Fund Releases</CardTitle>
-                  <p className="text-sm text-slate-500 dark:text-slate-400">Last 5 transactions</p>
+                  <CardTitle className="text-lg font-semibold text-slate-900 dark:text-white">
+                    Recent Fund Releases
+                  </CardTitle>
+                  <p className="text-sm text-slate-500 dark:text-slate-400">
+                    Last 5 transactions
+                  </p>
                 </div>
               </div>
             </CardHeader>
@@ -448,18 +667,26 @@ const MayorDashboard = () => {
               {recentReleases.length === 0 ? (
                 <div className="py-12 text-center">
                   <DollarSign className="mx-auto h-12 w-12 text-slate-300 dark:text-slate-600" />
-                  <p className="mt-3 text-slate-500 dark:text-slate-400">No funds released yet</p>
+                  <p className="mt-3 text-slate-500 dark:text-slate-400">
+                    No funds released yet
+                  </p>
                 </div>
               ) : (
                 <div className="divide-y divide-slate-100 dark:divide-slate-700">
                   {recentReleases.map((ticket, idx) => (
-                    <div key={ticket.id || ticket.trip_ticket_id} className="group flex items-center justify-between py-3 first:pt-0 last:pb-0">
+                    <div
+                      key={ticket.id || ticket.trip_ticket_id}
+                      className="group flex items-center justify-between py-3 first:pt-0 last:pb-0"
+                    >
                       <div className="flex-1">
                         <div className="flex items-center gap-2">
                           <span className="font-mono text-sm font-medium text-slate-900 dark:text-white">
                             {ticket.ticket_number || ticket.trip_ticket_number}
                           </span>
-                          <Badge variant="outline" className="text-xs dark:border-slate-600 dark:text-slate-400">
+                          <Badge
+                            variant="outline"
+                            className="text-xs dark:border-slate-600 dark:text-slate-400"
+                          >
                             {formatDate(ticket.trip_date)}
                           </Badge>
                           {ticket.is_mo_funded && (
@@ -475,7 +702,9 @@ const MayorDashboard = () => {
                           </span>
                           <span className="flex items-center gap-1">
                             <MapPin className="h-3 w-3" />
-                            {ticket.destination?.length > 30 ? `${ticket.destination.substring(0, 30)}...` : ticket.destination}
+                            {ticket.destination?.length > 30
+                              ? `${ticket.destination.substring(0, 30)}...`
+                              : ticket.destination}
                           </span>
                         </div>
                       </div>
@@ -486,7 +715,11 @@ const MayorDashboard = () => {
                         <Button
                           variant="ghost"
                           size="sm"
-                          onClick={() => navigate(`/mo/tickets/${ticket.id || ticket.trip_ticket_id}`)}
+                          onClick={() =>
+                            navigate(
+                              `/mo/tickets/${ticket.id || ticket.trip_ticket_id}`,
+                            )
+                          }
                           className="mt-1 h-7 text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300"
                         >
                           <Eye className="mr-1 h-3 w-3" />
@@ -497,9 +730,9 @@ const MayorDashboard = () => {
                   ))}
                   {approvedTickets.length > 5 && (
                     <div className="pt-3 text-center">
-                      <Button 
-                        variant="link" 
-                        onClick={() => navigate('/mo/approved')}
+                      <Button
+                        variant="link"
+                        onClick={() => navigate("/mo/approved")}
                         className="text-blue-600 dark:text-blue-400"
                       >
                         View all {approvedTickets.length} releases
@@ -520,8 +753,12 @@ const MayorDashboard = () => {
                   <Shield className="h-5 w-5 text-purple-600 dark:text-purple-400" />
                 </div>
                 <div>
-                  <CardTitle className="text-lg font-semibold text-slate-900 dark:text-white">Quick Navigation</CardTitle>
-                  <p className="text-sm text-slate-500 dark:text-slate-400">Access key management features</p>
+                  <CardTitle className="text-lg font-semibold text-slate-900 dark:text-white">
+                    Quick Navigation
+                  </CardTitle>
+                  <p className="text-sm text-slate-500 dark:text-slate-400">
+                    Access key management features
+                  </p>
                 </div>
               </div>
             </CardHeader>
@@ -557,26 +794,48 @@ const MayorDashboard = () => {
                 <div className="flex flex-wrap items-center justify-between gap-4">
                   <div className="flex items-center gap-2">
                     <Award className="h-5 w-5 text-blue-500" />
-                    <span className="text-sm text-slate-600 dark:text-slate-400">Department Performance</span>
+                    <span className="text-sm text-slate-600 dark:text-slate-400">
+                      Department Performance
+                    </span>
                   </div>
                   <div className="flex gap-4">
                     <div className="text-center">
                       <div className="text-lg font-bold text-emerald-600 dark:text-emerald-400">
-                        {departmentBudgets.filter(d => parseFloat(d.utilization) < 60).length}
+                        {
+                          departmentBudgets.filter(
+                            (d) => parseFloat(d.utilization) < 60,
+                          ).length
+                        }
                       </div>
-                      <div className="text-xs text-slate-500 dark:text-slate-400">Good Standing</div>
+                      <div className="text-xs text-slate-500 dark:text-slate-400">
+                        Good Standing
+                      </div>
                     </div>
                     <div className="text-center">
                       <div className="text-lg font-bold text-amber-600 dark:text-amber-400">
-                        {departmentBudgets.filter(d => parseFloat(d.utilization) >= 60 && parseFloat(d.utilization) < 80).length}
+                        {
+                          departmentBudgets.filter(
+                            (d) =>
+                              parseFloat(d.utilization) >= 60 &&
+                              parseFloat(d.utilization) < 80,
+                          ).length
+                        }
                       </div>
-                      <div className="text-xs text-slate-500 dark:text-slate-400">Warning</div>
+                      <div className="text-xs text-slate-500 dark:text-slate-400">
+                        Warning
+                      </div>
                     </div>
                     <div className="text-center">
                       <div className="text-lg font-bold text-red-600 dark:text-red-400">
-                        {departmentBudgets.filter(d => parseFloat(d.utilization) >= 80).length}
+                        {
+                          departmentBudgets.filter(
+                            (d) => parseFloat(d.utilization) >= 80,
+                          ).length
+                        }
                       </div>
-                      <div className="text-xs text-slate-500 dark:text-slate-400">Critical</div>
+                      <div className="text-xs text-slate-500 dark:text-slate-400">
+                        Critical
+                      </div>
                     </div>
                   </div>
                 </div>

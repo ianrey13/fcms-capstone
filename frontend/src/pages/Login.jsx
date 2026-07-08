@@ -12,15 +12,21 @@ const Login = () => {
 
   useEffect(() => {
     if (isAuthenticated && user) {
+      // ✅ Updated role routes for new 4-role system
       const roleRoutes = {
-        'superadmin': '/admin/dashboard',
-        'gso_staff': '/gso/dashboard',
+        // New roles
+        'gso_office': '/gso/dashboard',
         'mayors_office': '/mo/dashboard',
-        'head_of_office': '/head/dashboard',
-        'dept_office': '/department/dashboard',
         'driver': '/driver/dashboard',
+        // Backward compatibility for old roles
+        'superadmin': '/gso/dashboard',
+        'gso_staff': '/gso/dashboard',
+        'head_of_office': '/staff/dashboard',
+        'dept_office': '/staff/dashboard',
       };
-      navigate(roleRoutes[user.role] || '/dashboard');
+      const redirectPath = roleRoutes[user.role] || '/dashboard';
+      console.log('✅ Redirecting to:', redirectPath);
+      navigate(redirectPath, { replace: true });
     }
   }, [isAuthenticated, user, navigate]);
 
@@ -28,16 +34,13 @@ const Login = () => {
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-900 via-slate-800 to-blue-900 p-4 relative overflow-hidden">
       {/* Animated Background Pattern */}
       <div className="absolute inset-0 overflow-hidden">
-        {/* Animated gradient orbs */}
         <div className="absolute -top-40 -right-40 w-96 h-96 bg-blue-500/20 rounded-full blur-3xl animate-pulse" />
         <div className="absolute -bottom-40 -left-40 w-96 h-96 bg-purple-500/20 rounded-full blur-3xl animate-pulse delay-1000" />
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-cyan-500/10 rounded-full blur-3xl" />
         <div className="absolute top-20 left-1/4 w-64 h-64 bg-indigo-500/10 rounded-full blur-3xl animate-pulse delay-700" />
         
-        {/* Grid Pattern */}
         <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.03)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.03)_1px,transparent_1px)] bg-[size:50px_50px]" />
         
-        {/* Floating particles */}
         <div className="absolute top-1/4 left-10 w-1 h-1 bg-blue-400 rounded-full animate-ping" />
         <div className="absolute bottom-1/3 right-20 w-1.5 h-1.5 bg-purple-400 rounded-full animate-ping delay-300" />
         <div className="absolute top-2/3 left-1/3 w-1 h-1 bg-cyan-400 rounded-full animate-ping delay-700" />
@@ -64,7 +67,6 @@ const Login = () => {
         <div className="absolute top-0 right-0 w-20 h-20 bg-gradient-to-bl from-purple-500/10 to-transparent rounded-br-3xl" />
         
         <CardHeader className="space-y-1 text-center pt-10 pb-6">
-          {/* Logo with premium effects */}
           <div className="flex justify-center mb-4">
             <div className="relative group">
               <div className="absolute inset-0 bg-gradient-to-r from-blue-500 to-purple-600 rounded-2xl blur-xl opacity-50 group-hover:opacity-75 transition-opacity duration-500" />
@@ -76,7 +78,6 @@ const Login = () => {
             </div>
           </div>
           
-          {/* Main Title */}
           <CardTitle className="text-3xl font-bold tracking-tight">
             <span className="bg-gradient-to-r from-slate-800 to-slate-600 dark:from-white dark:to-slate-300 bg-clip-text text-transparent">
               FCMS
@@ -84,28 +85,14 @@ const Login = () => {
           </CardTitle>
           
           <CardDescription className="text-slate-500 dark:text-slate-400 text-sm font-medium">
-            Fuel Consumption Monitoring  System
+            Fuel Consumption Monitoring System
           </CardDescription>
           
-          {/* Divider with municipality name */}
           <div className="flex items-center justify-center gap-3 mt-3">
             <div className="h-px w-10 bg-gradient-to-r from-transparent to-slate-300 dark:to-slate-700" />
             <span className="text-xs text-slate-400 dark:text-slate-500">General Service Office - Laguindingan</span>
             <div className="h-px w-10 bg-gradient-to-l from-transparent to-slate-300 dark:to-slate-700" />
           </div>
-          
-          {/* Feature badges
-          <div className="flex items-center justify-center gap-3 mt-2">
-            <div className="flex items-center gap-1">
-              <CheckCircle className="h-3 w-3 text-emerald-500" />
-              <span className="text-[10px] text-slate-500">Real-time GPS</span>
-            </div>
-            <div className="w-1 h-1 bg-slate-300 rounded-full" />
-            <div className="flex items-center gap-1">
-              <Lock className="h-3 w-3 text-blue-500" />
-              <span className="text-[10px] text-slate-500">Secure Access</span>
-            </div>
-          </div> */}
         </CardHeader>
         
         <CardContent className="pb-8 px-6">
@@ -114,28 +101,9 @@ const Login = () => {
 
         {/* Premium Footer */}
         <div className="border-t border-slate-100 dark:border-slate-800 px-6 py-4 bg-gradient-to-r from-slate-50 to-white dark:from-slate-800/50 dark:to-slate-900/50">
-          <div className="flex items-center justify-center gap-4 text-xs text-slate-400 dark:text-slate-500">
-            {/* <div className="flex items-center gap-1.5">
-              <Clock className="h-3 w-3" />
-              <span>24/7 Support</span>
-            </div>
-            <div className="w-1 h-1 bg-slate-300 dark:bg-slate-600 rounded-full" />
-            <div className="flex items-center gap-1.5">
-              <Shield className="h-3 w-3" />
-              <span>Secured by FCMS</span>
-            </div>
-            <div className="w-1 h-1 bg-slate-300 dark:bg-slate-600 rounded-full" />
-            <div className="flex items-center gap-1.5">
-              <Sparkles className="h-3 w-3" />
-              <span>Real-time Tracking</span>
-            </div> */}
-          </div>
-          <p className="text-center text-[10px] text-slate-400 dark:text-slate-500 mt-3">
+          <p className="text-center text-[10px] text-slate-400 dark:text-slate-500">
             © 2026 General Services Office - Laguindingan • All rights reserved
           </p>
-          {/* <p className="text-center text-[9px] text-slate-300 dark:text-slate-600 mt-1">
-            Version 1.0.0 • Build 2024.1
-          </p> */}
         </div>
       </Card>
     </div>

@@ -11,53 +11,54 @@ import Layout from "./components/layout/Layout";
 import Login from "./pages/Login";
 import { Toaster } from "react-hot-toast";
 
-// Admin Pages
-import AdminDashboard from "./pages/AdminDashboard";
-import UserManagement from "./pages/admin/UserManagement";
-import DepartmentManagement from "./pages/admin/DepartmentManagement";
-import VehicleManagement from "./pages/admin/VehicleManagement";
-import SystemSettings from "./pages/admin/SystemSettings";
-import BudgetPolicies from "./pages/admin/BudgetPolicies";
-import Reports from "./pages/admin/Reports";
-import Profile from "./pages/admin/Profile";
+// ✅ Department Pages (GSO Superadmin)
+import DepartmentManagement from "./pages/mayor/departments/DepartmentManagement";
+import AddDepartment from "./pages/mayor/departments/AddDepartment";
+import EditDepartment from "./pages/mayor/departments/EditDepartment";
 
-// Department Pages
-import DepartmentDashboard from "./pages/department/DepartmentDashboard";
-import CreateTripTicket from "./pages/department/CreateTripTicket";
-import MyRequests from "./pages/department/MyRequests";
-import TripTicketDetail from "./pages/department/TripTicketDetail";
+// ✅ User Pages (GSO Superadmin)
+import UserManagement from "./pages/gso/users/UserManagement";
+import AddUser from "./pages/gso/users/AddUser";
+import EditUser from "./pages/gso/users/EditUser";
 
-// GSO pages
-import GsoPending from "./pages/gso/GsoPending";
-import GsoVerified from "./pages/gso/GsoVerified";
-import GsoReturned from "./pages/gso/GsoReturned";
-import GsoForward from "./pages/gso/GsoForward";
-import GsoReports from "./pages/gso/GsoReports";
+// ✅ Vehicle Pages (GSO Superadmin)
+import VehicleManagement from "./pages/gso/vehicles/VehicleManagement";
+import AddVehicle from "./pages/gso/vehicles/AddVehicle";
+import EditVehicle from "./pages/gso/vehicles/EditVehicle";
+
+// GSO Pages
 import GsoDashboard from "./pages/gso/GsoDashboard";
+import GsoCreateTrip from "./pages/gso/GsoCreateTrip";
+import GsoAllTrips from "./pages/gso/GsoAllTrips";
+import GsoPendingMO from "./pages/gso/GsoPendingMO";
+import GsoReconciliation from "./pages/gso/GsoReconciliation";
+import GsoReturned from "./pages/gso/GsoReturned";
+import GsoReports from "./pages/gso/GsoReports";
 import GsoTripTicket from "./pages/gso/GsoTripTicket";
+import SystemSettings from "./pages/gso/SystemSettings";
+import FuelReceipts from "./pages/gso/FuelReceipts";
+import CompletedTrips from "./pages/gso/CompletedTrips";
 
-//mayors pages
+// Staff Pages
+import StaffDashboard from "./pages/staff/StaffDashboard";
+import StaffTrips from "./pages/staff/StaffTrips";
+import StaffReports from "./pages/staff/StaffReports";
+
+// Mayor's Office Pages
 import MayorDashboard from "./pages/mayor/MayorDashboard";
 import MayorPending from "./pages/mayor/MayorPending";
 import MayorApproved from "./pages/mayor/MayorApproved";
 import MayorFundIssuance from "./pages/mayor/MayorFundIssuance";
-import MayorReconciliation from "./pages/mayor/MayorReconciliation";
+import MayorBudgetAssistance from "./pages/mayor/BudgetAssistance";
 import MayorBudget from "./pages/mayor/MayorBudget";
 import MayorReports from "./pages/mayor/MayorReports";
 import MayorTripTicketDetail from "./pages/mayor/MayorTripTicketDetail";
+import BudgetPolicies from "./pages/mayor/BudgetPolicies";
+import MayorReceiptVerification from "./pages/mayor/MayorReceiptVerification";
 
-// Driver Pages (Work in Progress - replace with actual components later)
-import DriverTrips from "./pages/admin/WorkInProgress";
-import DriverActive from "./pages/admin/WorkInProgress";
-import DriverHistory from "./pages/admin/WorkInProgress";
-import DriverFuelLogs from "./pages/admin/WorkInProgress";
-
-// Head of Office Pages
-import HeadDashboard from "./pages/head/HeadDashboard";
-import HeadPendingApproval from "./pages/head/HeadPendingApproval";
-import HeadCreateTripTicket from "./pages/head/HeadCreateTripTicket";
-
-// Help Page
+// Shared Pages
+import Reports from "./pages/admin/Reports";
+import Profile from "./pages/admin/Profile";
 import Help from "./pages/admin/WorkInProgress";
 import Unauthorized from "./pages/Unauthorized";
 
@@ -65,158 +66,21 @@ function App() {
   return (
     <Router>
       <AuthProvider>
+        <Toaster position="top-right" />
         <Routes>
-          {/* Public Routes */}
+          {/* ============ PUBLIC ROUTES ============ */}
           <Route path="/login" element={<Login />} />
-          {/* Default redirect - changed from /dashboard to /admin/dashboard */}
-          <Route
-            path="/"
-            element={
-              <ProtectedRoute>
-                <Layout>
-                  <Navigate to="/admin/dashboard" replace />
-                </Layout>
-              </ProtectedRoute>
-            }
-          />
-          {/* ============ SUPER ADMIN ROUTES ============ */}
-          <Route
-            path="/admin/dashboard"
-            element={
-              <ProtectedRoute allowedRoles={["superadmin"]}>
-                <Layout>
-                  <AdminDashboard />
-                </Layout>
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/admin/users"
-            element={
-              <ProtectedRoute allowedRoles={["superadmin"]}>
-                <Layout>
-                  <UserManagement />
-                </Layout>
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/admin/departments"
-            element={
-              <ProtectedRoute allowedRoles={["superadmin"]}>
-                <Layout>
-                  <DepartmentManagement />
-                </Layout>
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/admin/vehicles"
-            element={
-              <ProtectedRoute allowedRoles={["superadmin"]}>
-                <Layout>
-                  <VehicleManagement />
-                </Layout>
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/admin/settings"
-            element={
-              <ProtectedRoute allowedRoles={["superadmin"]}>
-                <Layout>
-                  <SystemSettings />
-                </Layout>
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/admin/budget-policies"
-            element={
-              <ProtectedRoute allowedRoles={["superadmin"]}>
-                <Layout>
-                  <BudgetPolicies />
-                </Layout>
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/admin/reports"
-            element={
-              <ProtectedRoute allowedRoles={["superadmin"]}>
-                <Layout>
-                  <Reports />
-                </Layout>
-              </ProtectedRoute>
-            }
-          />
-          {/* Profile Route - All Roles */}
-          <Route
-            path="/profile"
-            element={
-              <ProtectedRoute>
-                <Layout>
-                  <Profile />
-                </Layout>
-              </ProtectedRoute>
-            }
-          />
-          {/* ============ DEPARTMENT OFFICE ROUTES ============ */}
-          <Route
-            path="/department/dashboard"
-            element={
-              <ProtectedRoute allowedRoles={["dept_office", "head_of_office"]}>
-                <Layout>
-                  <DepartmentDashboard />
-                </Layout>
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/department/create"
-            element={
-              <ProtectedRoute allowedRoles={["dept_office", "head_of_office"]}>
-                <Layout>
-                  <CreateTripTicket />
-                </Layout>
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/department/requests"
-            element={
-              <ProtectedRoute allowedRoles={["dept_office", "head_of_office"]}>
-                <Layout>
-                  <MyRequests />
-                </Layout>
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/department/requests/:id"
-            element={
-              <ProtectedRoute allowedRoles={["dept_office", "head_of_office"]}>
-                <Layout>
-                  <TripTicketDetail />
-                </Layout>
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/department/budget"
-            element={
-              <ProtectedRoute allowedRoles={["dept_office", "head_of_office"]}>
-                <Layout>
-                  <BudgetPolicies />
-                </Layout>
-              </ProtectedRoute>
-            }
-          />
-          {/* ============ GSO ROUTES ============ */}
+          <Route path="/" element={<Navigate to="/login" replace />} />
+
+          {/* ============================================================ */}
+          {/* ============ GSO ROUTES (Superadmin Equivalent) ============ */}
+          {/* ============================================================ */}
+
+          {/* GSO Dashboard & Trip Management */}
           <Route
             path="/gso/dashboard"
             element={
-              <ProtectedRoute allowedRoles={["gso_staff"]}>
+              <ProtectedRoute allowedRoles={["gso_office"]}>
                 <Layout>
                   <GsoDashboard />
                 </Layout>
@@ -224,21 +88,41 @@ function App() {
             }
           />
           <Route
-            path="/gso/pending"
+            path="/gso/create-trip"
             element={
-              <ProtectedRoute allowedRoles={["gso_staff"]}>
+              <ProtectedRoute allowedRoles={["gso_office"]}>
                 <Layout>
-                  <GsoPending />
+                  <GsoCreateTrip />
                 </Layout>
               </ProtectedRoute>
             }
           />
           <Route
-            path="/gso/verified"
+            path="/gso/all-trips"
             element={
-              <ProtectedRoute allowedRoles={["gso_staff"]}>
+              <ProtectedRoute allowedRoles={["gso_office"]}>
                 <Layout>
-                  <GsoVerified />
+                  <GsoAllTrips />
+                </Layout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/gso/pending-mo"
+            element={
+              <ProtectedRoute allowedRoles={["gso_office"]}>
+                <Layout>
+                  <GsoPendingMO />
+                </Layout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/gso/reconciliation"
+            element={
+              <ProtectedRoute allowedRoles={["gso_office"]}>
+                <Layout>
+                  <GsoReconciliation />
                 </Layout>
               </ProtectedRoute>
             }
@@ -246,7 +130,7 @@ function App() {
           <Route
             path="/gso/returned"
             element={
-              <ProtectedRoute allowedRoles={["gso_staff"]}>
+              <ProtectedRoute allowedRoles={["gso_office"]}>
                 <Layout>
                   <GsoReturned />
                 </Layout>
@@ -254,47 +138,221 @@ function App() {
             }
           />
           <Route
-            path="/gso/forward"
-            element={
-              <ProtectedRoute allowedRoles={["gso_staff"]}>
-                <Layout>
-                  <GsoForward />
-                </Layout>
-              </ProtectedRoute>
-            }
-          />
-          <Route
             path="/gso/reports"
             element={
-              <ProtectedRoute allowedRoles={["gso_staff"]}>
+              <ProtectedRoute allowedRoles={["gso_office"]}>
                 <Layout>
                   <GsoReports />
                 </Layout>
               </ProtectedRoute>
             }
           />
-          {/* ============ HEAD OF OFFICE ROUTES ============ */}
           <Route
-            path="/head/dashboard"
+            path="/gso/tickets/:id"
             element={
-              <ProtectedRoute allowedRoles={["head_of_office"]}>
+              <ProtectedRoute allowedRoles={["gso_office"]}>
                 <Layout>
-                  <HeadDashboard />
+                  <GsoTripTicket />
                 </Layout>
               </ProtectedRoute>
             }
           />
           <Route
-            path="/head/pending"
+            path="/gso/fuel-receipts"
             element={
-              <ProtectedRoute allowedRoles={["head_of_office"]}>
+              <ProtectedRoute allowedRoles={["gso_office"]}>
                 <Layout>
-                  <HeadPendingApproval />
+                  <FuelReceipts />
                 </Layout>
               </ProtectedRoute>
             }
           />
+          <Route
+            path="/gso/completed-trips"
+            element={
+              <ProtectedRoute allowedRoles={["gso_office"]}>
+                <Layout>
+                  <CompletedTrips />
+                </Layout>
+              </ProtectedRoute>
+            }
+          />
+
+          {/* ============================================================ */}
+          {/* ============ GSO ADMIN ROUTES (Superadmin) ============ */}
+          {/* ============================================================ */}
+
+          {/* DEPARTMENT ROUTES */}
+          <Route
+            path="/mo/departments"
+            element={
+              <ProtectedRoute allowedRoles={["mayors_office"]}>
+                <Layout>
+                  <DepartmentManagement />
+                </Layout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/mo/departments/add"
+            element={
+              <ProtectedRoute allowedRoles={["mayors_office"]}>
+                <Layout>
+                  <AddDepartment />
+                </Layout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/mo/departments/edit/:id"
+            element={
+              <ProtectedRoute allowedRoles={["mayors_office"]}>
+                <Layout>
+                  <EditDepartment />
+                </Layout>
+              </ProtectedRoute>
+            }
+          />
+
+          {/* USER ROUTES */}
+          <Route
+            path="/admin/users"
+            element={
+              <ProtectedRoute allowedRoles={["gso_office"]}>
+                <Layout>
+                  <UserManagement />
+                </Layout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/admin/users/add"
+            element={
+              <ProtectedRoute allowedRoles={["gso_office"]}>
+                <Layout>
+                  <AddUser />
+                </Layout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/admin/users/edit/:id"
+            element={
+              <ProtectedRoute allowedRoles={["gso_office"]}>
+                <Layout>
+                  <EditUser />
+                </Layout>
+              </ProtectedRoute>
+            }
+          />
+
+          {/* VEHICLE ROUTES */}
+          <Route
+            path="/admin/vehicles"
+            element={
+              <ProtectedRoute allowedRoles={["gso_office"]}>
+                <Layout>
+                  <VehicleManagement />
+                </Layout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/admin/vehicles/add"
+            element={
+              <ProtectedRoute allowedRoles={["gso_office"]}>
+                <Layout>
+                  <AddVehicle />
+                </Layout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/admin/vehicles/edit/:id"
+            element={
+              <ProtectedRoute allowedRoles={["gso_office"]}>
+                <Layout>
+                  <EditVehicle />
+                </Layout>
+              </ProtectedRoute>
+            }
+          />
+
+          {/* SYSTEM SETTINGS */}
+          <Route
+            path="/admin/settings"
+            element={
+              <ProtectedRoute allowedRoles={["gso_office"]}>
+                <Layout>
+                  <SystemSettings />
+                </Layout>
+              </ProtectedRoute>
+            }
+          />
+
+          {/* BUDGET POLICIES (GSO) */}
+          <Route
+            path="/admin/budget-policies"
+            element={
+              <ProtectedRoute allowedRoles={["gso_office"]}>
+                <Layout>
+                  <BudgetPolicies />
+                </Layout>
+              </ProtectedRoute>
+            }
+          />
+
+          {/* REPORTS (GSO) */}
+          <Route
+            path="/admin/reports"
+            element={
+              <ProtectedRoute allowedRoles={["gso_office"]}>
+                <Layout>
+                  <Reports />
+                </Layout>
+              </ProtectedRoute>
+            }
+          />
+
+          {/* ============================================================ */}
+          {/* ============ STAFF ROUTES ============ */}
+          {/* ============================================================ */}
+
+          <Route
+            path="/driver/dashboard"
+            element={
+              <ProtectedRoute allowedRoles={["driver"]}>
+                <Layout>
+                  <StaffDashboard />
+                </Layout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/driver/trips"
+            element={
+              <ProtectedRoute allowedRoles={["driver"]}>
+                <Layout>
+                  <StaffTrips />
+                </Layout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/driver/reports"
+            element={
+              <ProtectedRoute allowedRoles={["driver"]}>
+                <Layout>
+                  <StaffReports />
+                </Layout>
+              </ProtectedRoute>
+            }
+          />
+
+          {/* ============================================================ */}
           {/* ============ MAYOR'S OFFICE ROUTES ============ */}
+          {/* ============================================================ */}
+
           <Route
             path="/mo/dashboard"
             element={
@@ -316,6 +374,16 @@ function App() {
             }
           />
           <Route
+            path="/mo/approved"
+            element={
+              <ProtectedRoute allowedRoles={["mayors_office"]}>
+                <Layout>
+                  <MayorApproved />
+                </Layout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
             path="/mo/fund-issuance"
             element={
               <ProtectedRoute allowedRoles={["mayors_office"]}>
@@ -326,11 +394,11 @@ function App() {
             }
           />
           <Route
-            path="/mo/reconciliation"
+            path="/mo/budget-assistance"
             element={
               <ProtectedRoute allowedRoles={["mayors_office"]}>
                 <Layout>
-                  <MayorReconciliation />
+                  <MayorBudgetAssistance />
                 </Layout>
               </ProtectedRoute>
             }
@@ -356,80 +424,52 @@ function App() {
             }
           />
           <Route
-            path="/mo/approved"
+            path="/mo/tickets/:id"
             element={
               <ProtectedRoute allowedRoles={["mayors_office"]}>
                 <Layout>
-                  <MayorApproved />
-                </Layout>
-              </ProtectedRoute>
-            }
-          />
-          {/* ============ DRIVER ROUTES ============ */}
-          <Route
-            path="/driver/trips"
-            element={
-              <ProtectedRoute allowedRoles={["driver"]}>
-                <Layout>
-                  <DriverTrips />
+                  <MayorTripTicketDetail />
                 </Layout>
               </ProtectedRoute>
             }
           />
           <Route
-            path="/driver/active"
+            path="/mo/budget-policies"
             element={
-              <ProtectedRoute allowedRoles={["driver"]}>
+              <ProtectedRoute allowedRoles={["mayors_office"]}>
                 <Layout>
-                  <DriverActive />
+                  <BudgetPolicies />
                 </Layout>
               </ProtectedRoute>
             }
           />
+
           <Route
-            path="/driver/history"
+            path="/mo/receipt-verification"
             element={
-              <ProtectedRoute allowedRoles={["driver"]}>
+              <ProtectedRoute allowedRoles={["mayors_office"]}>
                 <Layout>
-                  <DriverHistory />
+                  <MayorReceiptVerification />
                 </Layout>
               </ProtectedRoute>
             }
           />
+
+          {/* ============================================================ */}
+          {/* ============ SHARED ROUTES ============ */}
+          {/* ============================================================ */}
+
           <Route
-            path="/driver/fuel-logs"
+            path="/profile"
             element={
-              <ProtectedRoute allowedRoles={["driver"]}>
+              <ProtectedRoute>
                 <Layout>
-                  <DriverFuelLogs />
+                  <Profile />
                 </Layout>
               </ProtectedRoute>
             }
           />
-          <Route
-            path="/driver/reports"
-            element={
-              <ProtectedRoute allowedRoles={["driver", "superadmin"]}>
-                <Layout>
-                  <Reports />
-                </Layout>
-              </ProtectedRoute>
-            }
-          />
-          {/* Department Reports */}
-          <Route
-            path="/department/reports"
-            element={
-              <ProtectedRoute
-                allowedRoles={["dept_office", "head_of_office", "superadmin"]}
-              >
-                <Layout>
-                  <Reports />
-                </Layout>
-              </ProtectedRoute>
-            }
-          />
-          {/* Help Route */}
+
           <Route
             path="/help"
             element={
@@ -440,41 +480,12 @@ function App() {
               </ProtectedRoute>
             }
           />
-          // Add this route in your GSO routes section
-          <Route
-            path="/gso/tickets/:id"
-            element={
-              <ProtectedRoute allowedRoles={["gso_staff"]}>
-                <Layout>
-                  <GsoTripTicket />
-                </Layout>
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/mo/tickets/:id"
-            element={
-              <ProtectedRoute allowedRoles={["mayors_office"]}>
-                <Layout>
-                  <MayorTripTicketDetail />
-                </Layout>
-              </ProtectedRoute>
-            }
-          />
-        
-          <Route
-            path="/head/create-trip"
-            element={
-              <ProtectedRoute allowedRoles={["head_of_office"]}>
-                <Layout>
-                <HeadCreateTripTicket />
-                </Layout>
-              </ProtectedRoute>
-            }
-          />
-          {/* Unauthorized Page */}
+
+          {/* ============================================================ */}
+          {/* ============ UNAUTHORIZED & 404 ============ */}
+          {/* ============================================================ */}
+
           <Route path="/unauthorized" element={<Unauthorized />} />
-          {/* Catch all - 404 redirect */}
           <Route path="*" element={<Navigate to="/login" replace />} />
         </Routes>
       </AuthProvider>

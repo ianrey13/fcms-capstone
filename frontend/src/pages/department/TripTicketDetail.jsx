@@ -1,8 +1,16 @@
-// src/pages/department/TripTicketDetail.jsx
-import React, { useState, useEffect } from 'react';
+// src/pages/department/TripTicketDetail.jsx - TanStack Query Version
+import React, { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
-import { tripTicketAPI } from '../../services/api';
+import { 
+  useTripTicketDetail, 
+  useRefreshTicketDetail,
+  getStatusConfig,
+  formatDateTime,
+  formatDate,
+  formatCurrency,
+  getProgressPercentage
+} from '../../hooks/useTripTicketDetail';
 import { toast } from 'react-hot-toast';
 import { 
   ArrowLeft, 
@@ -20,16 +28,11 @@ import {
   Send,
   Building2,
   Fuel,
-  Hash,
   TrendingUp,
   Printer,
-  Download,
-  Eye,
   CreditCard,
-  Gauge,
   Route,
   CalendarDays,
-  UserCheck,
   Shield,
   Info
 } from 'lucide-react';
@@ -39,108 +42,69 @@ import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
+// Import icons dynamically for status badges
+const iconMap = {
+  Clock: Clock,
+  AlertCircle: AlertCircle,
+  XCircle: XCircle,
+  CheckCircle: CheckCircle,
+  Truck: Truck,
+  DollarSign: DollarSign,
+  Building2: Building2,
+};
+
 const TripTicketDetail = () => {
   const { id } = useParams();
   const { user } = useAuth();
   const navigate = useNavigate();
-  const [ticket, setTicket] = useState(null);
-  const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('details');
-
-  useEffect(() => {
-    fetchTicketDetail();
-  }, [id]);
-
-  const fetchTicketDetail = async () => {
-    setIsLoading(true);
-    try {
-      const response = await tripTicketAPI.getById(id);
-      const ticketData = response.data?.data || response.data;
-      setTicket(ticketData);
-    } catch (error) {
-      console.error('Error fetching ticket:', error);
-      toast.error('Failed to load trip ticket details');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const getStatusConfig = (status) => {
-    const configs = {
-      draft: { color: 'bg-slate-500', label: 'Draft', icon: Clock, textColor: 'text-white' },
-      pending_head_approval: { color: 'bg-purple-500', label: 'Pending Head Approval', icon: Clock, textColor: 'text-white' },
-      pending_gso_review: { color: 'bg-amber-500', label: 'Pending GSO Review', icon: Clock, textColor: 'text-white' },
-      returned_for_revision: { color: 'bg-red-500', label: 'Returned for Revision', icon: AlertCircle, textColor: 'text-white' },
-      with_mayors_office: { color: 'bg-violet-500', label: "With Mayor's Office", icon: Building2, textColor: 'text-white' },
-      pending_mayors_office: { color: 'bg-violet-500', label: "Pending Mayor's Office", icon: Clock, textColor: 'text-white' },
-      funds_issued: { color: 'bg-emerald-500', label: 'Funds Issued', icon: DollarSign, textColor: 'text-white' },
-      acknowledged: { color: 'bg-blue-500', label: 'Acknowledged', icon: CheckCircle, textColor: 'text-white' },
-      in_transit: { color: 'bg-indigo-500', label: 'In Transit', icon: Truck, textColor: 'text-white' },
-      pending_reconciliation: { color: 'bg-orange-500', label: 'Pending Reconciliation', icon: Clock, textColor: 'text-white' },
-      closed: { color: 'bg-emerald-600', label: 'Closed', icon: CheckCircle, textColor: 'text-white' },
-      cancelled: { color: 'bg-red-700', label: 'Cancelled', icon: XCircle, textColor: 'text-white' },
-      rejected: { color: 'bg-red-600', label: 'Rejected', icon: XCircle, textColor: 'text-white' }
-    };
-    return configs[status] || { color: 'bg-slate-500', label: status?.replace(/_/g, ' '), icon: Clock, textColor: 'text-white' };
-  };
+  
+  // ✅ TanStack Query hook
+  const { 
+    data: ticket, 
+    isLoading, 
+    error,
+    refetch 
+  } = useTripTicketDetail(id);
+  
+  const refreshTicket = useRefreshTicketDetail();
 
   const getStatusBadge = (status) => {
     const config = getStatusConfig(status);
-    const Icon = config.icon;
+    const IconComponent = iconMap[config.icon] || Clock;
     return (
       <Badge className={`${config.color} ${config.textColor} flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium shadow-sm`}>
-        <Icon className="h-3.5 w-3.5" />
+        <IconComponent className="h-3.5 w-3.5" />
         {config.label}
       </Badge>
     );
   };
 
-  const formatDateTime = (dateString) => {
-    if (!dateString) return 'N/A';
-    return new Date(dateString).toLocaleString('en-PH', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    });
+  const handleRefresh = () => {
+    refreshTicket.mutate(id);
+    toast.success('Refreshing ticket details...');
   };
 
-  const formatDate = (dateString) => {
-    if (!dateString) return 'N/A';
-    return new Date(dateString).toLocaleDateString('en-PH', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric'
-    });
-  };
-
-  const formatCurrency = (amount) => {
-    if (!amount) return '₱0.00';
-    return new Intl.NumberFormat('en-PH', {
-      style: 'currency',
-      currency: 'PHP',
-      minimumFractionDigits: 2
-    }).format(amount);
-  };
-
-  const getProgressPercentage = () => {
-    const statusOrder = [
-      'draft',
-      'pending_head_approval',
-      'pending_gso_review',
-      'pending_mayors_office',
-      'with_mayors_office',
-      'funds_issued',
-      'acknowledged',
-      'in_transit',
-      'pending_reconciliation',
-      'closed'
-    ];
-    const currentIndex = statusOrder.indexOf(ticket?.status);
-    if (currentIndex === -1) return 0;
-    return ((currentIndex + 1) / statusOrder.length) * 100;
-  };
+  // Handle error state
+  if (error) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-900 dark:to-slate-800">
+        <div className="text-center">
+          <FileText className="h-16 w-16 text-red-400 mx-auto mb-4" />
+          <p className="text-slate-500 dark:text-slate-400 text-lg">Failed to load trip ticket</p>
+          <p className="text-sm text-slate-400 dark:text-slate-500 mt-1">{error.message}</p>
+          <div className="flex gap-3 justify-center mt-4">
+            <Button onClick={() => refetch()} className="bg-gradient-to-r from-blue-600 to-blue-700">
+              Try Again
+            </Button>
+            <Button onClick={() => navigate('/department/requests')} variant="outline">
+              Back to Requests
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (isLoading) {
     return (
@@ -168,8 +132,9 @@ const TripTicketDetail = () => {
   }
 
   const statusConfig = getStatusConfig(ticket.status);
-  const StatusIcon = statusConfig.icon;
+  const StatusIcon = iconMap[statusConfig.icon] || Clock;
   const isMoFunded = ticket.created_by_mo_user_id || ticket.is_mo_funded;
+  const progressPercentage = getProgressPercentage(ticket.status);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-900 dark:to-slate-800 p-4 md:p-8">
@@ -181,14 +146,25 @@ const TripTicketDetail = () => {
           <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-emerald-500/10 rounded-full blur-3xl" />
           
           <div className="relative z-10">
-            <Button 
-              variant="ghost" 
-              onClick={() => navigate('/department/requests')}
-              className="text-white/80 hover:text-white hover:bg-white/10 mb-4 -ml-3 transition-all duration-200"
-            >
-              <ArrowLeft className="h-4 w-4 mr-2" />
-              Back to Requests
-            </Button>
+            <div className="flex items-center justify-between mb-4">
+              <Button 
+                variant="ghost" 
+                onClick={() => navigate('/department/requests')}
+                className="text-white/80 hover:text-white hover:bg-white/10 -ml-3 transition-all duration-200"
+              >
+                <ArrowLeft className="h-4 w-4 mr-2" />
+                Back to Requests
+              </Button>
+              <Button 
+                variant="ghost" 
+                size="sm"
+                onClick={handleRefresh}
+                className="text-white/80 hover:text-white hover:bg-white/10 transition-all duration-200"
+              >
+                <Loader2 className={`h-4 w-4 mr-2 ${refreshTicket.isPending ? 'animate-spin' : ''}`} />
+                Refresh
+              </Button>
+            </div>
             
             <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
               <div className="animate-fade-in-up">
@@ -248,9 +224,9 @@ const TripTicketDetail = () => {
               <TrendingUp className="h-3 w-3" />
               Progress
             </span>
-            <span className="font-medium">{Math.round(getProgressPercentage())}% Complete</span>
+            <span className="font-medium">{Math.round(progressPercentage)}% Complete</span>
           </div>
-          <Progress value={getProgressPercentage()} className="h-2 bg-slate-200 dark:bg-slate-700" />
+          <Progress value={progressPercentage} className="h-2 bg-slate-200 dark:bg-slate-700" />
         </div>
 
         {/* Tabs */}

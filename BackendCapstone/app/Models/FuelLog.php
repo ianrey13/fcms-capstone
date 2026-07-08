@@ -22,11 +22,9 @@ class FuelLog extends Model
         'trip_elapsed_minutes',
         'trip_started_at',
         'trip_ended_at',
-        
         'trip_start_gps_lat',
         'trip_start_gps_lng',
         'trip_start_gps_accuracy',
-        
         'distance_calculation_method',
         'gps_distance_km',
     ];
@@ -47,8 +45,65 @@ class FuelLog extends Model
         'gps_distance_km' => 'decimal:2',
     ];
     
+    // ============ RELATIONSHIPS ============
     public function gasSlip()
     {
         return $this->belongsTo(GasSlip::class, 'gas_slip_id', 'gas_slip_id');
+    }
+    
+    // ============ HELPER METHODS ============
+    
+    /**
+     * Check if trip is completed
+     */
+    public function isCompleted()
+    {
+        return $this->trip_ended_at !== null;
+    }
+    
+    /**
+     * Check if odometer readings are available
+     */
+    public function hasOdometerReadings()
+    {
+        return $this->odometer_start !== null && $this->odometer_end !== null;
+    }
+    
+    /**
+     * Calculate distance from odometer (if available)
+     */
+    public function getOdometerDistanceAttribute()
+    {
+        if ($this->hasOdometerReadings()) {
+            return $this->odometer_end - $this->odometer_start;
+        }
+        return null;
+    }
+    
+    /**
+     * Get the effective distance (odometer or GPS)
+     */
+    public function getEffectiveDistanceAttribute()
+    {
+        if ($this->hasOdometerReadings()) {
+            return $this->odometer_end - $this->odometer_start;
+        }
+        if ($this->gps_distance_km !== null) {
+            return $this->gps_distance_km;
+        }
+        return null;
+    }
+    
+    /**
+     * Get distance source label
+     */
+    public function getDistanceSourceLabelAttribute()
+    {
+        $labels = [
+            'odometer' => 'Odometer',
+            'gps' => 'GPS',
+            'manual_estimate' => 'Manual Estimate',
+        ];
+        return $labels[$this->distance_calculation_method] ?? 'Unknown';
     }
 }

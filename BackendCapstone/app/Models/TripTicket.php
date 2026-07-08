@@ -15,9 +15,9 @@ class TripTicket extends Model
         'department_id',
         'driver_id',
         'vehicle_id',
-        'submitted_by',
+        'submitted_by',        // GSO user who creates the trip
         'created_by_mo_user_id',
-        'submitted_by_head',
+        'submitted_by_staff',  // ✅ Replaced submitted_by_head
         'submitted_at',
         'trip_date',
         'purpose',
@@ -36,25 +36,27 @@ class TripTicket extends Model
         'odometer_exception_note',
         'odometer_exception_approved_by',
         'odometer_exception_approved_at',
-
-
+        'has_insufficient_budget',
+        'budget_shortage',
+        'original_department_id',
     ];
 
     protected $casts = [
         'submitted_at' => 'datetime',
         'updated_at' => 'datetime',
         'trip_date' => 'date',
-        'submitted_by_head' => 'boolean'
+        'submitted_by_staff' => 'boolean',  // ✅ Changed from submitted_by_head
+        'odometer_exception' => 'boolean',
+        'has_insufficient_budget' => 'boolean',
+        'estimated_distance_km' => 'decimal:2',
+        'estimated_fuel_liters' => 'decimal:2',
+        'budget_shortage' => 'decimal:2',
     ];
 
-    // Status constants
+    // ============ STATUS CONSTANTS ============
     public const STATUS_DRAFT = 'draft';
-    public const STATUS_PENDING_HEAD_APPROVAL = 'pending_head_approval';
-    public const STATUS_PENDING_GSO_REVIEW = 'pending_gso_review';
+    public const STATUS_PENDING_MAYORS_OFFICE = 'pending_mayors_office';  // ✅ GSO creates directly
     public const STATUS_RETURNED_FOR_REVISION = 'returned_for_revision';
-    public const STATUS_PENDING_MAYORS_OFFICE = 'pending_mayors_office';
-    public const STATUS_WITH_MAYORS_OFFICE = 'with_mayors_office';
-
     public const STATUS_FUNDS_ISSUED = 'funds_issued';
     public const STATUS_IN_TRANSIT = 'in_transit';
     public const STATUS_PENDING_RECONCILIATION = 'pending_reconciliation';
@@ -63,7 +65,9 @@ class TripTicket extends Model
     public const STATUS_CANCELLED = 'cancelled';
     public const STATUS_ACKNOWLEDGED = 'acknowledged';
 
-    // Relationships
+    // ❌ REMOVED: STATUS_PENDING_HEAD_APPROVAL, STATUS_PENDING_GSO_REVIEW, STATUS_WITH_MAYORS_OFFICE
+
+    // ============ RELATIONSHIPS ============
     public function department()
     {
         return $this->belongsTo(Department::class, 'department_id', 'department_id');
@@ -89,38 +93,9 @@ class TripTicket extends Model
         return $this->belongsTo(User::class, 'created_by_mo_user_id', 'user_id');
     }
 
-    public function headApprovals()
-    {
-        return $this->hasMany(HeadApproval::class, 'trip_ticket_id', 'trip_ticket_id');
-    }
-
-    public function latestHeadApproval()
-    {
-        return $this->hasOne(HeadApproval::class, 'trip_ticket_id', 'trip_ticket_id')
-            ->latest('review_cycle');
-    }
-
-    public function gsoVerifications()
-    {
-        return $this->hasMany(GsoVerification::class, 'trip_ticket_id', 'trip_ticket_id');
-    }
-
-    public function latestGsoVerification()
-    {
-        return $this->hasOne(GsoVerification::class, 'trip_ticket_id', 'trip_ticket_id')
-            ->latest('review_cycle');
-    }
-
-    public function moReviews()
-    {
-        return $this->hasMany(MoReview::class, 'trip_ticket_id', 'trip_ticket_id');
-    }
-
-    public function latestMoReview()
-    {
-        return $this->hasOne(MoReview::class, 'trip_ticket_id', 'trip_ticket_id')
-            ->latest('review_cycle');
-    }
+    // ❌ REMOVED: headApprovals(), latestHeadApproval() - Head approval removed
+    // ❌ REMOVED: gsoVerifications(), latestGsoVerification() - GSO verification removed
+    // ❌ REMOVED: moReviews(), latestMoReview() - MO Review merged into gas_slip
 
     public function gasSlip()
     {
@@ -142,35 +117,25 @@ class TripTicket extends Model
         return $this->hasOne(TripTicketCancellation::class, 'trip_ticket_id', 'trip_ticket_id');
     }
 
-    public function gpsPings()
+    public function chargeToModifiedBy()
     {
-        return $this->hasMany(GpsPing::class, 'trip_ticket_id', 'trip_ticket_id');
+        return $this->belongsTo(User::class, 'charge_to_modified_by', 'user_id');
     }
 
-    public function gpsDistanceResult()
+    public function odometerExceptionApprovedBy()
     {
-        return $this->hasOne(GpsDistanceResult::class, 'trip_ticket_id', 'trip_ticket_id');
+        return $this->belongsTo(User::class, 'odometer_exception_approved_by', 'user_id');
     }
 
-    public function tripTicketEsignatures()
-    {
-        return $this->hasMany(TripTicketEsignature::class, 'trip_ticket_id', 'trip_ticket_id');
-    }
-
-    // Scopes
-    public function scopePendingHeadApproval($query)
-    {
-        return $query->where('status', self::STATUS_PENDING_HEAD_APPROVAL);
-    }
-
-    public function scopePendingGsoReview($query)
-    {
-        return $query->where('status', self::STATUS_PENDING_GSO_REVIEW);
-    }
-
-    public function scopePendingMayorsOffice($query)
+    // ============ SCOPES ============
+    public function scopePendingMO($query)
     {
         return $query->where('status', self::STATUS_PENDING_MAYORS_OFFICE);
+    }
+
+    public function scopeFundsIssued($query)
+    {
+        return $query->where('status', self::STATUS_FUNDS_ISSUED);
     }
 
     public function scopeInTransit($query)
@@ -183,25 +148,16 @@ class TripTicket extends Model
         return $query->where('status', self::STATUS_CLOSED);
     }
 
-    // Helper methods
-    public function canBeApprovedByHead()
+    // ============ HELPER METHODS ============
+    
+    public function canAcknowledge()
     {
-        return $this->status === self::STATUS_PENDING_HEAD_APPROVAL;
-    }
-
-    public function canBeApprovedByGso()
-    {
-        return $this->status === self::STATUS_PENDING_GSO_REVIEW;
-    }
-
-    public function canBeApprovedByMo()
-    {
-        return $this->status === self::STATUS_PENDING_MAYORS_OFFICE;
+        return $this->status === self::STATUS_FUNDS_ISSUED;
     }
 
     public function canStartTrip()
     {
-        return $this->status === self::STATUS_FUNDS_ISSUED;
+        return $this->status === self::STATUS_FUNDS_ISSUED || $this->status === self::STATUS_ACKNOWLEDGED;
     }
 
     public function canCompleteTrip()
@@ -209,13 +165,47 @@ class TripTicket extends Model
         return $this->status === self::STATUS_IN_TRANSIT;
     }
 
-    public function chargeToModifiedBy()
-{
-    return $this->belongsTo(User::class, 'charge_to_modified_by', 'user_id');
-}
+    public function isGsoCreated()
+    {
+        return !$this->submitted_by_staff;  // ✅ GSO created if not submitted by staff
+    }
 
-public function odometerExceptionApprovedBy()
-{
-    return $this->belongsTo(User::class, 'odometer_exception_approved_by', 'user_id');
-}
+    public function isStaffCreated()
+    {
+        return $this->submitted_by_staff;
+    }
+
+    public function getStatusLabelAttribute()
+    {
+        $labels = [
+            self::STATUS_DRAFT => 'Draft',
+            self::STATUS_PENDING_MAYORS_OFFICE => 'Pending Mayor\'s Office',
+            self::STATUS_RETURNED_FOR_REVISION => 'Returned for Revision',
+            self::STATUS_FUNDS_ISSUED => 'Funds Issued',
+            self::STATUS_IN_TRANSIT => 'In Transit',
+            self::STATUS_PENDING_RECONCILIATION => 'Pending Reconciliation',
+            self::STATUS_CLOSED => 'Closed',
+            self::STATUS_REJECTED => 'Rejected',
+            self::STATUS_CANCELLED => 'Cancelled',
+            self::STATUS_ACKNOWLEDGED => 'Acknowledged',
+        ];
+        return $labels[$this->status] ?? $this->status;
+    }
+
+    public function getStatusColorAttribute()
+    {
+        $colors = [
+            self::STATUS_DRAFT => 'gray',
+            self::STATUS_PENDING_MAYORS_OFFICE => 'yellow',
+            self::STATUS_RETURNED_FOR_REVISION => 'purple',
+            self::STATUS_FUNDS_ISSUED => 'green',
+            self::STATUS_IN_TRANSIT => 'blue',
+            self::STATUS_PENDING_RECONCILIATION => 'teal',
+            self::STATUS_CLOSED => 'dark-green',
+            self::STATUS_REJECTED => 'red',
+            self::STATUS_CANCELLED => 'gray',
+            self::STATUS_ACKNOWLEDGED => 'cyan',
+        ];
+        return $colors[$this->status] ?? 'gray';
+    }
 }

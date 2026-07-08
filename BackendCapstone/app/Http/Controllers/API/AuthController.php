@@ -448,9 +448,7 @@ class AuthController extends Controller
         $labels = [
             'superadmin' => 'Super Administrator',
             'mayors_office' => "Mayor's Office",
-            'head_of_office' => 'Head of Office',
             'gso_staff' => 'GSO Staff',
-            'dept_office' => 'Department Staff',
             'driver' => 'Driver',
         ];
         

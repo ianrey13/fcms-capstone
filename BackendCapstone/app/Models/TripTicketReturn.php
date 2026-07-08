@@ -20,6 +20,12 @@ class TripTicketReturn extends Model
         'fields_changed' => 'array'
     ];
     
+    // ============ RETURN TYPE CONSTANTS ============
+    public const TYPE_REJECTED_BY_MO = 'rejected_by_mo';
+    public const TYPE_RETURNED_BY_MO = 'returned_by_mo';
+    public const TYPE_RESUBMITTED_BY_STAFF = 'resubmitted_by_staff';
+    
+    // ============ RELATIONSHIPS ============
     public function tripTicket()
     {
         return $this->belongsTo(TripTicket::class, 'trip_ticket_id', 'trip_ticket_id');

@@ -1,5 +1,5 @@
-// src/pages/AdminDashboard.jsx - Modern Redesign with Dark Mode Support
-import React, { useEffect, useState, useCallback } from 'react';
+// src/pages/AdminDashboard.jsx - TanStack Query Version
+import React, { useMemo } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -7,10 +7,10 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import {
   Shield, Building2, Car, Users as UsersIcon,
-  Activity, FileText, Settings, RefreshCw, Loader2, Zap, ArrowUpRight,
-  ArrowDownRight, Wallet, Fuel, CalendarDays, TrendingUp, TrendingDown
+  Activity, FileText, Settings, RefreshCw, Loader2, Zap, 
+  Wallet, Fuel, CalendarDays, TrendingUp, TrendingDown
 } from 'lucide-react';
-import { departmentAPI, vehicleAPI, userAPI, budgetPolicyAPI, reportsAPI } from '../services/api';
+import { useDashboardData, useRecentActivities } from '../hooks/useDashboardData';
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, PieChart as RePieChart, Pie, Cell,
@@ -21,315 +21,251 @@ import { toast } from 'react-hot-toast';
 const AdminDashboard = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
-  const [stats, setStats] = useState([]);
-  const [recentActivities, setRecentActivities] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [chartData, setChartData] = useState([]);
-  const [budgetChartData, setBudgetChartData] = useState([]);
-  const [tripTrendData, setTripTrendData] = useState([]);
-  const [departmentsList, setDepartmentsList] = useState([]);
+  
+  // ✅ Use TanStack Query hooks instead of useState + useEffect
+  const { 
+    data: dashboardData, 
+    isLoading, 
+    isFetching, 
+    refetch 
+  } = useDashboardData();
+  
+  const { 
+    data: activitiesData = [], 
+    isLoading: activitiesLoading 
+  } = useRecentActivities();
 
-  useEffect(() => {
-    fetchDashboardData();
-  }, []);
+  // Process dashboard data with useMemo for performance
+  const stats = useMemo(() => {
+    if (!dashboardData) return [];
 
-  const fetchDashboardData = async (isRefresh = false) => {
-    if (isRefresh) {
-      setRefreshing(true);
-    } else {
-      setLoading(true);
+    const { departments, vehicles, users, budgetStatus, fuelReport } = dashboardData;
+    
+    // Process departments
+    const departmentsCount = Array.isArray(departments) ? departments.length : 0;
+    
+    // Process vehicles
+    const vehiclesCount = Array.isArray(vehicles) ? vehicles.length : 0;
+    const activeVehiclesCount = Array.isArray(vehicles) 
+      ? vehicles.filter(v => v.status === 'active').length : 0;
+    
+    // Process users
+    const totalUsersCount = Array.isArray(users) ? users.length : 0;
+    const activeUsersCount = Array.isArray(users) 
+      ? users.filter(u => u.status === 'active').length : 0;
+    
+    // Process budget data
+    let totalBudget = 0;
+    let totalSpent = 0;
+    let budgetUtilization = 0;
+    
+    if (Array.isArray(budgetStatus)) {
+      budgetStatus.forEach(item => {
+        totalBudget += parseFloat(item.allocated_amount || 0);
+        totalSpent += parseFloat(item.spent_amount || 0);
+      });
+      budgetUtilization = totalBudget > 0 ? ((totalSpent / totalBudget) * 100) : 0;
     }
     
-    try {
-      // Fetch all data in parallel
-      const [
-        departmentsRes, 
-        vehiclesRes, 
-        usersRes, 
-        budgetStatusRes,
-        tripReportRes,
-        fuelReportRes
-      ] = await Promise.allSettled([
-        departmentAPI.getAll(),
-        vehicleAPI.getAll(),
-        userAPI.getAll(),
-        budgetPolicyAPI.getBudgetStatus(),
-        reportsAPI.getTripReport({ limit: 100 }),
-        reportsAPI.getFuelReport({ limit: 100 })
-      ]);
-
-      // ============ PROCESS DEPARTMENTS ============
-      let departmentsCount = 0;
-      if (departmentsRes.status === 'fulfilled') {
-        const deptData = departmentsRes.value.data?.data || departmentsRes.value.data || [];
-        departmentsCount = Array.isArray(deptData) ? deptData.length : 0;
-        setDepartmentsList(Array.isArray(deptData) ? deptData : []);
-      }
-
-      // ============ PROCESS VEHICLES ============
-      let vehiclesCount = 0;
-      let activeVehiclesCount = 0;
-      if (vehiclesRes.status === 'fulfilled') {
-        const vehicleData = vehiclesRes.value.data?.data || vehiclesRes.value.data || [];
-        if (Array.isArray(vehicleData)) {
-          vehiclesCount = vehicleData.length;
-          activeVehiclesCount = vehicleData.filter(v => v.status === 'active').length;
-        }
-      }
-
-      // ============ PROCESS USERS ============
-      let activeUsersCount = 0;
-      let totalUsersCount = 0;
-      if (usersRes.status === 'fulfilled') {
-        const usersData = usersRes.value.data?.data || usersRes.value.data || [];
-        if (Array.isArray(usersData)) {
-          totalUsersCount = usersData.length;
-          activeUsersCount = usersData.filter(u => u.status === 'active').length;
-        }
-      }
-
-      // ============ PROCESS BUDGET DATA ============
-      let totalBudget = 0;
-      let totalSpent = 0;
-      let budgetUtilization = 0;
-      let budgetByDepartment = [];
-      
-      if (budgetStatusRes.status === 'fulfilled') {
-        const budgetData = budgetStatusRes.value.data?.data || budgetStatusRes.value.data || [];
-        if (Array.isArray(budgetData)) {
-          budgetByDepartment = budgetData.map(item => ({
-            name: item.department_name || item.department_code || 'Unknown',
-            allocated: parseFloat(item.allocated_amount || 0),
-            spent: parseFloat(item.spent_amount || 0),
-            remaining: parseFloat(item.remaining_amount || 0)
-          }));
-          
-          budgetData.forEach(item => {
-            totalBudget += parseFloat(item.allocated_amount || 0);
-            totalSpent += parseFloat(item.spent_amount || 0);
-          });
-          budgetUtilization = totalBudget > 0 ? ((totalSpent / totalBudget) * 100) : 0;
-        }
-      }
-      
-      // Set budget chart data
-      if (budgetByDepartment.length > 0) {
-        setBudgetChartData(budgetByDepartment.slice(0, 6));
-      } else {
-        setBudgetChartData([
-          { name: 'No Data', allocated: 0, spent: 0, remaining: 0 }
-        ]);
-      }
-
-      // ============ PROCESS TRIP REPORTS FOR CHARTS ============
-      let tripMonthlyData = [];
-      if (tripReportRes.status === 'fulfilled') {
-        const tripData = tripReportRes.value.data?.data || tripReportRes.value.data || [];
-        if (Array.isArray(tripData)) {
-          const monthlyMap = new Map();
-          tripData.forEach(trip => {
-            if (trip.trip_date) {
-              const date = new Date(trip.trip_date);
-              const monthKey = date.toLocaleString('default', { month: 'short' });
-              if (!monthlyMap.has(monthKey)) {
-                monthlyMap.set(monthKey, { trips: 0, fuel: 0 });
-              }
-              monthlyMap.get(monthKey).trips++;
-              monthlyMap.get(monthKey).fuel += trip.estimated_fuel_liters || 0;
-            }
-          });
-          tripMonthlyData = Array.from(monthlyMap.entries()).map(([month, data]) => ({
-            month,
-            trips: data.trips,
-            fuel: Math.round(data.fuel)
-          })).slice(-6);
-        }
-      }
-      
-      if (tripMonthlyData.length === 0) {
-        tripMonthlyData = [
-          { month: 'Jan', trips: 0, fuel: 0 },
-          { month: 'Feb', trips: 0, fuel: 0 },
-          { month: 'Mar', trips: 0, fuel: 0 },
-          { month: 'Apr', trips: 0, fuel: 0 },
-          { month: 'May', trips: 0, fuel: 0 },
-          { month: 'Jun', trips: 0, fuel: 0 },
-        ];
-      }
-      setChartData(tripMonthlyData);
-
-      // ============ PROCESS DAILY TRIP TRENDS ============
-      let dailyTrendData = [];
-      if (tripReportRes.status === 'fulfilled') {
-        const tripData = tripReportRes.value.data?.data || tripReportRes.value.data || [];
-        if (Array.isArray(tripData)) {
-          const daysOfWeek = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-          const dailyMap = new Map();
-          daysOfWeek.forEach(day => dailyMap.set(day, { completed: 0, pending: 0, inTransit: 0 }));
-          
-          tripData.forEach(trip => {
-            if (trip.trip_date) {
-              const date = new Date(trip.trip_date);
-              const dayName = daysOfWeek[date.getDay()];
-              const current = dailyMap.get(dayName) || { completed: 0, pending: 0, inTransit: 0 };
-              
-              if (trip.status === 'closed' || trip.status === 'completed') {
-                current.completed++;
-              } else if (trip.status === 'pending_head_approval' || trip.status === 'pending_gso_review' || trip.status === 'pending_mayors_office') {
-                current.pending++;
-              } else if (trip.status === 'in_transit') {
-                current.inTransit++;
-              }
-              dailyMap.set(dayName, current);
-            }
-          });
-          
-          dailyTrendData = daysOfWeek.map(day => ({
-            day,
-            ...dailyMap.get(day)
-          }));
-        }
-      }
-      
-      if (dailyTrendData.length === 0) {
-        dailyTrendData = [
-          { day: 'Mon', completed: 0, pending: 0, inTransit: 0 },
-          { day: 'Tue', completed: 0, pending: 0, inTransit: 0 },
-          { day: 'Wed', completed: 0, pending: 0, inTransit: 0 },
-          { day: 'Thu', completed: 0, pending: 0, inTransit: 0 },
-          { day: 'Fri', completed: 0, pending: 0, inTransit: 0 },
-          { day: 'Sat', completed: 0, pending: 0, inTransit: 0 },
-          { day: 'Sun', completed: 0, pending: 0, inTransit: 0 },
-        ];
-      }
-      setTripTrendData(dailyTrendData);
-
-      // ============ CALCULATE TOTAL FUEL ============
-      let totalFuel = 0;
-      if (fuelReportRes.status === 'fulfilled') {
-        const fuelData = fuelReportRes.value.data?.data || fuelReportRes.value.data || [];
-        if (Array.isArray(fuelData)) {
-          totalFuel = fuelData.reduce((sum, item) => sum + (parseFloat(item.liters_availed) || 0), 0);
-        }
-      }
-
-      // ============ SET STATS CARDS ============
-      setStats([
-        { 
-          title: 'Departments', 
-          value: departmentsCount, 
-          icon: Building2, 
-          gradient: 'from-blue-500 to-blue-600',
-          subtitle: `${departmentsCount} active departments`,
-          trend: `${departmentsCount} total`,
-          trendUp: true,
-          onClick: () => navigate('/admin/departments')
-        },
-        { 
-          title: 'Vehicles', 
-          value: vehiclesCount, 
-          icon: Car, 
-          gradient: 'from-emerald-500 to-emerald-600',
-          subtitle: `${activeVehiclesCount} active`,
-          trend: `${activeVehiclesCount}/${vehiclesCount}`,
-          trendUp: true,
-          onClick: () => navigate('/admin/vehicles')
-        },
-        { 
-          title: 'Active Users', 
-          value: activeUsersCount, 
-          icon: UsersIcon, 
-          gradient: 'from-purple-500 to-purple-600',
-          subtitle: `${totalUsersCount} total users`,
-          trend: `${activeUsersCount} active`,
-          trendUp: true,
-          onClick: () => navigate('/admin/users')
-        },
-        { 
-          title: 'Budget Used', 
-          value: `${budgetUtilization.toFixed(1)}%`, 
-          icon: Wallet, 
-          gradient: 'from-amber-500 to-amber-600',
-          subtitle: `₱${(totalSpent/1000).toFixed(0)}K / ₱${(totalBudget/1000).toFixed(0)}K`,
-          trend: budgetUtilization > 70 ? 'High Usage' : 'Normal',
-          trendUp: budgetUtilization > 70,
-          onClick: () => navigate('/admin/budget-policies')
-        },
-        { 
-          title: 'Fuel Consumed', 
-          value: totalFuel.toLocaleString(), 
-          icon: Fuel, 
-          gradient: 'from-cyan-500 to-cyan-600',
-          subtitle: 'Total Liters',
-          trend: totalFuel > 0 ? `${totalFuel}L` : 'No data',
-          trendUp: true,
-          onClick: () => navigate('/admin/reports')
-        },
-      ]);
-
-      // ============ FETCH RECENT ACTIVITIES ============
-      await fetchRecentActivities();
-
-    } catch (error) {
-      console.error('Failed to fetch dashboard data:', error);
-      toast.error('Failed to load dashboard data');
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
+    // Process fuel data
+    let totalFuel = 0;
+    if (Array.isArray(fuelReport)) {
+      totalFuel = fuelReport.reduce((sum, item) => sum + (parseFloat(item.liters_availed) || 0), 0);
     }
-  };
 
-  const fetchRecentActivities = async () => {
-    try {
-      const logsRes = await budgetPolicyAPI.getEventLogs();
-      const logs = logsRes.data?.data || logsRes.data || [];
-      
-      if (Array.isArray(logs) && logs.length > 0) {
-        const activities = logs.slice(0, 5).map(log => ({
-          id: log.log_id || log.id || Math.random(),
-          action: `${log.event_name || 'Budget Reset'} - ${log.status || 'completed'}`,
-          user: 'System',
-          time: formatRelativeTime(log.run_at || log.created_at),
-          type: log.status === 'success' ? 'success' : log.status === 'error' ? 'warning' : 'info'
-        }));
-        setRecentActivities(activities);
-      } else {
-        setRecentActivities([]);
+    return [
+      { 
+        title: 'Departments', 
+        value: departmentsCount, 
+        icon: Building2, 
+        gradient: 'from-blue-500 to-blue-600',
+        subtitle: `${departmentsCount} active departments`,
+        trend: `${departmentsCount} total`,
+        trendUp: true,
+        onClick: () => navigate('/admin/departments')
+      },
+      { 
+        title: 'Vehicles', 
+        value: vehiclesCount, 
+        icon: Car, 
+        gradient: 'from-emerald-500 to-emerald-600',
+        subtitle: `${activeVehiclesCount} active`,
+        trend: `${activeVehiclesCount}/${vehiclesCount}`,
+        trendUp: true,
+        onClick: () => navigate('/admin/vehicles')
+      },
+      { 
+        title: 'Active Users', 
+        value: activeUsersCount, 
+        icon: UsersIcon, 
+        gradient: 'from-purple-500 to-purple-600',
+        subtitle: `${totalUsersCount} total users`,
+        trend: `${activeUsersCount} active`,
+        trendUp: true,
+        onClick: () => navigate('/admin/users')
+      },
+      { 
+        title: 'Budget Used', 
+        value: `${budgetUtilization.toFixed(1)}%`, 
+        icon: Wallet, 
+        gradient: 'from-amber-500 to-amber-600',
+        subtitle: `₱${(totalSpent/1000).toFixed(0)}K / ₱${(totalBudget/1000).toFixed(0)}K`,
+        trend: budgetUtilization > 70 ? 'High Usage' : 'Normal',
+        trendUp: budgetUtilization > 70,
+        onClick: () => navigate('/admin/budget-policies')
+      },
+      { 
+        title: 'Fuel Consumed', 
+        value: totalFuel.toLocaleString(), 
+        icon: Fuel, 
+        gradient: 'from-cyan-500 to-cyan-600',
+        subtitle: 'Total Liters',
+        trend: totalFuel > 0 ? `${totalFuel}L` : 'No data',
+        trendUp: true,
+        onClick: () => navigate('/admin/reports')
+      },
+    ];
+  }, [dashboardData, navigate]);
+
+  // Process chart data
+  const chartData = useMemo(() => {
+    if (!dashboardData?.tripReport) return [];
+    
+    const tripData = Array.isArray(dashboardData.tripReport) ? dashboardData.tripReport : [];
+    const monthlyMap = new Map();
+    
+    tripData.forEach(trip => {
+      if (trip.trip_date) {
+        const date = new Date(trip.trip_date);
+        const monthKey = date.toLocaleString('default', { month: 'short' });
+        if (!monthlyMap.has(monthKey)) {
+          monthlyMap.set(monthKey, { trips: 0, fuel: 0 });
+        }
+        monthlyMap.get(monthKey).trips++;
+        monthlyMap.get(monthKey).fuel += trip.estimated_fuel_liters || 0;
       }
-    } catch (error) {
-      console.error('Failed to fetch recent activities:', error);
-      setRecentActivities([]);
+    });
+    
+    let result = Array.from(monthlyMap.entries()).map(([month, data]) => ({
+      month,
+      trips: data.trips,
+      fuel: Math.round(data.fuel)
+    })).slice(-6);
+    
+    if (result.length === 0) {
+      result = [
+        { month: 'Jan', trips: 0, fuel: 0 },
+        { month: 'Feb', trips: 0, fuel: 0 },
+        { month: 'Mar', trips: 0, fuel: 0 },
+        { month: 'Apr', trips: 0, fuel: 0 },
+        { month: 'May', trips: 0, fuel: 0 },
+        { month: 'Jun', trips: 0, fuel: 0 },
+      ];
     }
-  };
+    return result;
+  }, [dashboardData?.tripReport]);
 
-  const formatRelativeTime = (timestamp) => {
-    if (!timestamp) return 'Unknown';
-    try {
-      const date = new Date(timestamp);
-      const now = new Date();
-      const diffMs = now - date;
-      const diffMins = Math.floor(diffMs / 60000);
-      const diffHours = Math.floor(diffMins / 60);
-      const diffDays = Math.floor(diffHours / 24);
+  // Process budget chart data
+  const budgetChartData = useMemo(() => {
+    if (!dashboardData?.budgetStatus) return [{ name: 'No Data', allocated: 0, spent: 0, remaining: 0 }];
+    
+    const budgetData = Array.isArray(dashboardData.budgetStatus) ? dashboardData.budgetStatus : [];
+    if (budgetData.length === 0) return [{ name: 'No Data', allocated: 0, spent: 0, remaining: 0 }];
+    
+    return budgetData.map(item => ({
+      name: item.department_name || item.department_code || 'Unknown',
+      allocated: parseFloat(item.allocated_amount || 0),
+      spent: parseFloat(item.spent_amount || 0),
+      remaining: parseFloat(item.remaining_amount || 0)
+    })).slice(0, 6);
+  }, [dashboardData?.budgetStatus]);
 
-      if (diffMins < 1) return 'Just now';
-      if (diffMins < 60) return `${diffMins} min${diffMins > 1 ? 's' : ''} ago`;
-      if (diffHours < 24) return `${diffHours} hour${diffHours > 1 ? 's' : ''} ago`;
-      return `${diffDays} day${diffDays > 1 ? 's' : ''} ago`;
-    } catch (e) {
-      return 'Unknown';
+  // Process trip trend data
+  const tripTrendData = useMemo(() => {
+    if (!dashboardData?.tripReport) return [];
+    
+    const tripData = Array.isArray(dashboardData.tripReport) ? dashboardData.tripReport : [];
+    const daysOfWeek = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    const dailyMap = new Map();
+    daysOfWeek.forEach(day => dailyMap.set(day, { completed: 0, pending: 0, inTransit: 0 }));
+    
+    tripData.forEach(trip => {
+      if (trip.trip_date) {
+        const date = new Date(trip.trip_date);
+        const dayName = daysOfWeek[date.getDay()];
+        const current = dailyMap.get(dayName) || { completed: 0, pending: 0, inTransit: 0 };
+        
+        if (trip.status === 'closed' || trip.status === 'completed') {
+          current.completed++;
+        } else if (trip.status === 'pending_head_approval' || trip.status === 'pending_gso_review' || trip.status === 'pending_mayors_office') {
+          current.pending++;
+        } else if (trip.status === 'in_transit') {
+          current.inTransit++;
+        }
+        dailyMap.set(dayName, current);
+      }
+    });
+    
+    let result = daysOfWeek.map(day => ({
+      day,
+      ...dailyMap.get(day)
+    }));
+    
+    if (result.every(d => d.completed === 0 && d.pending === 0 && d.inTransit === 0)) {
+      result = [
+        { day: 'Mon', completed: 0, pending: 0, inTransit: 0 },
+        { day: 'Tue', completed: 0, pending: 0, inTransit: 0 },
+        { day: 'Wed', completed: 0, pending: 0, inTransit: 0 },
+        { day: 'Thu', completed: 0, pending: 0, inTransit: 0 },
+        { day: 'Fri', completed: 0, pending: 0, inTransit: 0 },
+        { day: 'Sat', completed: 0, pending: 0, inTransit: 0 },
+        { day: 'Sun', completed: 0, pending: 0, inTransit: 0 },
+      ];
     }
-  };
+    return result;
+  }, [dashboardData?.tripReport]);
+
+  // Process recent activities
+  const recentActivities = useMemo(() => {
+    if (!Array.isArray(activitiesData) || activitiesData.length === 0) return [];
+    
+    const formatRelativeTime = (timestamp) => {
+      if (!timestamp) return 'Unknown';
+      try {
+        const date = new Date(timestamp);
+        const now = new Date();
+        const diffMs = now - date;
+        const diffMins = Math.floor(diffMs / 60000);
+        const diffHours = Math.floor(diffMins / 60);
+        const diffDays = Math.floor(diffHours / 24);
+
+        if (diffMins < 1) return 'Just now';
+        if (diffMins < 60) return `${diffMins} min${diffMins > 1 ? 's' : ''} ago`;
+        if (diffHours < 24) return `${diffHours} hour${diffHours > 1 ? 's' : ''} ago`;
+        return `${diffDays} day${diffDays > 1 ? 's' : ''} ago`;
+      } catch (e) {
+        return 'Unknown';
+      }
+    };
+
+    return activitiesData.slice(0, 5).map(log => ({
+      id: log.log_id || log.id || Math.random(),
+      action: `${log.event_name || 'Budget Reset'} - ${log.status || 'completed'}`,
+      user: 'System',
+      time: formatRelativeTime(log.run_at || log.created_at),
+      type: log.status === 'success' ? 'success' : log.status === 'error' ? 'warning' : 'info'
+    }));
+  }, [activitiesData]);
 
   const handleRefresh = () => {
-    fetchDashboardData(true);
+    refetch(); // ✅ TanStack Query handles refetching
     toast.success('Dashboard refreshed');
   };
 
   const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ef4444', '#06b6d4', '#ec4899'];
 
-  if (loading) {
+  // ✅ Use TanStack Query's built-in loading state
+  if (isLoading) {
     return (
       <div className="flex items-center justify-center h-96">
         <div className="text-center">
@@ -342,7 +278,7 @@ const AdminDashboard = () => {
 
   return (
     <div className="space-y-6">
-      {/* Welcome Section - Premium Gradient with Dark Mode */}
+      {/* Welcome Section - same as before */}
       <div className="relative overflow-hidden bg-gradient-to-r from-slate-900 via-slate-800 to-blue-900 rounded-2xl p-6 text-white">
         <div className="absolute top-0 right-0 w-64 h-64 bg-blue-500/20 rounded-full blur-3xl" />
         <div className="absolute bottom-0 left-0 w-64 h-64 bg-purple-500/20 rounded-full blur-3xl" />
@@ -370,9 +306,9 @@ const AdminDashboard = () => {
               onClick={handleRefresh} 
               variant="outline" 
               className="bg-white/10 border-white/20 text-white hover:bg-white/20 dark:bg-white/5 dark:hover:bg-white/15"
-              disabled={refreshing}
+              disabled={isFetching}
             >
-              {refreshing ? (
+              {isFetching ? (
                 <Loader2 className="h-4 w-4 animate-spin mr-2" />
               ) : (
                 <RefreshCw className="h-4 w-4 mr-2" />
@@ -383,7 +319,7 @@ const AdminDashboard = () => {
         </div>
       </div>
 
-      {/* Stats Grid - Dark Mode Compatible */}
+      {/* Stats Grid - same JSX but data from useMemo */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-5">
         {stats.map((stat, index) => (
           <div
@@ -420,7 +356,7 @@ const AdminDashboard = () => {
         ))}
       </div>
 
-      {/* Charts Section - Dark Mode Compatible */}
+      {/* Charts Section - same JSX but with useMemo data */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Trip & Fuel Trends */}
         <Card className="overflow-hidden dark:bg-slate-800/80 dark:border-slate-700">
@@ -458,13 +394,10 @@ const AdminDashboard = () => {
                 <Legend />
               </AreaChart>
             </ResponsiveContainer>
-            {chartData.every(d => d.trips === 0 && d.fuel === 0) && (
-              <p className="text-center text-slate-400 text-sm mt-4">No trip data available. Create trips to see trends.</p>
-            )}
           </CardContent>
         </Card>
 
-        {/* Budget Utilization Pie Chart */}
+        {/* Budget Utilization - same but with useMemo data */}
         <Card className="overflow-hidden dark:bg-slate-800/80 dark:border-slate-700">
           <CardHeader className="pb-0">
             <div className="flex items-center justify-between">
@@ -515,14 +448,13 @@ const AdminDashboard = () => {
               <div className="text-center py-12">
                 <Wallet className="h-12 w-12 text-slate-300 dark:text-slate-600 mx-auto mb-3" />
                 <p className="text-slate-500 dark:text-slate-400">No budget data available</p>
-                <p className="text-sm text-slate-400 dark:text-slate-500 mt-1">Add budget policies to see utilization</p>
               </div>
             )}
           </CardContent>
         </Card>
       </div>
 
-      {/* Daily Trip Trends */}
+      {/* Daily Trip Trends - same but with useMemo data */}
       <div>
         <Card className="dark:bg-slate-800/80 dark:border-slate-700">
           <CardHeader className="pb-0">
@@ -548,14 +480,11 @@ const AdminDashboard = () => {
                 <Bar dataKey="inTransit" fill="#3b82f6" name="In Transit" radius={[4, 4, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
-            {tripTrendData.every(d => d.completed === 0 && d.pending === 0 && d.inTransit === 0) && (
-              <p className="text-center text-slate-400 text-sm mt-4">No trip data available yet</p>
-            )}
           </CardContent>
         </Card>
       </div>
 
-      {/* Recent Activity & Quick Actions */}
+      {/* Recent Activity & Quick Actions - same but with useMemo data */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Recent Activity */}
         <Card className="lg:col-span-2 dark:bg-slate-800/80 dark:border-slate-700">
@@ -576,16 +505,17 @@ const AdminDashboard = () => {
               </div>
             ) : (
               <div className="space-y-4">
-                {recentActivities.map((activity, index) => (
+                {recentActivities.map((activity) => (
                   <div key={activity.id} className="flex items-center justify-between py-3 border-b dark:border-slate-700 last:border-0 transition-all hover:bg-slate-50 dark:hover:bg-slate-700/50 rounded-lg px-2">
                     <div className="flex items-center space-x-3">
                       <div className={`p-2 rounded-full ${
                         activity.type === 'success' ? 'bg-emerald-100 dark:bg-emerald-900/30' :
                         activity.type === 'warning' ? 'bg-amber-100 dark:bg-amber-900/30' : 'bg-blue-100 dark:bg-blue-900/30'
                       }`}>
-                        {activity.type === 'success' && <Activity className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />}
-                        {activity.type === 'info' && <Activity className="h-4 w-4 text-blue-600 dark:text-blue-400" />}
-                        {activity.type === 'warning' && <Activity className="h-4 w-4 text-amber-600 dark:text-amber-400" />}
+                        <Activity className={`h-4 w-4 ${
+                          activity.type === 'success' ? 'text-emerald-600 dark:text-emerald-400' :
+                          activity.type === 'warning' ? 'text-amber-600 dark:text-amber-400' : 'text-blue-600 dark:text-blue-400'
+                        }`} />
                       </div>
                       <div>
                         <p className="text-sm font-medium text-slate-900 dark:text-white">{activity.action}</p>
@@ -600,7 +530,7 @@ const AdminDashboard = () => {
           </CardContent>
         </Card>
 
-        {/* Quick Actions */}
+        {/* Quick Actions - same as before */}
         <Card className="dark:bg-slate-800/80 dark:border-slate-700">
           <CardHeader>
             <CardTitle className="text-lg font-semibold dark:text-white">Quick Actions</CardTitle>

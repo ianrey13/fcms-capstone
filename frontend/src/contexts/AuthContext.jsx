@@ -12,13 +12,10 @@ export const useAuth = () => {
   return context;
 };
 
-// Role constants matching backend
+// ✅ Updated Role Constants for 4-Role System
 export const USER_ROLES = {
-  SUPERADMIN: 'superadmin',
+  GSO_OFFICE: 'gso_office',      // Superadmin equivalent
   MAYORS_OFFICE: 'mayors_office',
-  HEAD_OF_OFFICE: 'head_of_office',
-  GSO_STAFF: 'gso_staff',
-  DEPT_OFFICE: 'dept_office',
   DRIVER: 'driver',
 };
 
@@ -35,10 +32,12 @@ export const AuthProvider = ({ children }) => {
     if (storedToken && storedUser) {
       setToken(storedToken);
       try {
-        setUser(JSON.parse(storedUser));
+        const parsedUser = JSON.parse(storedUser);
+        console.log('Loaded user:', parsedUser);
+        console.log('User role:', parsedUser?.role);
+        setUser(parsedUser);
       } catch (e) {
         console.error('Failed to parse stored user:', e);
-        // Clear invalid data
         localStorage.removeItem('fcms_token');
         localStorage.removeItem('fcms_user');
       }
@@ -50,10 +49,14 @@ export const AuthProvider = ({ children }) => {
     try {
       const response = await authAPI.login(email, password, 'web');
       
+      console.log('Login response:', response.data);
+      
       if (response.data && response.data.success && response.data.data) {
         const { user: userData, token: accessToken, token_type } = response.data.data;
         
-        // Format token with Bearer prefix if needed
+        console.log('User role from API:', userData?.role);
+        
+        // Format token
         let fullToken = accessToken;
         if (token_type === 'Bearer' && !accessToken.startsWith('Bearer ')) {
           fullToken = `Bearer ${accessToken}`;
@@ -61,7 +64,6 @@ export const AuthProvider = ({ children }) => {
           fullToken = `Bearer ${accessToken}`;
         }
         
-        // Store token and user
         localStorage.setItem('fcms_token', fullToken);
         localStorage.setItem('fcms_user', JSON.stringify(userData));
         
@@ -93,7 +95,6 @@ export const AuthProvider = ({ children }) => {
     } catch (error) {
       console.error('Logout error:', error);
     } finally {
-      // Clear storage regardless of API response
       localStorage.removeItem('fcms_token');
       localStorage.removeItem('fcms_user');
       setToken(null);
@@ -113,20 +114,15 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  // Helper to get dashboard route based on role
+  // ✅ Updated getDashboardRoute for new roles
   const getDashboardRoute = () => {
     if (!user) return '/login';
     switch (user.role) {
-      case USER_ROLES.SUPERADMIN:
-        return '/admin/dashboard';
+      case USER_ROLES.GSO_OFFICE:
+        return '/gso/dashboard';
       case USER_ROLES.MAYORS_OFFICE:
         return '/mo/dashboard';
-      case USER_ROLES.HEAD_OF_OFFICE:
-        return '/head/dashboard';
-      case USER_ROLES.GSO_STAFF:
-        return '/gso/dashboard';
-      case USER_ROLES.DEPT_OFFICE:
-        return '/department/dashboard';
+  
       case USER_ROLES.DRIVER:
         return '/driver/dashboard';
       default:
@@ -134,6 +130,7 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  // ✅ Updated role check helpers
   const value = {
     user,
     token,
@@ -142,17 +139,19 @@ export const AuthProvider = ({ children }) => {
     logout,
     changePassword,
     getDashboardRoute,
-    isAuthenticated: !!user,  // This is what your ProtectedRoute uses
+    isAuthenticated: !!user,
     // Role check helpers
-    isSuperAdmin: user?.role === USER_ROLES.SUPERADMIN,
+    isGsoOffice: user?.role === USER_ROLES.GSO_OFFICE,
     isMayorsOffice: user?.role === USER_ROLES.MAYORS_OFFICE,
-    isHeadOfOffice: user?.role === USER_ROLES.HEAD_OF_OFFICE,
-    isGsoStaff: user?.role === USER_ROLES.GSO_STAFF,
-    isDeptOffice: user?.role === USER_ROLES.DEPT_OFFICE,
     isDriver: user?.role === USER_ROLES.DRIVER,
-    // Additional helper
+    // Additional helpers
     hasRole: (role) => user?.role === role,
     hasAnyRole: (roles) => roles.includes(user?.role),
+    // ✅ Backward compatibility (for old code)
+    isSuperAdmin: user?.role === USER_ROLES.GSO_OFFICE,
+    isGsoStaff: user?.role === USER_ROLES.GSO_OFFICE,
+    isDeptOffice: user?.role === USER_ROLES.DRIVER,
+    isHeadOfOffice: false, // Removed
   };
 
   return (

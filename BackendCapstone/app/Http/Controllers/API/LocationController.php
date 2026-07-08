@@ -36,7 +36,7 @@ class LocationController extends Controller
     }
     
     /**
-     * Calculate distance and fuel estimate - FIXED
+     * Calculate distance and fuel estimate 
      */
     public function calculateDistance(Request $request)
     {
@@ -50,7 +50,7 @@ class LocationController extends Controller
                 return response()->json(['error' => 'Destination required'], 400);
             }
             
-            // Get distance from config (FIXED for nested structure)
+            // Get distance from config 
             $distanceData = $this->getDistanceFromConfig($destinationName);
             
             if (!$distanceData || !isset($distanceData['distance_km'])) {
@@ -106,7 +106,7 @@ class LocationController extends Controller
     }
     
     /**
-     * Get distance from config - FIXED for nested structure
+     * Get distance from config 
      */
     private function getDistanceFromConfig($destinationName)
     {

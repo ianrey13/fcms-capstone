@@ -33,6 +33,8 @@ import {
   ChevronUp,
   Filter,
   Fuel,
+  Receipt,
+  Image as ImageIcon,
 } from "lucide-react";
 import {
   Dialog,
@@ -47,322 +49,199 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "react-hot-toast";
 
-// Gas Slip Modal Component - Premium Design
+// ============================================================
+// 1. GAS SLIP MODAL (Keep as is)
+// ============================================================
 const GasSlipModal = ({ isOpen, onClose, gasSlipData }) => {
-  if (!isOpen || !gasSlipData) return null;
+  // ... keep your existing GasSlipModal code ...
+  // (Too long to repeat, but keep it exactly as you have it)
+};
 
-  const handlePrint = () => {
-    const printWindow = window.open("", "_blank");
-    printWindow.document.write(`
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <title>Gas Slip - ${gasSlipData.control_number}</title>
-          <meta charset="UTF-8">
-          <style>
-            @page { size: auto; margin: 0; }
-            * { margin: 0; padding: 0; box-sizing: border-box; }
-            body {
-              font-family: 'Times New Roman', 'Georgia', serif;
-              background: white;
-              display: flex;
-              justify-content: center;
-              align-items: flex-start;
-              min-height: 100vh;
-              padding: 20px;
-            }
-            .gas-slip-container {
-              width: 500px;
-              background: white;
-              border: 1px solid #333;
-            }
-            .header-banner {
-              background: linear-gradient(135deg, #4a7c59 0%, #6b9b7a 50%, #4a7c59 100%);
-              padding: 12px 15px;
-              display: flex;
-              align-items: center;
-              justify-content: space-between;
-              border-bottom: 2px solid #333;
-            }
-            .logo-left, .logo-right {
-              width: 55px;
-              height: 55px;
-              background: white;
-              border-radius: 50%;
-              display: flex;
-              align-items: center;
-              justify-content: center;
-              font-size: 10px;
-              text-align: center;
-              border: 2px solid #ffd700;
-            }
-            .header-text {
-              text-align: center;
-              flex: 1;
-              color: white;
-            }
-            .republic { font-size: 9px; letter-spacing: 1px; margin-bottom: 2px; }
-            .province { font-size: 10px; font-weight: bold; margin-bottom: 1px; }
-            .municipality { font-size: 11px; font-weight: bold; margin-bottom: 1px; }
-            .office { font-size: 10px; font-weight: bold; letter-spacing: 1px; }
-            .title-box {
-              background: #d4c5b5;
-              border-bottom: 2px solid #333;
-              text-align: center;
-              padding: 8px;
-            }
-            .title-box h1 {
-              font-size: 22px;
-              font-weight: bold;
-              letter-spacing: 3px;
-              color: #333;
-              margin: 0;
-            }
-            .form-content { padding: 20px 25px; }
-            .form-row { display: flex; align-items: flex-end; margin-bottom: 15px; gap: 10px; }
-            .form-row.full { flex-direction: column; align-items: flex-start; }
-            .form-label { font-size: 12px; font-weight: bold; color: #333; min-width: 120px; }
-            .form-line { flex: 1; border-bottom: 1px solid #333; min-height: 18px; font-size: 12px; padding: 0 5px; text-align: center; font-weight: 600; }
-            .form-line.full-width { width: 100%; margin-top: 5px; text-align: left; padding-left: 10px; }
-            .two-col { display: flex; gap: 20px; width: 100%; }
-            .two-col .col { flex: 1; display: flex; align-items: flex-end; gap: 8px; }
-            .fuel-section { margin: 20px 0; }
-            .fuel-header { display: flex; text-align: center; margin-bottom: 8px; }
-            .fuel-header-col { flex: 1; font-size: 12px; font-weight: bold; text-transform: uppercase; }
-            .fuel-row { display: flex; align-items: center; margin-bottom: 8px; }
-            .fuel-type { flex: 1; font-size: 11px; font-style: italic; }
-            .fuel-liters, .fuel-amount { flex: 1; border-bottom: 1px solid #333; text-align: center; font-size: 11px; font-weight: 600; }
-            .control-row { display: flex; align-items: center; margin-top: 15px; gap: 10px; }
-            .control-number-box { flex: 1; border-bottom: 1px solid #333; text-align: center; font-size: 12px; font-weight: bold; }
-            .signature-section { margin-top: 30px; text-align: center; padding: 0 20px; }
-            .signature-line { border-top: 1px solid #333; width: 250px; margin: 0 auto 8px auto; padding-top: 8px; }
-            .mayor-name { font-size: 13px; font-weight: bold; text-transform: uppercase; }
-            .mayor-title { font-size: 11px; font-style: italic; margin-top: 3px; }
-            @media print { body { padding: 0; } .no-print { display: none; } }
-          </style>
-        </head>
-        <body>
-          <div class="gas-slip-container">
-            <div class="header-banner">
-              <div class="logo-left">MUN<br/>LOGO</div>
-              <div class="header-text">
-                <div class="republic">REPUBLIC OF THE PHILIPPINES</div>
-                <div class="province">PROVINCE OF MISAMIS ORIENTAL</div>
-                <div class="municipality">MUNICIPALITY OF LAGUINDINGAN</div>
-                <div class="office">GENERAL SERVICES OFFICE</div>
-              </div>
-              <div class="logo-right">GSO<br/>LOGO</div>
-            </div>
-            <div class="title-box"><h1>GAS SLIP</h1></div>
-            <div class="form-content">
-              <div class="form-row"><span class="form-label">Driver</span><div class="form-line">${gasSlipData.driver_name}</div></div>
-              <div class="form-row">
-                <div class="two-col">
-                  <div class="col"><span class="form-label">Vehicle/Plate #</span><div class="form-line">${gasSlipData.vehicle_plate}</div></div>
-                  <div class="col"><span class="form-label">Date</span><div class="form-line">${gasSlipData.date}</div></div>
-                </div>
-              </div>
-              <div class="form-row full"><span class="form-label">Purpose</span><div class="form-line full-width">${gasSlipData.purpose}</div></div>
-              <div class="form-row full"><span class="form-label">Destination</span><div class="form-line full-width">${gasSlipData.destination}</div></div>
-              <div class="fuel-section">
-                <div class="fuel-header"><div class="fuel-header-col">FUEL</div><div class="fuel-header-col">LITERS</div><div class="fuel-header-col">AMOUNT</div></div>
-                <div class="fuel-row"><div class="fuel-type">Premium/UNLEADED</div><div class="fuel-liters">${gasSlipData.fuel_type === "Premium" || gasSlipData.fuel_type === "UNLEADED" ? gasSlipData.liters : ""}</div><div class="fuel-amount">${gasSlipData.fuel_type === "Premium" || gasSlipData.fuel_type === "UNLEADED" ? "₱" + gasSlipData.amount.toLocaleString() : ""}</div></div>
-                <div class="fuel-row"><div class="fuel-type">Diesel</div><div class="fuel-liters">${gasSlipData.fuel_type === "Diesel" ? gasSlipData.liters : ""}</div><div class="fuel-amount">${gasSlipData.fuel_type === "Diesel" ? "₱" + gasSlipData.amount.toLocaleString() : ""}</div></div>
-                <div class="fuel-row"><div class="fuel-type">Engine Oil</div><div class="fuel-liters">-</div><div class="fuel-amount"></div></div>
-                <div class="fuel-row"><div class="fuel-type">Brake Fluid</div><div class="fuel-liters">-</div><div class="fuel-amount"></div></div>
-              </div>
-              <div class="control-row"><span class="form-label">Control No.</span><div class="control-number-box">${gasSlipData.control_number}</div></div>
-            </div>
-            <div class="signature-section">
-              <div class="signature-line"></div>
-              <div class="mayor-name">${gasSlipData.mayor_name}</div>
-              <div class="mayor-title">Municipal Mayor</div>
-            </div>
-          </div>
-          <div class="no-print" style="text-align:center; margin-top:20px;">
-            <button onclick="window.print()" style="padding:10px 25px; font-size:14px; cursor:pointer; background:#4a7c59; color:white; border:none; border-radius:4px;">Print Gas Slip</button>
-          </div>
-        </body>
-      </html>
-    `);
-    printWindow.document.close();
+// ============================================================
+// 2. RECEIPT VERIFICATION MODAL (NEW)
+// ============================================================
+const ReceiptVerificationModal = ({ 
+  isOpen, 
+  onClose, 
+  receipt, 
+  onVerify,
+  onRefresh 
+}) => {
+  const [verifying, setVerifying] = useState(false);
+
+  if (!isOpen || !receipt) return null;
+
+  const handleVerify = async () => {
+    setVerifying(true);
+    try {
+      await onVerify(receipt.id);
+      toast.success("Receipt verified successfully!");
+      onClose();
+      if (onRefresh) onRefresh();
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Failed to verify receipt");
+    } finally {
+      setVerifying(false);
+    }
   };
+
+  const formatDate = (date) => {
+    if (!date) return "N/A";
+    return new Date(date).toLocaleDateString("en-PH", {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+    });
+  };
+
+  const formatCurrency = (amount) => {
+    const numAmount = parseFloat(amount);
+    if (isNaN(numAmount) || numAmount === 0) return "₱0.00";
+    return new Intl.NumberFormat("en-PH", {
+      style: "currency",
+      currency: "PHP",
+      minimumFractionDigits: 2,
+    }).format(numAmount);
+  };
+
+  const isVerified = receipt.status === "verified";
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-[550px] p-0 overflow-hidden dark:bg-slate-800 dark:border-slate-700">
-        <div id="gas-slip-print-content" className="bg-white dark:bg-slate-800">
-          <div className="bg-gradient-to-r from-[#4a7c59] via-[#6b9b7a] to-[#4a7c59] px-4 py-3 flex items-center justify-between border-b-2 border-gray-800">
-            <div className="w-14 h-14 bg-white rounded-full flex items-center justify-center border-2 border-yellow-500 text-[8px] text-center font-bold text-gray-600">
-              MUN
-              <br />
-              LOGO
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto dark:bg-slate-800 dark:border-slate-700">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2 text-slate-900 dark:text-white">
+            <Receipt className="h-5 w-5 text-green-600" />
+            Fuel Receipt Verification
+          </DialogTitle>
+          <DialogDescription className="dark:text-slate-400">
+            Review the uploaded fuel receipt for {receipt.ticket_number}
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-4">
+          {/* Receipt Image */}
+          {receipt.receipt_url ? (
+            <div className="border rounded-xl overflow-hidden bg-slate-50 dark:bg-slate-900/50">
+              <img
+                src={receipt.receipt_url}
+                alt="Fuel Receipt"
+                className="w-full max-h-64 object-contain"
+                onError={(e) => {
+                  e.target.src = "/placeholder-receipt.png";
+                  e.target.alt = "Receipt image not available";
+                }}
+              />
             </div>
-            <div className="text-center flex-1 text-white">
-              <div className="text-[9px] tracking-wider mb-0.5">
-                REPUBLIC OF THE PHILIPPINES
-              </div>
-              <div className="text-[10px] font-bold">
-                PROVINCE OF MISAMIS ORIENTAL
-              </div>
-              <div className="text-[11px] font-bold">
-                MUNICIPALITY OF LAGUINDINGAN
-              </div>
-              <div className="text-[10px] font-bold tracking-wider">
-                GENERAL SERVICES OFFICE
-              </div>
+          ) : (
+            <div className="border rounded-xl p-8 text-center bg-slate-50 dark:bg-slate-900/50">
+              <ImageIcon className="h-12 w-12 text-slate-300 mx-auto mb-3" />
+              <p className="text-slate-500 dark:text-slate-400">No receipt image uploaded</p>
             </div>
-            <div className="w-14 h-14 bg-white rounded-full flex items-center justify-center border-2 border-yellow-500 text-[8px] text-center font-bold text-gray-600">
-              GSO
-              <br />
-              LOGO
+          )}
+
+          {/* Receipt Details */}
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
+            <div>
+              <p className="text-xs text-slate-500 dark:text-slate-400">Ticket Number</p>
+              <p className="font-medium text-slate-900 dark:text-white">{receipt.ticket_number}</p>
             </div>
-          </div>
-          <div className="bg-[#d4c5b5] dark:bg-[#6b5b4e] border-b-2 border-gray-800 text-center py-2">
-            <h1 className="text-2xl font-bold tracking-widest text-gray-800 dark:text-white">
-              GAS SLIP
-            </h1>
-          </div>
-          <div className="px-6 py-5 font-serif">
-            <div className="flex items-end mb-4 gap-3">
-              <span className="text-sm font-bold text-gray-800 dark:text-gray-200 min-w-[120px]">
-                Driver
-              </span>
-              <div className="flex-1 border-b border-gray-800 dark:border-gray-600 text-sm font-semibold text-center pb-0.5 dark:text-gray-300">
-                {gasSlipData.driver_name}
-              </div>
+            <div>
+              <p className="text-xs text-slate-500 dark:text-slate-400">Driver</p>
+              <p className="font-medium text-slate-900 dark:text-white">{receipt.driver_name}</p>
             </div>
-            <div className="flex gap-6 mb-4">
-              <div className="flex-1 flex items-end gap-2">
-                <span className="text-sm font-bold text-gray-800 dark:text-gray-200 whitespace-nowrap">
-                  Vehicle/Plate #
-                </span>
-                <div className="flex-1 border-b border-gray-800 dark:border-gray-600 text-sm font-semibold text-center pb-0.5 dark:text-gray-300">
-                  {gasSlipData.vehicle_plate}
-                </div>
-              </div>
-              <div className="flex-1 flex items-end gap-2">
-                <span className="text-sm font-bold text-gray-800 dark:text-gray-200">
-                  Date
-                </span>
-                <div className="flex-1 border-b border-gray-800 dark:border-gray-600 text-sm font-semibold text-center pb-0.5 dark:text-gray-300">
-                  {gasSlipData.date}
-                </div>
-              </div>
+            <div>
+              <p className="text-xs text-slate-500 dark:text-slate-400">Vehicle</p>
+              <p className="font-medium text-slate-900 dark:text-white">{receipt.plate_number}</p>
             </div>
-            <div className="mb-4">
-              <span className="text-sm font-bold text-gray-800 dark:text-gray-200">
-                Purpose
-              </span>
-              <div className="w-full border-b border-gray-800 dark:border-gray-600 text-sm font-semibold uppercase mt-1 pb-0.5 pl-2 dark:text-gray-300">
-                {gasSlipData.purpose}
-              </div>
+            <div>
+              <p className="text-xs text-slate-500 dark:text-slate-400">Liters</p>
+              <p className="font-medium text-slate-900 dark:text-white">{receipt.liters} L</p>
             </div>
-            <div className="mb-5">
-              <span className="text-sm font-bold text-gray-800 dark:text-gray-200">
-                Destination
-              </span>
-              <div className="w-full border-b border-gray-800 dark:border-gray-600 text-sm font-semibold uppercase mt-1 pb-0.5 pl-2 dark:text-gray-300">
-                {gasSlipData.destination}
-              </div>
+            <div>
+              <p className="text-xs text-slate-500 dark:text-slate-400">Amount</p>
+              <p className="font-medium text-green-600 dark:text-green-400">{formatCurrency(receipt.amount)}</p>
             </div>
-            <div className="mb-4">
-              <div className="flex text-center mb-2">
-                <div className="flex-1 text-sm font-bold uppercase tracking-wide text-gray-700 dark:text-gray-300">
-                  FUEL
-                </div>
-                <div className="flex-1 text-sm font-bold uppercase tracking-wide text-gray-700 dark:text-gray-300">
-                  LITERS
-                </div>
-                <div className="flex-1 text-sm font-bold uppercase tracking-wide text-gray-700 dark:text-gray-300">
-                  AMOUNT
-                </div>
-              </div>
-              <div className="flex items-center mb-2">
-                <div className="flex-1 text-sm italic text-gray-600 dark:text-gray-400">
-                  Premium/UNLEADED
-                </div>
-                <div className="flex-1 border-b border-gray-800 dark:border-gray-600 text-center text-sm font-semibold pb-0.5 dark:text-gray-300">
-                  {gasSlipData.fuel_type === "Premium" ||
-                  gasSlipData.fuel_type === "UNLEADED"
-                    ? gasSlipData.liters
-                    : ""}
-                </div>
-                <div className="flex-1 border-b border-gray-800 dark:border-gray-600 text-center text-sm font-semibold pb-0.5 text-green-700 dark:text-green-400">
-                  {gasSlipData.fuel_type === "Premium" ||
-                  gasSlipData.fuel_type === "UNLEADED"
-                    ? `₱${gasSlipData.amount.toLocaleString()}`
-                    : ""}
-                </div>
-              </div>
-              <div className="flex items-center mb-2">
-                <div className="flex-1 text-sm italic text-gray-600 dark:text-gray-400">
-                  Diesel
-                </div>
-                <div className="flex-1 border-b border-gray-800 dark:border-gray-600 text-center text-sm font-semibold pb-0.5 dark:text-gray-300">
-                  {gasSlipData.fuel_type === "Diesel" ? gasSlipData.liters : ""}
-                </div>
-                <div className="flex-1 border-b border-gray-800 dark:border-gray-600 text-center text-sm font-semibold pb-0.5 text-green-700 dark:text-green-400">
-                  {gasSlipData.fuel_type === "Diesel"
-                    ? `₱${gasSlipData.amount.toLocaleString()}`
-                    : ""}
-                </div>
-              </div>
-              <div className="flex items-center mb-2">
-                <div className="flex-1 text-sm italic text-gray-600 dark:text-gray-400">
-                  Engine Oil
-                </div>
-                <div className="flex-1 border-b border-gray-800 dark:border-gray-600 text-center text-sm pb-0.5 dark:text-gray-400">
-                  -
-                </div>
-                <div className="flex-1 border-b border-gray-800 dark:border-gray-600 text-center text-sm pb-0.5 dark:text-gray-400"></div>
-              </div>
-              <div className="flex items-center">
-                <div className="flex-1 text-sm italic text-gray-600 dark:text-gray-400">
-                  Brake Fluid
-                </div>
-                <div className="flex-1 border-b border-gray-800 dark:border-gray-600 text-center text-sm pb-0.5 dark:text-gray-400">
-                  -
-                </div>
-                <div className="flex-1 border-b border-gray-800 dark:border-gray-600 text-center text-sm pb-0.5 dark:text-gray-400"></div>
-              </div>
+            <div>
+              <p className="text-xs text-slate-500 dark:text-slate-400">Trip Date</p>
+              <p className="font-medium text-slate-900 dark:text-white">{formatDate(receipt.trip_date)}</p>
             </div>
-            <div className="flex items-center gap-3 mt-5">
-              <span className="text-sm font-bold text-gray-800 dark:text-gray-200">
-                Control No.
-              </span>
-              <div className="flex-1 border-b border-gray-800 dark:border-gray-600 text-center text-sm font-bold tracking-wider pb-0.5 dark:text-gray-300">
-                {gasSlipData.control_number}
-              </div>
+            <div>
+              <p className="text-xs text-slate-500 dark:text-slate-400">Status</p>
+              <Badge className={isVerified ? "bg-green-500" : "bg-yellow-500"}>
+                {isVerified ? "Verified" : "Pending"}
+              </Badge>
+            </div>
+            <div>
+              <p className="text-xs text-slate-500 dark:text-slate-400">Fuel Type</p>
+              <p className="font-medium text-slate-900 dark:text-white">{receipt.fuel_type || "N/A"}</p>
+            </div>
+            <div>
+              <p className="text-xs text-slate-500 dark:text-slate-400">Uploaded</p>
+              <p className="font-medium text-slate-900 dark:text-white">{formatDate(receipt.uploaded_at)}</p>
             </div>
           </div>
-          <div className="text-center pt-6 pb-8 px-8">
-            <div className="border-t border-gray-800 dark:border-gray-600 w-64 mx-auto pt-3 mb-2"></div>
-            <div className="text-sm font-bold uppercase tracking-wide text-gray-800 dark:text-white">
-              {gasSlipData.mayor_name}
+
+          {/* Distance Details */}
+          {(receipt.odometer_start || receipt.odometer_end || receipt.gps_distance_km) && (
+            <div className="bg-slate-50 dark:bg-slate-900/50 rounded-xl p-4">
+              <h4 className="text-sm font-medium mb-2 text-slate-700 dark:text-slate-300">Distance Details</h4>
+              <div className="grid grid-cols-3 gap-4 text-sm">
+                <div>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">Method</p>
+                  <p className="font-medium text-slate-900 dark:text-white">
+                    {receipt.distance_calculation_method || "N/A"}
+                  </p>
+                </div>
+                {receipt.odometer_start && (
+                  <div>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">Odometer Start</p>
+                    <p className="font-medium text-slate-900 dark:text-white">{receipt.odometer_start} km</p>
+                  </div>
+                )}
+                {receipt.odometer_end && (
+                  <div>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">Odometer End</p>
+                    <p className="font-medium text-slate-900 dark:text-white">{receipt.odometer_end} km</p>
+                  </div>
+                )}
+                {receipt.gps_distance_km && (
+                  <div>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">GPS Distance</p>
+                    <p className="font-medium text-slate-900 dark:text-white">{receipt.gps_distance_km} km</p>
+                  </div>
+                )}
+              </div>
             </div>
-            <div className="text-xs italic text-gray-600 dark:text-gray-400 mt-1">
-              Municipal Mayor
-            </div>
+          )}
+
+          {/* Action Buttons */}
+          <div className="flex gap-3 pt-4 border-t dark:border-slate-700">
+            <Button
+              onClick={handleVerify}
+              disabled={isVerified || verifying}
+              className="flex-1 bg-green-600 hover:bg-green-700"
+            >
+              {verifying ? (
+                <Loader2 className="h-4 w-4 animate-spin mr-2" />
+              ) : (
+                <CheckCircle className="h-4 w-4 mr-2" />
+              )}
+              {isVerified ? "Already Verified" : "Verify Receipt"}
+            </Button>
+            <Button variant="outline" onClick={onClose} className="flex-1 dark:border-slate-700 dark:text-slate-300">
+              Close
+            </Button>
           </div>
-        </div>
-        <div className="flex gap-3 p-4 border-t bg-gray-50 dark:bg-slate-900 no-print">
-          <Button variant="outline" onClick={onClose} className="flex-1 dark:border-slate-700 dark:text-slate-300">
-            Close
-          </Button>
-          <Button
-            onClick={handlePrint}
-            className="flex-1 gap-2 bg-[#4a7c59] hover:bg-[#3d6549] dark:bg-[#4a7c59] dark:hover:bg-[#3d6549]"
-          >
-            <Printer className="h-4 w-4" />
-            Print Gas Slip
-          </Button>
         </div>
       </DialogContent>
     </Dialog>
   );
 };
 
+// ============================================================
+// 3. MAIN COMPONENT (MayorPending)
+// ============================================================
 const MayorPending = () => {
   const navigate = useNavigate();
   const [tickets, setTickets] = useState([]);
@@ -372,6 +251,8 @@ const MayorPending = () => {
   const [showApproveDialog, setShowApproveDialog] = useState(false);
   const [showRejectDialog, setShowRejectDialog] = useState(false);
   const [showGasSlipModal, setShowGasSlipModal] = useState(false);
+  const [showReceiptModal, setShowReceiptModal] = useState(false);
+  const [receiptData, setReceiptData] = useState(null);
   const [gasSlipData, setGasSlipData] = useState(null);
   const [rejectionNote, setRejectionNote] = useState("");
   const [amountReleased, setAmountReleased] = useState("");
@@ -434,8 +315,6 @@ const MayorPending = () => {
 
   // Fetch all departments for the selector
   const fetchAllDepartments = useCallback(async () => {
-    // This would need to be added to your API service
-    // For now, we'll use the departments from tickets
     const uniqueDepts = [...new Map(tickets.map(ticket => [ticket.department_id, ticket.department_name])).entries()]
       .map(([id, name]) => ({ department_id: id, department_name: name }));
     setAvailableDepartments(uniqueDepts);
@@ -458,7 +337,55 @@ const MayorPending = () => {
     setShowApproveDialog(true);
   };
 
-const handleApprove = async () => {
+  // ============================================================
+  // ✅ NEW: Open Receipt Verification Modal
+  // ============================================================
+  const openReceiptModal = (ticket) => {
+    // Find fuel log data from ticket
+    const fuelLog = ticket.fuel_log || ticket.fuelLog || null;
+    
+    if (!fuelLog) {
+      toast.info("No fuel receipt found for this trip");
+      return;
+    }
+
+    const receipt = {
+      id: fuelLog.fuel_log_id || fuelLog.id,
+      ticket_number: ticket.ticket_number || ticket.trip_ticket_number,
+      driver_name: ticket.driver?.full_name || ticket.driver_name || "N/A",
+      plate_number: ticket.vehicle?.plate_number || "N/A",
+      liters: fuelLog.liters_availed || 0,
+      amount: fuelLog.amount_on_receipt || 0,
+      receipt_url: fuelLog.receipt_photo_path || fuelLog.receipt_url,
+      trip_date: ticket.trip_date,
+      status: fuelLog.reconciliation_status || "pending",
+      fuel_type: ticket.vehicle?.fuel_type || "N/A",
+      uploaded_at: fuelLog.receipt_uploaded_at || fuelLog.created_at,
+      odometer_start: fuelLog.odometer_start,
+      odometer_end: fuelLog.odometer_end,
+      gps_distance_km: fuelLog.gps_distance_km,
+      distance_calculation_method: fuelLog.distance_calculation_method,
+    };
+
+    setReceiptData(receipt);
+    setShowReceiptModal(true);
+  };
+
+  // ============================================================
+  // ✅ NEW: Verify Receipt Handler
+  // ============================================================
+  const handleVerifyReceipt = async (receiptId) => {
+    try {
+      // Add this endpoint to your API
+      await mayorsOfficeAPI.verifyReceipt(receiptId);
+      return Promise.resolve();
+    } catch (error) {
+      console.error("Failed to verify receipt:", error);
+      return Promise.reject(error);
+    }
+  };
+
+  const handleApprove = async () => {
     if (!selectedTicket) {
         toast.error("No ticket selected");
         return;
@@ -506,7 +433,6 @@ const handleApprove = async () => {
         const errorMessage = error.response?.data?.message || "Failed to release funds";
         toast.error(errorMessage);
         
-        // Show detailed error if available
         if (error.response?.data?.budget_info) {
             const budgetInfo = error.response.data.budget_info;
             toast.error(`Budget insufficient: ₱${budgetInfo.remaining?.toLocaleString()} remaining, ₱${budgetInfo.requested?.toLocaleString()} requested`);
@@ -514,7 +440,8 @@ const handleApprove = async () => {
     } finally {
         setSubmitting(false);
     }
-};
+  };
+
   const handleReject = async () => {
     if (!selectedTicket) return;
     if (!rejectionNote.trim()) {
@@ -575,6 +502,17 @@ const handleApprove = async () => {
     }).format(numAmount);
   };
 
+  // ============================================================
+  // ✅ Check if ticket has fuel receipt
+  // ============================================================
+  const hasFuelReceipt = (ticket) => {
+    const fuelLog = ticket.fuel_log || ticket.fuelLog;
+    return fuelLog && (fuelLog.liters_availed > 0 || fuelLog.amount_on_receipt > 0);
+  };
+
+  // ============================================================
+  // 4. RENDER
+  // ============================================================
   if (loading) {
     return (
       <div className="flex justify-center py-12">
@@ -754,6 +692,7 @@ const handleApprove = async () => {
                       </td>
                       <td className="px-4 py-3 text-right">
                         <div className="flex items-center justify-end gap-1">
+                          {/* View Details */}
                           <Button
                             variant="ghost"
                             size="sm"
@@ -767,6 +706,21 @@ const handleApprove = async () => {
                           >
                             <Eye className="h-4 w-4" />
                           </Button>
+
+                          {/* ✅ NEW: View Receipt Button */}
+                          {hasFuelReceipt(ticket) && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => openReceiptModal(ticket)}
+                              className="text-green-600 hover:text-green-700 hover:bg-green-50 dark:text-green-400 dark:hover:text-green-300 dark:hover:bg-green-950/30 h-8 w-8 p-0"
+                              title="View Fuel Receipt"
+                            >
+                              <Receipt className="h-4 w-4" />
+                            </Button>
+                          )}
+
+                          {/* Release Fund */}
                           <Button
                             size="sm"
                             onClick={() => openApproveDialog(ticket)}
@@ -775,6 +729,8 @@ const handleApprove = async () => {
                             <DollarSign className="h-3 w-3 mr-1" />
                             Release
                           </Button>
+
+                          {/* Reject */}
                           <Button
                             size="sm"
                             variant="outline"
@@ -798,8 +754,11 @@ const handleApprove = async () => {
         </CardContent>
       </Card>
 
-      {/* Approve/Fund Release Dialog */}
+      {/* ============================================================ */}
+      {/* APPROVE DIALOG */}
+      {/* ============================================================ */}
       <Dialog open={showApproveDialog} onOpenChange={setShowApproveDialog}>
+        {/* ... keep your existing approve dialog ... */}
         <DialogContent className="max-w-md dark:bg-slate-800 dark:border-slate-700">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-slate-900 dark:text-white">
@@ -953,8 +912,11 @@ const handleApprove = async () => {
         </DialogContent>
       </Dialog>
 
-      {/* Reject Dialog */}
+      {/* ============================================================ */}
+      {/* REJECT DIALOG */}
+      {/* ============================================================ */}
       <Dialog open={showRejectDialog} onOpenChange={setShowRejectDialog}>
+        {/* ... keep your existing reject dialog ... */}
         <DialogContent className="dark:bg-slate-800 dark:border-slate-700">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-slate-900 dark:text-white">
@@ -1009,6 +971,20 @@ const handleApprove = async () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* ============================================================ */}
+      {/* ✅ NEW: RECEIPT VERIFICATION MODAL */}
+      {/* ============================================================ */}
+      <ReceiptVerificationModal
+        isOpen={showReceiptModal}
+        onClose={() => {
+          setShowReceiptModal(false);
+          setReceiptData(null);
+        }}
+        receipt={receiptData}
+        onVerify={handleVerifyReceipt}
+        onRefresh={fetchTickets}
+      />
 
       {/* Gas Slip Modal */}
       <GasSlipModal

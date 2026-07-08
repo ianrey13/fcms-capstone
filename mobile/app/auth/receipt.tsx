@@ -1,4 +1,5 @@
-// app/auth/receipt.tsx - Professional Receipt Upload Screen
+// app/auth/receipt.tsx - Fixed with correct FileSystem API
+
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { 
   View, 
@@ -18,7 +19,7 @@ import {
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { driverAPI } from '../../services/api';
@@ -75,6 +76,10 @@ export default function ReceiptScreen() {
     ]).start();
   };
 
+  // ============================================
+  // PERMISSIONS
+  // ============================================
+
   const requestPermissions = async () => {
     const { status: cameraStatus } = await ImagePicker.requestCameraPermissionsAsync();
     const { status: mediaStatus } = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -92,6 +97,10 @@ export default function ReceiptScreen() {
     }
     return true;
   };
+
+  // ============================================
+  // IMAGE PICKING
+  // ============================================
 
   const processImageAsset = (asset: ImagePicker.ImagePickerAsset) => {
     setImage(asset.uri);
@@ -156,26 +165,36 @@ export default function ReceiptScreen() {
         { 
           text: 'Take Photo', 
           onPress: takePhoto,
-          icon: Platform.OS === 'ios' ? 'camera' : undefined 
         },
         { 
           text: 'Choose from Gallery', 
           onPress: pickFromGallery,
-          icon: Platform.OS === 'ios' ? 'photo' : undefined 
         },
         { text: 'Cancel', style: 'cancel' },
       ]
     );
   }, []);
 
-  const validateImage = async (uri: string): Promise<{ valid: boolean; sizeMB: number }> => {
+  // ============================================
+  // ✅ FIXED: FILE VALIDATION
+  // ============================================
+
+  const validateImage = async (uri: string): Promise<{ valid: boolean; sizeMB: number; size?: number }> => {
     try {
+      // ✅ Use FileSystem.getInfoAsync instead of new File()
       const fileInfo = await FileSystem.getInfoAsync(uri);
+      
+      console.log('File info:', fileInfo);
+      
       if (!fileInfo.exists) {
+        Alert.alert('Error', 'File does not exist. Please select another image.');
         return { valid: false, sizeMB: 0 };
       }
-      const fileSize = (fileInfo as any).size || 0;
+      
+      const fileSize = fileInfo.size || 0;
       const fileSizeMB = fileSize / (1024 * 1024);
+
+      console.log(`File size: ${fileSizeMB.toFixed(2)} MB`);
 
       if (fileSizeMB > 5) {
         Alert.alert(
@@ -183,15 +202,20 @@ export default function ReceiptScreen() {
           `Selected image is ${fileSizeMB.toFixed(1)}MB. Please select an image smaller than 5MB.`,
           [{ text: 'OK', onPress: resetImage }]
         );
-        return { valid: false, sizeMB: fileSizeMB };
+        return { valid: false, sizeMB: fileSizeMB, size: fileSize };
       }
 
-      return { valid: true, sizeMB: fileSizeMB };
+      return { valid: true, sizeMB: fileSizeMB, size: fileSize };
     } catch (error) {
       console.error('File validation error:', error);
+      Alert.alert('Error', 'Failed to validate image. Please try again.');
       return { valid: false, sizeMB: 0 };
     }
   };
+
+  // ============================================
+  // UPLOAD
+  // ============================================
 
   const uploadReceipt = async () => {
     if (!image) {
@@ -220,14 +244,22 @@ export default function ReceiptScreen() {
     }).start();
 
     try {
+      // ✅ Get file info using FileSystem
+      const fileInfo = await FileSystem.getInfoAsync(image);
+      
       const formData = new FormData();
       const filename = `receipt_${tripId}_${Date.now()}.jpg`;
 
+      // ✅ Properly append file for React Native
       formData.append('receipt', {
         uri: image,
         name: filename,
         type: 'image/jpeg',
       } as any);
+
+      // Add liters and amount if provided (you can add inputs for these)
+      // formData.append('liters_availed', liters);
+      // formData.append('amount_on_receipt', amount);
 
       const response = await driverAPI.uploadReceipt(tripId, formData);
 
@@ -283,6 +315,10 @@ export default function ReceiptScreen() {
     const mb = bytes / (1024 * 1024);
     return mb > 1 ? `${mb.toFixed(1)} MB` : `${(bytes / 1024).toFixed(0)} KB`;
   };
+
+  // ============================================
+  // RENDER
+  // ============================================
 
   return (
     <>
@@ -406,26 +442,6 @@ export default function ReceiptScreen() {
                     ))}
                   </View>
                 </View>
-
-                {/* Tips Card */}
-                {/* <View style={styles.tipsCard}>
-                  <View style={styles.tipsHeader}>
-                    <Ionicons name="bulb-outline" size={16} color="#f59e0b" />
-                    <Text style={styles.tipsTitle}>Tips for Best Results</Text>
-                  </View>
-                  <View style={styles.tipsList}>
-                    {[
-                      'Hold the receipt flat against a dark surface',
-                      'Avoid shadows and glare on the receipt',
-                      'Make sure all text is readable and in focus',
-                    ].map((tip, index) => (
-                      <View key={index} style={styles.tipItem}>
-                        <View style={styles.tipDot} />
-                        <Text style={styles.tipText}>{tip}</Text>
-                      </View>
-                    ))}
-                  </View>
-                </View> */}
               </Animated.View>
             ) : (
               <Animated.View style={{ opacity: fadeAnim }}>
@@ -800,49 +816,6 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     color: '#475569',
     lineHeight: 20,
-  },
-
-  // Tips Card
-  tipsCard: {
-    backgroundColor: '#fffbeb',
-    borderRadius: 16,
-    padding: 16,
-    marginTop: 16,
-    borderWidth: 1,
-    borderColor: '#fef3c7',
-  },
-  tipsHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginBottom: 10,
-  },
-  tipsTitle: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#92400e',
-  },
-  tipsList: {
-    gap: 8,
-  },
-  tipItem: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 8,
-  },
-  tipDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: '#f59e0b',
-    marginTop: 6,
-  },
-  tipText: {
-    flex: 1,
-    fontSize: 13,
-    fontWeight: '500',
-    color: '#78350f',
-    lineHeight: 18,
   },
 
   // Preview Card

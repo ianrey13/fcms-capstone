@@ -1,5 +1,5 @@
 // app/auth/(tabs)/index.tsx
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { 
   View, 
   Text, 
@@ -18,11 +18,17 @@ import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { driverAPI } from '../../../services/api';
-import { storage } from '../../../services/storage';
+import { storage } from '../../../utils/storage';
+import EventEmitter from '../../../utils/eventEmitter';
 import GasSlipModal from '../components/GasSlipModal';
-import API_URL from '../../../services/api';
+// ✅ ADD TOAST
+import Toast from 'react-native-toast-message';
 
 const { width } = Dimensions.get('window');
+
+// ============================================
+// TYPES
+// ============================================
 
 interface Trip {
   trip_ticket_id: number;
@@ -49,6 +55,10 @@ type StatusConfig = {
   borderColor: string;
 };
 
+// ============================================
+// COMPONENT
+// ============================================
+
 export default function DriverDashboard() {
   const [trips, setTrips] = useState<Trip[]>([]);
   const [loading, setLoading] = useState(true);
@@ -58,12 +68,18 @@ export default function DriverDashboard() {
   const [showGasSlipModal, setShowGasSlipModal] = useState(false);
   const [acknowledging, setAcknowledging] = useState<number | null>(null);
   const [activeTab, setActiveTab] = useState<'all' | 'active' | 'completed'>('all');
+  const [lastRefreshTime, setLastRefreshTime] = useState<Date>(new Date());
 
   const fadeAnim = useState(new Animated.Value(0))[0];
   const slideAnim = useState(new Animated.Value(20))[0];
   const scaleAnim = useState(new Animated.Value(0.95))[0];
-
+  
   const router = useRouter();
+  const intervalRef = useRef<NodeJS.Timeout | null>(null);
+
+  // ============================================
+  // LIFE CYCLE
+  // ============================================
 
   useEffect(() => {
     loadUser();
@@ -74,14 +90,113 @@ export default function DriverDashboard() {
       Animated.timing(slideAnim, { toValue: 0, duration: 600, useNativeDriver: true }),
       Animated.spring(scaleAnim, { toValue: 1, friction: 8, tension: 40, useNativeDriver: true }),
     ]).start();
+
+    // ============================================
+    // ✅ EVENT LISTENERS WITH TOAST
+    // ============================================
+
+    const handleNewNotification = (data: any) => {
+      console.log('📨 Dashboard: New notification event received!', data?.notification_type);
+      
+      // Show toast for general notifications
+      if (data?.message) {
+        Toast.show({
+          type: 'default',
+          text1: '📨 New Notification',
+          text2: data.message,
+        });
+      }
+      
+      fetchTrips();
+    };
+
+   const handleFundRelease = (data: any) => {
+  console.log('💰 Dashboard: Fund release event received!', data);
+  console.log('💰 Showing toast for fund release...');
+  
+  // ✅ SHOW TOAST
+  Toast.show({
+    type: 'fundRelease',
+    text1: '💰 Fund Released!',
+    text2: data?.message || 'Trip funds have been released. Start your trip now!',
+    props: {
+      onPress: () => {
+        console.log('👆 Toast pressed - navigating to active trip');
+        router.push('/auth/trips/active');
+      },
+    },
+  });
+  
+  // Refresh trips after showing toast
+  setTimeout(() => {
+    fetchTrips();
+  }, 500);
+};
+
+    const handleTripAssigned = (data: any) => {
+      console.log('🚗 Dashboard: Trip assigned event received!', data);
+      
+      // ✅ SHOW TRIP ASSIGNMENT TOAST
+      Toast.show({
+        type: 'tripAssigned',
+        text1: '🚗 New Trip Assigned!',
+        text2: data?.message || 'A new trip has been assigned to you.',
+        props: {
+          onPress: () => {
+            router.push('/auth/trips/active');
+          },
+        },
+      });
+      
+      fetchTrips();
+    };
+
+    console.log('📢 Dashboard: Registering event listeners...');
+    EventEmitter.on('new-notification', handleNewNotification);
+    EventEmitter.on('fund_released', handleFundRelease);
+    EventEmitter.on('trip_assigned', handleTripAssigned);
+
+    // ============================================
+    // ✅ POLLING FALLBACK (Refresh every 30 seconds)
+    // ============================================
+    
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current);
+    }
+    
+    intervalRef.current = setInterval(() => {
+      console.log('🔄 Dashboard: Auto-refresh polling...');
+      fetchTrips();
+    }, 30000);
+
+    // ============================================
+    // CLEANUP
+    // ============================================
+
+    return () => {
+      console.log('🧹 Dashboard: Cleaning up...');
+      EventEmitter.off('new-notification', handleNewNotification);
+      EventEmitter.off('fund_released', handleFundRelease);
+      EventEmitter.off('trip_assigned', handleTripAssigned);
+      
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+        intervalRef.current = null;
+      }
+    };
   }, []);
 
   useFocusEffect(
     useCallback(() => {
+      console.log('📱 Dashboard focused - refreshing...');
       fetchTrips();
       loadUser();
     }, [])
   );
+
+  // ============================================
+  // DATA FETCHING
+  // ============================================
 
   const loadUser = async () => {
     try {
@@ -106,12 +221,14 @@ export default function DriverDashboard() {
 
   const fetchTrips = async () => {
     try {
+      console.log('📤 Fetching trips...');
       const response = await driverAPI.getTrips();
       const tripsData = response.data?.data || [];
+      console.log('📥 Trips fetched:', tripsData.length);
       setTrips(tripsData);
+      setLastRefreshTime(new Date());
     } catch (error: any) {
       console.error('Failed to fetch trips:', error);
-      Alert.alert('Connection Error', 'Unable to load your trips. Please check your connection and try again.');
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -124,90 +241,69 @@ export default function DriverDashboard() {
     loadUser();
   };
 
-  // Replace your handleAcknowledge function with this:
+  // ============================================
+  // ACTIONS
+  // ============================================
 
-const handleAcknowledge = async (tripId: number, tripNumber: string) => {
-  // ✅ Use browser confirm for web, Alert for mobile
-  const isWeb = Platform.OS === 'web';
-
-  const userConfirmed = isWeb 
-    ? window.confirm(`Confirm acknowledgment for trip #${tripNumber}?`)
-    : await new Promise((resolve) => {
-        Alert.alert(
-          'Acknowledge Gas Slip',
-          `Confirm acknowledgment for trip #${tripNumber}?`,
-          [
-            { text: 'Cancel', onPress: () => resolve(false) },
-            { text: 'Receive Amount', onPress: () => resolve(true) },
-          ]
-        );
-      });
-
-  if (!userConfirmed) return;
-
-  setAcknowledging(tripId);
-  try {
-    const response = await driverAPI.acknowledgeFunds(tripId);
-    if (response.data.success) {
-      await fetchTrips();
-      router.push(`/auth/trips/active?id=${tripId}`);
-    }
-  } catch (error) {
-    console.error('Error:', error);
-    Alert.alert('Error', 'Failed to acknowledge gas slip');
-  } finally {
-    setAcknowledging(null);
-  }
-};
- const handleViewGasSlip = async (tripId: number) => {
-  try {
-    setLoading(true);
-    const response = await driverAPI.getGasSlip(tripId);
-    const gasSlipData = response.data?.data;
-    
-    console.log('Setting gasSlip data:', gasSlipData);
-    console.log('Vehicle data:', gasSlipData?.vehicle);
-    
-    // ✅ Set the data directly
-    setSelectedGasSlip(gasSlipData);
-    setShowGasSlipModal(true);
-  } catch (error) {
-    console.error('Failed to fetch gas slip:', error);
-    Alert.alert('Error', 'Failed to load gas slip details');
-  } finally {
-    setLoading(false);
-  }
-};
-
-
-  const getStatusConfig = (status: string): StatusConfig => {
-    const configs: Record<string, StatusConfig> = {
-      funds_issued: {
-        bg: '#fef3c7', bgLight: '#fffbeb', text: '#d97706', label: 'Awaiting Acknowledgment',
-        icon: 'document-text-outline', actionLabel: 'Receive Amount', actionGradient: ['#059669', '#047857'], borderColor: '#fbbf24',
-      },
-      acknowledged: {
-        bg: '#dbeafe', bgLight: '#eff6ff', text: '#2563eb', label: 'Ready to Start',
-        icon: 'checkmark-circle-outline', actionLabel: 'Start Trip', actionGradient: ['#2563eb', '#1d4ed8'], borderColor: '#60a5fa',
-      },
-      in_transit: {
-        bg: '#d1fae5', bgLight: '#ecfdf5', text: '#059669', label: 'In Transit',
-        icon: 'navigate-outline', actionLabel: 'Continue Trip', actionGradient: ['#ea580c', '#c2410c'], borderColor: '#34d399',
-      },
-      completed: {
-        bg: '#f3f4f6', bgLight: '#f9fafb', text: '#4b5563', label: 'Completed',
-        icon: 'flag-outline', actionGradient: ['#6b7280', '#4b5563'], borderColor: '#d1d5db',
-      },
-      closed: {
-        bg: '#f3f4f6', bgLight: '#f9fafb', text: '#9ca3af', label: 'Closed',
-        icon: 'lock-closed-outline', actionGradient: ['#6b7280', '#4b5563'], borderColor: '#e5e7eb',
-      },
-    };
-    return configs[status] || { 
-      bg: '#f3f4f6', bgLight: '#f9fafb', text: '#4b5563', label: status, 
-      icon: 'document-outline', actionGradient: ['#6b7280', '#4b5563'], borderColor: '#d1d5db',
-    };
+  const handleAcknowledge = async (tripId: number, tripNumber: string) => {
+    Alert.alert(
+      'Acknowledge Gas Slip',
+      `Confirm acknowledgment for trip #${tripNumber}?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { 
+          text: 'Receive Amount', 
+          style: 'default',
+          onPress: async () => {
+            setAcknowledging(tripId);
+            try {
+              const response = await driverAPI.acknowledgeFunds(tripId);
+              if (response.data.success) {
+                await fetchTrips();
+                router.push(`/auth/trips/active?id=${tripId}`);
+              }
+            } catch (error) {
+              console.error('Error:', error);
+              Alert.alert('Error', 'Failed to acknowledge gas slip');
+            } finally {
+              setAcknowledging(null);
+            }
+          }
+        },
+      ]
+    );
   };
+
+  const handleViewGasSlip = async (tripId: number) => {
+    try {
+      setLoading(true);
+      const response = await driverAPI.getGasSlip(tripId);
+      const gasSlipData = response.data?.data;
+      
+      console.log('Setting gasSlip data:', gasSlipData);
+      console.log('Vehicle data:', gasSlipData?.vehicle);
+      
+      setSelectedGasSlip(gasSlipData);
+      setShowGasSlipModal(true);
+    } catch (error) {
+      console.error('Failed to fetch gas slip:', error);
+      Alert.alert('Error', 'Failed to load gas slip details');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const testToast = () => {
+  console.log('🧪 Testing toast...');
+  Toast.show({
+    type: 'fundRelease',
+    text1: '🧪 Test Toast',
+    text2: 'This is a test toast notification!',
+    props: {
+      onPress: () => console.log('Toast pressed!'),
+    },
+  });
+};
 
   const handleTripAction = (trip: Trip) => {
     switch (trip.status) {
@@ -223,11 +319,62 @@ const handleAcknowledge = async (tripId: number, tripNumber: string) => {
     }
   };
 
+  // ============================================
+  // HELPERS
+  // ============================================
+
+  const getStatusConfig = (status: string): StatusConfig => {
+    const configs: Record<string, StatusConfig> = {
+      funds_issued: {
+        bg: '#fef3c7', bgLight: '#fffbeb', text: '#d97706', label: 'Awaiting Acknowledgment',
+        icon: 'document-text-outline', actionLabel: 'Receive Amount', 
+        actionGradient: ['#059669', '#047857'], borderColor: '#fbbf24',
+      },
+      acknowledged: {
+        bg: '#dbeafe', bgLight: '#eff6ff', text: '#2563eb', label: 'Ready to Start',
+        icon: 'checkmark-circle-outline', actionLabel: 'Start Trip', 
+        actionGradient: ['#2563eb', '#1d4ed8'], borderColor: '#60a5fa',
+      },
+      in_transit: {
+        bg: '#d1fae5', bgLight: '#ecfdf5', text: '#059669', label: 'In Transit',
+        icon: 'navigate-outline', actionLabel: 'Continue Trip', 
+        actionGradient: ['#ea580c', '#c2410c'], borderColor: '#34d399',
+      },
+      pending_reconciliation: {
+        bg: '#fef3c7', bgLight: '#fffbeb', text: '#d97706', label: 'Pending Reconciliation',
+        icon: 'time-outline', actionGradient: ['#6b7280', '#4b5563'], borderColor: '#fbbf24',
+      },
+      closed: {
+        bg: '#f3f4f6', bgLight: '#f9fafb', text: '#9ca3af', label: 'Closed',
+        icon: 'lock-closed-outline', actionGradient: ['#6b7280', '#4b5563'], borderColor: '#e5e7eb',
+      },
+      rejected: {
+        bg: '#fee2e2', bgLight: '#fef2f2', text: '#dc2626', label: 'Rejected',
+        icon: 'close-circle-outline', actionGradient: ['#6b7280', '#4b5563'], borderColor: '#fca5a5',
+      },
+      cancelled: {
+        bg: '#f3f4f6', bgLight: '#f9fafb', text: '#6b7280', label: 'Cancelled',
+        icon: 'ban-outline', actionGradient: ['#6b7280', '#4b5563'], borderColor: '#d1d5db',
+      },
+    };
+    return configs[status] || { 
+      bg: '#f3f4f6', bgLight: '#f9fafb', text: '#4b5563', label: status, 
+      icon: 'document-outline', actionGradient: ['#6b7280', '#4b5563'], borderColor: '#d1d5db',
+    };
+  };
+
+  // ============================================
+  // COMPUTED
+  // ============================================
+
   const filteredTrips = useCallback(() => {
     switch (activeTab) {
-      case 'active': return trips.filter(t => ['funds_issued', 'acknowledged', 'in_transit'].includes(t.status));
-      case 'completed': return trips.filter(t => ['completed', 'closed'].includes(t.status));
-      default: return trips;
+      case 'active': 
+        return trips.filter(t => ['funds_issued', 'acknowledged', 'in_transit'].includes(t.status));
+      case 'completed': 
+        return trips.filter(t => ['pending_reconciliation', 'closed', 'rejected', 'cancelled'].includes(t.status));
+      default: 
+        return trips;
     }
   }, [trips, activeTab]);
 
@@ -240,26 +387,30 @@ const handleAcknowledge = async (tripId: number, tripNumber: string) => {
 
   const displayTrips = filteredTrips();
 
-  // ✅ Simple wrapper function for web click handlers
-  const handleWebClick = (callback: () => void) => {
-    return (e: any) => {
-      e?.preventDefault?.();
-      e?.stopPropagation?.();
-      callback();
-    };
-  };
+  // ============================================
+  // LOADING STATE
+  // ============================================
 
   if (loading && !refreshing) {
     return (
       <View style={styles.loadingContainer}>
         <StatusBar barStyle="light-content" backgroundColor="#0f172a" />
-        <LinearGradient colors={['#0f172a', '#1e293b']} style={styles.loadingGradient}>
+        <LinearGradient 
+          colors={['#0f172a', '#1e293b']} 
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={styles.loadingGradient}
+        >
           <ActivityIndicator size="large" color="#3b82f6" />
           <Text style={styles.loadingText}>Loading your dashboard...</Text>
         </LinearGradient>
       </View>
     );
   }
+
+  // ============================================
+  // RENDER
+  // ============================================
 
   return (
     <>
@@ -305,6 +456,25 @@ const handleAcknowledge = async (tripId: number, tripNumber: string) => {
                 <View style={styles.avatarStatus} />
               </View>
             </View>
+            <TouchableOpacity 
+  onPress={() => {
+    console.log('🧪 Testing toast...');
+    Toast.show({
+      type: 'fundRelease',
+      text1: '🧪 Test Toast',
+      text2: 'This is a test toast notification! Tap to see action.',
+      props: {
+        onPress: () => {
+          console.log('✅ Toast pressed!');
+          Alert.alert('Toast Pressed', 'You tapped the toast!');
+        },
+      },
+    });
+  }}
+  style={styles.testButton}
+>
+  <Text style={styles.testButtonText}>Test Toast</Text>
+</TouchableOpacity>
 
             <View style={styles.statsContainer}>
               <View style={styles.statCard}>
@@ -366,6 +536,9 @@ const handleAcknowledge = async (tripId: number, tripNumber: string) => {
             <View style={styles.badge}>
               <Text style={styles.badgeText}>{displayTrips.length}</Text>
             </View>
+            <Text style={styles.lastRefreshText}>
+              Last updated: {lastRefreshTime.toLocaleTimeString()}
+            </Text>
           </View>
 
           {displayTrips.length === 0 ? (
@@ -445,7 +618,7 @@ const handleAcknowledge = async (tripId: number, tripNumber: string) => {
                       </View>
                     </View>
 
-                    {trip.amount_released && (
+                    {trip.amount_released ? (
                       <View style={styles.detailRow}>
                         <View style={styles.detailIconContainer}>
                           <Ionicons name="cash-outline" size={14} color="#9ca3af" />
@@ -457,7 +630,7 @@ const handleAcknowledge = async (tripId: number, tripNumber: string) => {
                           </Text>
                         </View>
                       </View>
-                    )}
+                    ) : null}
                   </View>
 
                   {/* Action Buttons */}
@@ -508,16 +681,6 @@ const handleAcknowledge = async (tripId: number, tripNumber: string) => {
             })
           )}
         </Animated.View>
-
-        {/* <View style={styles.footer}>
-          <View style={styles.footerDivider}>
-            <View style={styles.footerLine} />
-            <Text style={styles.footerDividerText}>FCMS</Text>
-            <View style={styles.footerLine} />
-          </View>
-          <Text style={styles.footerVersion}>Version 1.0.0</Text>
-          <Text style={styles.footerCopyright}>© GSO Laguindingan</Text>
-        </View> */}
       </ScrollView>
 
       <GasSlipModal
@@ -529,12 +692,23 @@ const handleAcknowledge = async (tripId: number, tripNumber: string) => {
   );
 }
 
+// ============================================
+// STYLES
+// ============================================
+
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f8fafc' },
   loadingContainer: { flex: 1 },
   loadingGradient: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   loadingText: { color: 'rgba(255, 255, 255, 0.7)', marginTop: 16, fontSize: 15, fontWeight: '500' },
-  heroHeader: { paddingTop: Platform.OS === 'ios' ? 60 : 48, paddingBottom: 28, paddingHorizontal: 20, borderBottomLeftRadius: 24, borderBottomRightRadius: 24, overflow: 'hidden' },
+  heroHeader: { 
+    paddingTop: Platform.OS === 'ios' ? 60 : 48, 
+    paddingBottom: 28, 
+    paddingHorizontal: 20, 
+    borderBottomLeftRadius: 24, 
+    borderBottomRightRadius: 24, 
+    overflow: 'hidden' 
+  },
   heroPattern: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, overflow: 'hidden' },
   heroCircle: { position: 'absolute', borderRadius: 999, backgroundColor: 'rgba(255, 255, 255, 0.03)' },
   heroCircle1: { width: 250, height: 250, top: -80, right: -60 },
@@ -544,14 +718,51 @@ const styles = StyleSheet.create({
   userInfo: { flex: 1 },
   welcomeText: { fontSize: 14, color: 'rgba(255, 255, 255, 0.6)', fontWeight: '500' },
   userName: { fontSize: 26, fontWeight: '800', color: '#ffffff', marginTop: 4 },
-  roleBadge: { flexDirection: 'row', alignItems: 'center', marginTop: 8, backgroundColor: 'rgba(255, 255, 255, 0.12)', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20, alignSelf: 'flex-start', borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.15)' },
+  roleBadge: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    marginTop: 8, 
+    backgroundColor: 'rgba(255, 255, 255, 0.12)', 
+    paddingHorizontal: 10, 
+    paddingVertical: 4, 
+    borderRadius: 20, 
+    alignSelf: 'flex-start', 
+    borderWidth: 1, 
+    borderColor: 'rgba(255, 255, 255, 0.15)' 
+  },
   roleDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#4ade80', marginRight: 6 },
   roleText: { fontSize: 12, color: 'rgba(255, 255, 255, 0.85)', fontWeight: '600' },
   avatarContainer: { position: 'relative', marginLeft: 12 },
-  avatarInner: { width: 52, height: 52, borderRadius: 16, backgroundColor: 'rgba(255, 255, 255, 0.15)', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.2)' },
-  avatarStatus: { position: 'absolute', bottom: -2, right: -2, width: 14, height: 14, borderRadius: 7, backgroundColor: '#22c55e', borderWidth: 2, borderColor: '#0f172a' },
+  avatarInner: { 
+    width: 52, 
+    height: 52, 
+    borderRadius: 16, 
+    backgroundColor: 'rgba(255, 255, 255, 0.15)', 
+    alignItems: 'center', 
+    justifyContent: 'center', 
+    borderWidth: 1, 
+    borderColor: 'rgba(255, 255, 255, 0.2)' 
+  },
+  avatarStatus: { 
+    position: 'absolute', 
+    bottom: -2, 
+    right: -2, 
+    width: 14, 
+    height: 14, 
+    borderRadius: 7, 
+    backgroundColor: '#22c55e', 
+    borderWidth: 2, 
+    borderColor: '#0f172a' 
+  },
   statsContainer: { flexDirection: 'row', gap: 10 },
-  statCard: { flex: 1, backgroundColor: 'rgba(255, 255, 255, 0.08)', borderRadius: 16, padding: 14, borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.1)' },
+  statCard: { 
+    flex: 1, 
+    backgroundColor: 'rgba(255, 255, 255, 0.08)', 
+    borderRadius: 16, 
+    padding: 14, 
+    borderWidth: 1, 
+    borderColor: 'rgba(255, 255, 255, 0.1)' 
+  },
   statIconContainer: { width: 32, height: 32, borderRadius: 10, alignItems: 'center', justifyContent: 'center', marginBottom: 10 },
   statValue: { fontSize: 22, fontWeight: '800', color: '#ffffff' },
   statLabel: { fontSize: 11, color: 'rgba(255, 255, 255, 0.5)', marginTop: 2, fontWeight: '600' },
@@ -563,16 +774,34 @@ const styles = StyleSheet.create({
   tabTextActive: { color: '#0f172a' },
   tabIndicator: { position: 'absolute', bottom: -4, width: 20, height: 3, borderRadius: 2, backgroundColor: '#3b82f6' },
   tripsSection: { paddingHorizontal: 20, paddingTop: 16, paddingBottom: 24 },
-  sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
+  sectionHeader: { 
+    flexDirection: 'row', 
+    justifyContent: 'space-between', 
+    alignItems: 'center', 
+    marginBottom: 16,
+    flexWrap: 'wrap',
+  },
   sectionTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   sectionTitle: { fontSize: 17, fontWeight: '700', color: '#1e293b' },
   badge: { backgroundColor: '#e2e8f0', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12, minWidth: 28, alignItems: 'center' },
   badgeText: { fontSize: 12, fontWeight: '700', color: '#475569' },
+  lastRefreshText: { fontSize: 10, color: '#94a3b8', marginLeft: 8 },
   emptyState: { alignItems: 'center', paddingVertical: 48, backgroundColor: '#ffffff', borderRadius: 20, borderWidth: 1, borderColor: '#e2e8f0', borderStyle: 'dashed' },
   emptyIconContainer: { width: 80, height: 80, borderRadius: 24, backgroundColor: '#f1f5f9', alignItems: 'center', justifyContent: 'center', marginBottom: 16 },
   emptyTitle: { fontSize: 16, fontWeight: '700', color: '#475569', marginBottom: 6 },
   emptySubtitle: { fontSize: 13, color: '#94a3b8', textAlign: 'center', paddingHorizontal: 32, lineHeight: 20 },
-  tripCard: { backgroundColor: '#ffffff', borderRadius: 16, padding: 18, marginBottom: 12, borderLeftWidth: 4, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.04, shadowRadius: 8, elevation: 2 },
+  tripCard: { 
+    backgroundColor: '#ffffff', 
+    borderRadius: 16, 
+    padding: 18, 
+    marginBottom: 12, 
+    borderLeftWidth: 4, 
+    shadowColor: '#000', 
+    shadowOffset: { width: 0, height: 2 }, 
+    shadowOpacity: 0.04, 
+    shadowRadius: 8, 
+    elevation: 2 
+  },
   tripCardFirst: { shadowOpacity: 0.06, shadowRadius: 12, elevation: 3 },
   tripCardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14 },
   tripNumberContainer: { flex: 1, marginRight: 8 },
@@ -589,16 +818,21 @@ const styles = StyleSheet.create({
   detailValue: { fontSize: 14, fontWeight: '600', color: '#334155', lineHeight: 20 },
   amountValue: { color: '#059669', fontWeight: '700' },
   actionContainer: { flexDirection: 'row', gap: 10, marginTop: 16 },
-  secondaryButton: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#f8fafc', paddingVertical: 12, borderRadius: 12, borderWidth: 1, borderColor: '#e2e8f0', gap: 6 },
+  secondaryButton: { 
+    flex: 1, 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    justifyContent: 'center', 
+    backgroundColor: '#f8fafc', 
+    paddingVertical: 12, 
+    borderRadius: 12, 
+    borderWidth: 1, 
+    borderColor: '#e2e8f0', 
+    gap: 6 
+  },
   secondaryButtonText: { fontSize: 13, fontWeight: '700', color: '#475569' },
   primaryButton: { flex: 1, borderRadius: 12, overflow: 'hidden', shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.15, shadowRadius: 8, elevation: 4 },
   primaryButtonGradient: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 12, gap: 6 },
   primaryButtonIcon: { marginRight: 2 },
   primaryButtonText: { fontSize: 13, fontWeight: '700', color: '#ffffff' },
-  footer: { alignItems: 'center', paddingVertical: 24, paddingHorizontal: 20 },
-  footerDivider: { flexDirection: 'row', alignItems: 'center', width: '100%', marginBottom: 12 },
-  footerLine: { flex: 1, height: 1, backgroundColor: '#e2e8f0' },
-  footerDividerText: { fontSize: 10, color: '#cbd5e1', marginHorizontal: 12, fontWeight: '800' },
-  footerVersion: { fontSize: 11, color: '#94a3b8', fontWeight: '500', marginBottom: 2 },
-  footerCopyright: { fontSize: 10, color: '#cbd5e1', fontWeight: '500' },
 });

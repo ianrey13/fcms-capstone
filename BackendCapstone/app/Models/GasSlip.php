@@ -38,10 +38,9 @@ class GasSlip extends Model
         'budget_before' => 'decimal:2',
         'budget_after' => 'decimal:2',
     ];
-    
 
-
-      public function period()
+    // ============ RELATIONSHIPS ============
+    public function period()
     {
         return $this->belongsTo(DeptBudgetPeriod::class, 'period_id', 'period_id');
     }
@@ -66,8 +65,7 @@ class GasSlip extends Model
         return $this->belongsTo(User::class, 'receipt_acknowledged_by', 'user_id');
     }
     
-    
-   public function acknowledgedBy()
+    public function acknowledgedBy()
     {
         return $this->belongsTo(User::class, 'acknowledged_by', 'user_id');
     }
@@ -77,4 +75,29 @@ class GasSlip extends Model
         return $this->hasOne(FuelLog::class, 'gas_slip_id', 'gas_slip_id');
     }
 
+    // ============ HELPER METHODS ============
+    
+    /**
+     * Check if gas slip is pending reconciliation
+     */
+    public function isPending()
+    {
+        return $this->reconciliation_status === 'pending';
+    }
+    
+    /**
+     * Check if gas slip is verified
+     */
+    public function isVerified()
+    {
+        return $this->reconciliation_status === 'verified';
+    }
+    
+    /**
+     * Check if gas slip has discrepancy
+     */
+    public function hasDiscrepancy()
+    {
+        return $this->reconciliation_status === 'discrepancy';
+    }
 }

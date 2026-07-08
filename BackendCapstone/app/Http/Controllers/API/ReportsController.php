@@ -5,371 +5,487 @@ namespace App\Http\Controllers\API;
 use App\Http\Controllers\Controller;
 use App\Models\TripTicket;
 use App\Models\FuelLog;
-use App\Models\GasSlip;
-// ❌ REMOVED: use App\Models\FundIssuance;
-use App\Models\Department;
 use App\Models\Vehicle;
+use App\Models\Department;
 use App\Models\DeptBudgetPeriod;
+use App\Models\GasSlip;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Response;
+use Carbon\Carbon;
 
 class ReportsController extends Controller
 {
     /**
-     * Get trip report data
+     * Get Trip Report
+     * GET /api/reports/trips
      */
     public function getTripReport(Request $request)
     {
         try {
-            $user = $request->user();
-            $query = TripTicket::with(['department', 'vehicle', 'driver.user', 'gasSlip']);
-            
-            if ($request->has('start_date') && $request->has('end_date')) {
-                $query->whereBetween('trip_date', [$request->start_date, $request->end_date]);
+            $startDate = $request->get('start_date');
+            $endDate = $request->get('end_date');
+            $departmentId = $request->get('department_id');
+            $status = $request->get('status');
+
+            $query = TripTicket::with([
+                'department',
+                'driver.user',
+                'vehicle',
+                'gasSlip'
+            ]);
+
+            if ($startDate && $endDate) {
+                $query->whereBetween('trip_date', [$startDate, $endDate]);
             }
-            
-            if ($request->has('department_id')) {
-                $query->where('department_id', $request->department_id);
+
+            if ($departmentId) {
+                $query->where('department_id', $departmentId);
             }
-            
-            if ($request->has('status')) {
-                $query->where('status', $request->status);
+
+            if ($status) {
+                $query->where('status', $status);
             }
-            
+
             $trips = $query->orderBy('trip_date', 'desc')->get();
-            
-            $data = $trips->map(function($trip) {
-                return [
-                    'id' => $trip->trip_ticket_id,
-                    'ticket_number' => $trip->trip_ticket_number,
-                    'trip_date' => $trip->trip_date,
-                    'destination' => $trip->destination,
-                    'purpose' => $trip->purpose,
-                    'status' => $trip->status,
-                    'department_id' => $trip->department_id,
-                    'department_name' => $trip->department ? $trip->department->department_name : null,
-                    'vehicle' => $trip->vehicle ? [
-                        'plate_number' => $trip->vehicle->plate_number,
-                        'vehicle_model' => $trip->vehicle->vehicle_model,
-                    ] : null,
-                    'driver' => $trip->driver && $trip->driver->user ? [
-                        'full_name' => $trip->driver->user->full_name,
-                    ] : null,
-                    'amount_released' => $trip->gasSlip ? $trip->gasSlip->amount_released : 0,
-                    'created_at' => $trip->submitted_at,
-                ];
+
+            $statusBreakdown = $trips->groupBy('status')->map(function($group) {
+                return $group->count();
             });
-            
+
+            $departmentBreakdown = $trips->groupBy('department_id')->map(function($group) {
+                $first = $group->first();
+                return [
+                    'department_id' => $first->department_id,
+                    'department_name' => $first->department->department_name ?? 'Unknown',
+                    'total' => $group->count(),
+                    'pending' => $group->where('status', 'pending_mayors_office')->count(),
+                    'in_transit' => $group->where('status', 'in_transit')->count(),
+                    'completed' => $group->where('status', 'closed')->count(),
+                    'rejected' => $group->where('status', 'rejected')->count(),
+                ];
+            })->values();
+
+            $monthlyTrend = $trips->groupBy(function($trip) {
+                return $trip->trip_date ? Carbon::parse($trip->trip_date)->format('Y-m') : 'Unknown';
+            })->map(function($group) {
+                return [
+                    'month' => $group->first()->trip_date ? Carbon::parse($group->first()->trip_date)->format('M Y') : 'Unknown',
+                    'count' => $group->count(),
+                ];
+            })->values();
+
             return response()->json([
                 'success' => true,
-                'data' => $data,
-                'meta' => [
-                    'total' => $data->count(),
-                    'start_date' => $request->start_date,
-                    'end_date' => $request->end_date,
+                'data' => [
+                    'total_trips' => $trips->count(),
+                    'status_breakdown' => $statusBreakdown,
+                    'department_breakdown' => $departmentBreakdown,
+                    'monthly_trend' => $monthlyTrend,
+                    'recent_trips' => $trips->take(20)->map(function($trip) {
+                        return [
+                            'trip_ticket_id' => $trip->trip_ticket_id,
+                            'trip_ticket_number' => $trip->trip_ticket_number,
+                            'destination' => $trip->destination,
+                            'purpose' => $trip->purpose,
+                            'trip_date' => $trip->trip_date,
+                            'department_name' => $trip->department->department_name ?? 'Unknown',
+                            'driver_name' => $trip->driver->user->full_name ?? 'Unknown',
+                            'vehicle_plate' => $trip->vehicle->plate_number ?? 'Unknown',
+                            'status' => $trip->status,
+                            'amount_released' => $trip->gasSlip->amount_released ?? 0,
+                        ];
+                    }),
                 ]
             ]);
+
         } catch (\Exception $e) {
-            Log::error('Get trip report error: ' . $e->getMessage());
+            Log::error('Trip report error: ' . $e->getMessage());
             return response()->json([
                 'success' => false,
-                'message' => 'Failed to fetch trip report: ' . $e->getMessage()
+                'message' => 'Failed to generate trip report: ' . $e->getMessage()
             ], 500);
         }
     }
-    
+
     /**
-     * Get fuel report data
+     * Get Fuel Report
+     * GET /api/reports/fuel
      */
     public function getFuelReport(Request $request)
     {
         try {
-            $user = $request->user();
-            $query = FuelLog::with(['gasSlip.tripTicket.department', 'gasSlip.tripTicket.vehicle']);
-            
-            if ($request->has('start_date') && $request->has('end_date')) {
-                $query->whereBetween('created_at', [$request->start_date . ' 00:00:00', $request->end_date . ' 23:59:59']);
+            $startDate = $request->get('start_date');
+            $endDate = $request->get('end_date');
+            $departmentId = $request->get('department_id');
+            $vehicleId = $request->get('vehicle_id');
+
+            $query = FuelLog::with([
+                'gasSlip.tripTicket.department',
+                'gasSlip.tripTicket.vehicle',
+                'gasSlip.tripTicket.driver.user'
+            ]);
+
+            if ($startDate && $endDate) {
+                $query->whereBetween('created_at', [$startDate, $endDate]);
             }
-            
-            $fuelLogs = $query->orderBy('created_at', 'desc')->get();
-            
-            $data = $fuelLogs->map(function($log) {
-                $trip = $log->gasSlip ? $log->gasSlip->tripTicket : null;
-                return [
-                    'id' => $log->fuel_log_id,
-                    'liters_availed' => $log->liters_availed,
-                    'amount_on_receipt' => $log->amount_on_receipt,
-                    'odometer_out' => $log->odometer_out,
-                    'odometer_in' => $log->odometer_in,
-                    'created_at' => $log->created_at,
-                    'trip' => $trip ? [
-                        'ticket_number' => $trip->trip_ticket_number,
-                        'destination' => $trip->destination,
-                        'department_name' => $trip->department ? $trip->department->department_name : null,
-                    ] : null,
-                ];
-            });
-            
+
+            if ($departmentId) {
+                $query->whereHas('gasSlip.tripTicket', function($q) use ($departmentId) {
+                    $q->where('department_id', $departmentId);
+                });
+            }
+
+            if ($vehicleId) {
+                $query->whereHas('gasSlip.tripTicket', function($q) use ($vehicleId) {
+                    $q->where('vehicle_id', $vehicleId);
+                });
+            }
+
+            $fuelLogs = $query->get();
+
+            // Summary
             $totalLiters = $fuelLogs->sum('liters_availed');
-            $totalAmount = $fuelLogs->sum('amount_on_receipt');
-            
+            $totalCost = $fuelLogs->sum('amount_on_receipt');
+            $totalTrips = $fuelLogs->unique('gas_slip.trip_ticket_id')->count();
+
+            // Department breakdown
+            $departmentBreakdown = $fuelLogs->groupBy(function($log) {
+                return $log->gasSlip->tripTicket->department->department_name ?? 'Unknown';
+            })->map(function($group) {
+                return [
+                    'department_name' => $group->first()->gasSlip->tripTicket->department->department_name ?? 'Unknown',
+                    'trips' => $group->unique('gas_slip.trip_ticket_id')->count(),
+                    'liters' => round($group->sum('liters_availed'), 2),
+                    'cost' => round($group->sum('amount_on_receipt'), 2),
+                ];
+            })->values();
+
+            // Vehicle breakdown
+            $vehicleBreakdown = $fuelLogs->groupBy(function($log) {
+                $vehicle = $log->gasSlip->tripTicket->vehicle;
+                return $vehicle ? $vehicle->plate_number : 'Unknown';
+            })->map(function($group) {
+                $first = $group->first();
+                $vehicle = $first->gasSlip->tripTicket->vehicle;
+                $totalDistance = $this->calculateTotalDistance($group);
+                $totalLiters = $group->sum('liters_availed');
+                
+                return [
+                    'plate_number' => $vehicle ? $vehicle->plate_number : 'Unknown',
+                    'model' => $vehicle ? $vehicle->vehicle_model : 'Unknown',
+                    'fuel_type' => $vehicle ? $vehicle->fuel_type : 'Unknown',
+                    'trips' => $group->unique('gas_slip.trip_ticket_id')->count(),
+                    'liters' => round($totalLiters, 2),
+                    'cost' => round($group->sum('amount_on_receipt'), 2),
+                    'distance_km' => round($totalDistance, 2),
+                    'km_per_liter' => $totalLiters > 0 ? round($totalDistance / $totalLiters, 2) : 0,
+                ];
+            })->values();
+
+            // Monthly trend
+            $monthlyTrend = $fuelLogs->groupBy(function($log) {
+                return $log->created_at ? Carbon::parse($log->created_at)->format('Y-m') : 'Unknown';
+            })->map(function($group) {
+                return [
+                    'month' => $group->first()->created_at ? Carbon::parse($group->first()->created_at)->format('M Y') : 'Unknown',
+                    'liters' => round($group->sum('liters_availed'), 2),
+                    'cost' => round($group->sum('amount_on_receipt'), 2),
+                    'trips' => $group->unique('gas_slip.trip_ticket_id')->count(),
+                ];
+            })->values();
+
+            $totalDistance = $this->calculateTotalDistance($fuelLogs);
+
             return response()->json([
                 'success' => true,
-                'data' => $data,
-                'summary' => [
-                    'total_liters' => $totalLiters,
-                    'total_amount' => $totalAmount,
-                    'average_liters_per_trip' => $fuelLogs->count() > 0 ? $totalLiters / $fuelLogs->count() : 0,
-                ],
-                'meta' => [
-                    'total' => $data->count(),
-                    'start_date' => $request->start_date,
-                    'end_date' => $request->end_date,
+                'data' => [
+                    'summary' => [
+                        'total_trips' => $totalTrips,
+                        'total_liters' => round($totalLiters, 2),
+                        'total_cost' => round($totalCost, 2),
+                        'total_distance_km' => round($totalDistance, 2),
+                        'average_km_per_liter' => $totalLiters > 0 ? round($totalDistance / $totalLiters, 2) : 0,
+                        'average_cost_per_km' => $totalDistance > 0 ? round($totalCost / $totalDistance, 2) : 0,
+                    ],
+                    'department_breakdown' => $departmentBreakdown,
+                    'vehicle_breakdown' => $vehicleBreakdown,
+                    'monthly_trend' => $monthlyTrend,
+                    'recent_fuel_logs' => $fuelLogs->take(20)->map(function($log) {
+                        $trip = $log->gasSlip->tripTicket;
+                        return [
+                            'ticket_number' => $trip->trip_ticket_number,
+                            'department' => $trip->department->department_name ?? 'Unknown',
+                            'vehicle' => $trip->vehicle->plate_number ?? 'Unknown',
+                            'driver' => $trip->driver->user->full_name ?? 'Unknown',
+                            'destination' => $trip->destination,
+                            'liters' => $log->liters_availed,
+                            'cost' => $log->amount_on_receipt,
+                            'date' => $log->created_at ? $log->created_at->format('Y-m-d') : null,
+                        ];
+                    }),
                 ]
             ]);
+
         } catch (\Exception $e) {
-            Log::error('Get fuel report error: ' . $e->getMessage());
+            Log::error('Fuel report error: ' . $e->getMessage());
             return response()->json([
                 'success' => false,
-                'message' => 'Failed to fetch fuel report: ' . $e->getMessage()
+                'message' => 'Failed to generate fuel report: ' . $e->getMessage()
             ], 500);
         }
     }
-    
+
     /**
-     * Get budget report data
-     * ✅ FIXED: Use GasSlip instead of FundIssuance
+     * Get Budget Report
+     * GET /api/reports/budget
      */
     public function getBudgetReport(Request $request)
     {
         try {
-            $user = $request->user();
-            $query = DeptBudgetPeriod::with('department');
-            
-            if ($request->has('start_date') && $request->has('end_date')) {
-                $query->whereBetween('week_start', [$request->start_date, $request->end_date]);
+            $departmentId = $request->get('department_id');
+            $periodId = $request->get('period_id');
+
+            $query = DeptBudgetPeriod::with(['department']);
+
+            if ($departmentId) {
+                $query->where('department_id', $departmentId);
             }
-            
-            if ($request->has('department_id')) {
-                $query->where('department_id', $request->department_id);
+
+            if ($periodId) {
+                $query->where('period_id', $periodId);
             }
-            
+
             $periods = $query->orderBy('week_start', 'desc')->get();
-            
-            $data = $periods->map(function($period) {
-                // ✅ FIXED: Use GasSlip instead of FundIssuance
-                $spent = GasSlip::where('period_id', $period->period_id)
-                    ->whereNotNull('acknowledged_at')
-                    ->sum('amount_released');
+
+            $budgetData = $periods->map(function($period) {
+                $used = GasSlip::where('period_id', $period->period_id)->sum('amount_released');
+                $allocated = $period->allocated_amount;
+                $remaining = $allocated - $used;
+                $utilization = $allocated > 0 ? round(($used / $allocated) * 100, 2) : 0;
+
                 return [
+                    'period_id' => $period->period_id,
                     'department_id' => $period->department_id,
-                    'department_name' => $period->department ? $period->department->department_name : null,
+                    'department_name' => $period->department->department_name ?? 'Unknown',
                     'week_start' => $period->week_start,
                     'week_end' => $period->week_end,
-                    'allocated_amount' => $period->allocated_amount,
-                    'spent_amount' => $spent,
-                    'remaining_amount' => $period->allocated_amount - $spent,
-                    'utilization_percentage' => $period->allocated_amount > 0 
-                        ? round(($spent / $period->allocated_amount) * 100, 2) 
-                        : 0,
+                    'allocated' => round($allocated, 2),
+                    'used' => round($used, 2),
+                    'remaining' => round($remaining, 2),
+                    'utilization_percentage' => $utilization,
                     'status' => $period->status,
+                    'is_over_budget' => $remaining < 0,
                 ];
             });
-            
+
+            // Summary totals
+            $totalAllocated = $budgetData->sum('allocated');
+            $totalUsed = $budgetData->sum('used');
+            $totalRemaining = $budgetData->sum('remaining');
+
             return response()->json([
                 'success' => true,
-                'data' => $data
+                'data' => [
+                    'summary' => [
+                        'total_allocated' => round($totalAllocated, 2),
+                        'total_used' => round($totalUsed, 2),
+                        'total_remaining' => round($totalRemaining, 2),
+                        'overall_utilization' => $totalAllocated > 0 ? round(($totalUsed / $totalAllocated) * 100, 2) : 0,
+                        'total_departments' => $budgetData->unique('department_id')->count(),
+                    ],
+                    'periods' => $budgetData,
+                ]
             ]);
+
         } catch (\Exception $e) {
-            Log::error('Get budget report error: ' . $e->getMessage());
+            Log::error('Budget report error: ' . $e->getMessage());
             return response()->json([
                 'success' => false,
-                'message' => 'Failed to fetch budget report: ' . $e->getMessage()
+                'message' => 'Failed to generate budget report: ' . $e->getMessage()
             ], 500);
         }
     }
-    
+
     /**
-     * Get vehicle report
+     * Get Vehicle Report
+     * GET /api/reports/vehicles
      */
     public function getVehicleReport(Request $request)
     {
         try {
-            $user = $request->user();
-            $vehicles = Vehicle::with('department')->get();
-            
-            $data = $vehicles->map(function($vehicle) {
-                $trips = TripTicket::where('vehicle_id', $vehicle->vehicle_id)->get();
-                $totalFuelUsed = 0;
+            $vehicles = Vehicle::with(['trips' => function($q) {
+                $q->where('status', 'closed')
+                  ->with(['gasSlip.fuelLog']);
+            }])->get();
+
+            $vehicleData = $vehicles->map(function($vehicle) {
+                $trips = $vehicle->trips;
+                $totalLiters = 0;
+                $totalCost = 0;
                 $totalDistance = 0;
-                
+                $tripCount = $trips->count();
+
                 foreach ($trips as $trip) {
                     if ($trip->gasSlip && $trip->gasSlip->fuelLog) {
-                        $totalFuelUsed += $trip->gasSlip->fuelLog->liters_availed ?? 0;
-                        $totalDistance += ($trip->gasSlip->fuelLog->odometer_in ?? 0) - ($trip->gasSlip->fuelLog->odometer_out ?? 0);
+                        $fuelLog = $trip->gasSlip->fuelLog;
+                        $totalLiters += $fuelLog->liters_availed ?? 0;
+                        $totalCost += $fuelLog->amount_on_receipt ?? 0;
+                        
+                        if ($fuelLog->odometer_start && $fuelLog->odometer_end) {
+                            $totalDistance += ($fuelLog->odometer_end - $fuelLog->odometer_start);
+                        } elseif ($fuelLog->gps_distance_km) {
+                            $totalDistance += $fuelLog->gps_distance_km;
+                        }
                     }
                 }
-                
+
                 return [
                     'vehicle_id' => $vehicle->vehicle_id,
-                    'vehicle_model' => $vehicle->vehicle_model,
                     'plate_number' => $vehicle->plate_number,
+                    'model' => $vehicle->vehicle_model,
                     'fuel_type' => $vehicle->fuel_type,
-                    'status' => $vehicle->status,
-                    'department_name' => $vehicle->department ? $vehicle->department->department_name : null,
-                    'total_trips' => $trips->count(),
-                    'total_fuel_used' => $totalFuelUsed,
-                    'total_distance' => $totalDistance,
-                    'average_fuel_efficiency' => $totalDistance > 0 && $totalFuelUsed > 0 
-                        ? round($totalDistance / $totalFuelUsed, 2) 
-                        : 0,
+                    'odometer_status' => $vehicle->odometer_status,
+                    'maintenance_flag' => $vehicle->maintenance_flag,
+                    'trip_count' => $tripCount,
+                    'total_liters' => round($totalLiters, 2),
+                    'total_cost' => round($totalCost, 2),
+                    'total_distance_km' => round($totalDistance, 2),
+                    'km_per_liter' => $totalLiters > 0 ? round($totalDistance / $totalLiters, 2) : 0,
+                    'cost_per_km' => $totalDistance > 0 ? round($totalCost / $totalDistance, 2) : 0,
+                    'efficiency_rating' => $this->getEfficiencyRating($totalLiters, $totalDistance),
                 ];
             });
-            
+
             return response()->json([
                 'success' => true,
-                'data' => $data
+                'data' => $vehicleData
             ]);
+
         } catch (\Exception $e) {
-            Log::error('Get vehicle report error: ' . $e->getMessage());
+            Log::error('Vehicle report error: ' . $e->getMessage());
             return response()->json([
                 'success' => false,
-                'message' => 'Failed to fetch vehicle report: ' . $e->getMessage()
+                'message' => 'Failed to generate vehicle report: ' . $e->getMessage()
             ], 500);
         }
     }
-    
+
     /**
-     * Get report summary dashboard data
-     * ✅ FIXED: Use GasSlip instead of FundIssuance
+     * Get Report Summary
+     * GET /api/reports/summary
      */
     public function getReportSummary(Request $request)
     {
         try {
-            $user = $request->user();
-            
-            $startDate = $request->start_date ?? now()->subDays(30);
-            $endDate = $request->end_date ?? now();
-            
-            // Trip statistics
+            $year = $request->get('year', date('Y'));
+            $month = $request->get('month', date('m'));
+
+            // Total trips
             $totalTrips = TripTicket::count();
-            $pendingTrips = TripTicket::whereIn('status', [
-                TripTicket::STATUS_PENDING_HEAD_APPROVAL,
-                TripTicket::STATUS_PENDING_GSO_REVIEW,
-                TripTicket::STATUS_PENDING_MAYORS_OFFICE
-            ])->count();
-            $completedTrips = TripTicket::where('status', TripTicket::STATUS_CLOSED)->count();
-            $cancelledTrips = TripTicket::where('status', TripTicket::STATUS_CANCELLED)->count();
-            
-            // Budget statistics - ✅ FIXED: Use GasSlip
-            $totalBudgetAllocated = DeptBudgetPeriod::where('status', 'active')->sum('allocated_amount');
-            $totalBudgetSpent = GasSlip::sum('amount_released');
-            $budgetUtilization = $totalBudgetAllocated > 0 
-                ? round(($totalBudgetSpent / $totalBudgetAllocated) * 100, 2) 
-                : 0;
-            
-            // Fuel statistics
-            $totalFuelUsed = FuelLog::sum('liters_availed');
-            $totalFuelCost = FuelLog::sum('amount_on_receipt');
-            $averageFuelPrice = $totalFuelUsed > 0 ? $totalFuelCost / $totalFuelUsed : 0;
-            
-            // Department breakdown - ✅ FIXED: Use GasSlip
-            $departmentStats = Department::withCount('tripTickets')->get()->map(function($dept) {
-                $trips = TripTicket::where('department_id', $dept->department_id)->get();
-                $budgetPeriod = DeptBudgetPeriod::where('department_id', $dept->department_id)
-                    ->where('status', 'active')
-                    ->first();
-                $spent = GasSlip::whereHas('tripTicket', function($q) use ($dept) {
-                    $q->where('department_id', $dept->department_id);
-                })->sum('amount_released');
-                
+            $activeTrips = TripTicket::whereIn('status', ['in_transit', 'funds_issued'])->count();
+            $completedTrips = TripTicket::where('status', 'closed')->count();
+
+            // Fuel summary
+            $fuelSummary = FuelLog::select(
+                DB::raw('SUM(liters_availed) as total_liters'),
+                DB::raw('SUM(amount_on_receipt) as total_cost'),
+                DB::raw('COUNT(DISTINCT gas_slip_id) as total_entries')
+            )->first();
+
+            // Budget summary
+            $budgetSummary = DeptBudgetPeriod::select(
+                DB::raw('SUM(allocated_amount) as total_allocated')
+            )->where('status', 'active')->first();
+
+            $usedBudget = GasSlip::sum('amount_released');
+
+            // Department count
+            $totalDepartments = Department::where('is_active', 1)->count();
+
+            // Vehicle count
+            $totalVehicles = Vehicle::where('status', 'active')->count();
+
+            // Monthly trend (last 6 months)
+            $monthlyTrips = TripTicket::select(
+                DB::raw('YEAR(trip_date) as year'),
+                DB::raw('MONTH(trip_date) as month'),
+                DB::raw('COUNT(*) as count')
+            )
+            ->where('trip_date', '>=', Carbon::now()->subMonths(6))
+            ->groupBy('year', 'month')
+            ->orderBy('year', 'desc')
+            ->orderBy('month', 'desc')
+            ->get()
+            ->map(function($item) {
                 return [
-                    'name' => $dept->department_name,
-                    'total_trips' => $trips->count(),
-                    'allocated_budget' => $budgetPeriod ? $budgetPeriod->allocated_amount : 0,
-                    'spent_budget' => $spent,
-                    'utilization' => $budgetPeriod && $budgetPeriod->allocated_amount > 0 
-                        ? round(($spent / $budgetPeriod->allocated_amount) * 100, 2) 
-                        : 0,
+                    'month' => Carbon::createFromDate($item->year, $item->month, 1)->format('M Y'),
+                    'count' => $item->count,
                 ];
             });
-            
+
             return response()->json([
                 'success' => true,
                 'data' => [
                     'trips' => [
                         'total' => $totalTrips,
-                        'pending' => $pendingTrips,
+                        'active' => $activeTrips,
                         'completed' => $completedTrips,
-                        'cancelled' => $cancelledTrips,
-                    ],
-                    'budget' => [
-                        'total_allocated' => $totalBudgetAllocated,
-                        'total_spent' => $totalBudgetSpent,
-                        'utilization' => $budgetUtilization,
+                        'monthly_trend' => $monthlyTrips,
                     ],
                     'fuel' => [
-                        'total_liters' => $totalFuelUsed,
-                        'total_cost' => $totalFuelCost,
-                        'average_price' => $averageFuelPrice,
+                        'total_liters' => round($fuelSummary->total_liters ?? 0, 2),
+                        'total_cost' => round($fuelSummary->total_cost ?? 0, 2),
+                        'total_entries' => $fuelSummary->total_entries ?? 0,
                     ],
-                    'departments' => $departmentStats,
+                    'budget' => [
+                        'total_allocated' => round($budgetSummary->total_allocated ?? 0, 2),
+                        'used' => round($usedBudget, 2),
+                        'remaining' => round(($budgetSummary->total_allocated ?? 0) - $usedBudget, 2),
+                    ],
+                    'resources' => [
+                        'departments' => $totalDepartments,
+                        'vehicles' => $totalVehicles,
+                    ],
                 ]
             ]);
+
         } catch (\Exception $e) {
-            Log::error('Get report summary error: ' . $e->getMessage());
+            Log::error('Report summary error: ' . $e->getMessage());
             return response()->json([
                 'success' => false,
-                'message' => 'Failed to fetch report summary: ' . $e->getMessage()
+                'message' => 'Failed to generate report summary: ' . $e->getMessage()
             ], 500);
         }
     }
-    
+
+    // ============================================
+    // EXPORT METHODS
+    // ============================================
+
     /**
-     * Export trip report to CSV
+     * Export Trip Report
+     * GET /api/reports/trips/export/{format}
      */
     public function exportTripReport(Request $request, $format)
     {
         try {
-            $trips = TripTicket::with(['department', 'vehicle', 'driver.user', 'gasSlip'])
-                ->when($request->start_date, function($q) use ($request) {
-                    return $q->whereDate('trip_date', '>=', $request->start_date);
-                })
-                ->when($request->end_date, function($q) use ($request) {
-                    return $q->whereDate('trip_date', '<=', $request->end_date);
-                })
-                ->orderBy('trip_date', 'desc')
-                ->get();
+            $data = $this->getTripReport($request)->getData();
             
-            $filename = 'trip-report-' . now()->format('Y-m-d') . '.csv';
-            $handle = fopen('php://temp', 'w');
-            
-            fputs($handle, "\xEF\xBB\xBF");
-            fputcsv($handle, ['Ticket #', 'Trip Date', 'Destination', 'Department', 'Vehicle', 'Driver', 'Amount', 'Status']);
-            
-            foreach ($trips as $trip) {
-                fputcsv($handle, [
-                    $trip->trip_ticket_number,
-                    $trip->trip_date,
-                    $trip->destination,
-                    $trip->department->department_name ?? 'N/A',
-                    $trip->vehicle->plate_number ?? 'N/A',
-                    $trip->driver->user->full_name ?? 'N/A',
-                    $trip->gasSlip->amount_released ?? 0,
-                    $trip->status,
-                ]);
+            if ($format === 'pdf') {
+                // PDF export logic
+                return $this->exportToPDF($data->data, 'trip_report');
+            } elseif ($format === 'excel') {
+                // Excel export logic
+                return $this->exportToExcel($data->data, 'trip_report');
+            } else {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Unsupported format: ' . $format
+                ], 400);
             }
-            
-            rewind($handle);
-            $csvContent = stream_get_contents($handle);
-            fclose($handle);
-            
-            return response($csvContent)
-                ->withHeaders([
-                    'Content-Type' => 'text/csv; charset=UTF-8',
-                    'Content-Disposition' => 'attachment; filename="' . $filename . '"',
-                ]);
+
         } catch (\Exception $e) {
             Log::error('Export trip report error: ' . $e->getMessage());
             return response()->json([
@@ -378,50 +494,27 @@ class ReportsController extends Controller
             ], 500);
         }
     }
-    
+
     /**
-     * Export fuel report to CSV
+     * Export Fuel Report
+     * GET /api/reports/fuel/export/{format}
      */
     public function exportFuelReport(Request $request, $format)
     {
         try {
-            $fuelLogs = FuelLog::with(['gasSlip.tripTicket'])
-                ->when($request->start_date, function($q) use ($request) {
-                    return $q->whereDate('created_at', '>=', $request->start_date);
-                })
-                ->when($request->end_date, function($q) use ($request) {
-                    return $q->whereDate('created_at', '<=', $request->end_date);
-                })
-                ->get();
+            $data = $this->getFuelReport($request)->getData();
             
-            $filename = 'fuel-report-' . now()->format('Y-m-d') . '.csv';
-            $handle = fopen('php://temp', 'w');
-            
-            fputs($handle, "\xEF\xBB\xBF");
-            fputcsv($handle, ['Ticket #', 'Destination', 'Liters', 'Amount', 'Date', 'Odometer Out', 'Odometer In']);
-            
-            foreach ($fuelLogs as $log) {
-                $trip = $log->gasSlip->tripTicket ?? null;
-                fputcsv($handle, [
-                    $trip->trip_ticket_number ?? 'N/A',
-                    $trip->destination ?? 'N/A',
-                    $log->liters_availed,
-                    $log->amount_on_receipt,
-                    $log->created_at,
-                    $log->odometer_out,
-                    $log->odometer_in,
-                ]);
+            if ($format === 'pdf') {
+                return $this->exportToPDF($data->data, 'fuel_report');
+            } elseif ($format === 'excel') {
+                return $this->exportToExcel($data->data, 'fuel_report');
+            } else {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Unsupported format: ' . $format
+                ], 400);
             }
-            
-            rewind($handle);
-            $csvContent = stream_get_contents($handle);
-            fclose($handle);
-            
-            return response($csvContent)
-                ->withHeaders([
-                    'Content-Type' => 'text/csv; charset=UTF-8',
-                    'Content-Disposition' => 'attachment; filename="' . $filename . '"',
-                ]);
+
         } catch (\Exception $e) {
             Log::error('Export fuel report error: ' . $e->getMessage());
             return response()->json([
@@ -430,55 +523,27 @@ class ReportsController extends Controller
             ], 500);
         }
     }
-    
+
     /**
-     * Export budget report to CSV
-     * ✅ FIXED: Use GasSlip instead of FundIssuance
+     * Export Budget Report
+     * GET /api/reports/budget/export/{format}
      */
     public function exportBudgetReport(Request $request, $format)
     {
         try {
-            $periods = DeptBudgetPeriod::with('department')
-                ->when($request->start_date, function($q) use ($request) {
-                    return $q->whereDate('week_start', '>=', $request->start_date);
-                })
-                ->when($request->end_date, function($q) use ($request) {
-                    return $q->whereDate('week_end', '<=', $request->end_date);
-                })
-                ->get();
+            $data = $this->getBudgetReport($request)->getData();
             
-            $filename = 'budget-report-' . now()->format('Y-m-d') . '.csv';
-            $handle = fopen('php://temp', 'w');
-            
-            fputs($handle, "\xEF\xBB\xBF");
-            fputcsv($handle, ['Department', 'Week Start', 'Week End', 'Allocated', 'Spent', 'Remaining', 'Utilization', 'Status']);
-            
-            foreach ($periods as $period) {
-                // ✅ FIXED: Use GasSlip instead of FundIssuance
-                $spent = GasSlip::where('period_id', $period->period_id)
-                    ->whereNotNull('acknowledged_at')
-                    ->sum('amount_released');
-                fputcsv($handle, [
-                    $period->department->department_name ?? 'N/A',
-                    $period->week_start,
-                    $period->week_end,
-                    $period->allocated_amount,
-                    $spent,
-                    $period->allocated_amount - $spent,
-                    $period->allocated_amount > 0 ? round(($spent / $period->allocated_amount) * 100, 2) . '%' : '0%',
-                    $period->status,
-                ]);
+            if ($format === 'pdf') {
+                return $this->exportToPDF($data->data, 'budget_report');
+            } elseif ($format === 'excel') {
+                return $this->exportToExcel($data->data, 'budget_report');
+            } else {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Unsupported format: ' . $format
+                ], 400);
             }
-            
-            rewind($handle);
-            $csvContent = stream_get_contents($handle);
-            fclose($handle);
-            
-            return response($csvContent)
-                ->withHeaders([
-                    'Content-Type' => 'text/csv; charset=UTF-8',
-                    'Content-Disposition' => 'attachment; filename="' . $filename . '"',
-                ]);
+
         } catch (\Exception $e) {
             Log::error('Export budget report error: ' . $e->getMessage());
             return response()->json([
@@ -486,5 +551,55 @@ class ReportsController extends Controller
                 'message' => 'Failed to export report: ' . $e->getMessage()
             ], 500);
         }
+    }
+
+    // ============================================
+    // HELPER METHODS
+    // ============================================
+
+    private function calculateTotalDistance($fuelLogs)
+    {
+        $totalDistance = 0;
+        foreach ($fuelLogs as $log) {
+            if ($log->odometer_start && $log->odometer_end) {
+                $totalDistance += ($log->odometer_end - $log->odometer_start);
+            } elseif ($log->gps_distance_km) {
+                $totalDistance += $log->gps_distance_km;
+            }
+        }
+        return $totalDistance;
+    }
+
+    private function getEfficiencyRating($liters, $distance)
+    {
+        if ($liters == 0 || $distance == 0) return 'No Data';
+        
+        $kmPerLiter = $distance / $liters;
+        
+        if ($kmPerLiter >= 10) return 'Excellent';
+        if ($kmPerLiter >= 7) return 'Good';
+        if ($kmPerLiter >= 5) return 'Average';
+        if ($kmPerLiter >= 3) return 'Poor';
+        return 'Critical - Needs Maintenance';
+    }
+
+    private function exportToPDF($data, $name)
+    {
+        // Placeholder for PDF export
+        return response()->json([
+            'success' => true,
+            'message' => 'PDF export coming soon',
+            'data' => $data
+        ]);
+    }
+
+    private function exportToExcel($data, $name)
+    {
+        // Placeholder for Excel export
+        return response()->json([
+            'success' => true,
+            'message' => 'Excel export coming soon',
+            'data' => $data
+        ]);
     }
 }

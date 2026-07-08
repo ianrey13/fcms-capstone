@@ -26,6 +26,10 @@ import {
   FileBarChart,
   CreditCard,
   HandCoins,
+  PlusCircle,
+  RefreshCw,
+  Eye,
+  AlertTriangle,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -40,11 +44,9 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
   const [isMobile, setIsMobile] = useState(false);
 
   const getDashboardHref = () => {
-    if (user?.role === "superadmin") return "/admin/dashboard";
-    if (user?.role === "gso_staff") return "/gso/dashboard";
+    // ✅ Updated for new roles (removed staff)
+    if (user?.role === "gso_office") return "/gso/dashboard";
     if (user?.role === "mayors_office") return "/mo/dashboard";
-    if (user?.role === "dept_office") return "/department/dashboard";
-    if (user?.role === "head_of_office") return "/head/dashboard";
     if (user?.role === "driver") return "/driver/dashboard";
     return "/dashboard";
   };
@@ -72,44 +74,44 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
   }, [location, isMobile, setIsOpen]);
 
   const getNavigationItems = () => {
+    // ✅ Updated for new roles (removed staff)
     const roleSpecificItems = {
-      superadmin: [
-        { name: "Dashboard", href: getDashboardHref(), icon: LayoutDashboard },
-        { name: "Users", href: "/admin/users", icon: Users },
-        { name: "Departments", href: "/admin/departments", icon: Building2 },
-        { name: "Vehicles", href: "/admin/vehicles", icon: Car },
-        { name: "Budget Policies", href: "/admin/budget-policies", icon: DollarSign },
-        { name: "System Settings", href: "/admin/settings", icon: Settings },
-      ],
-      gso_staff: [
+      // ✅ GSO Office (Superadmin Equivalent)
+      gso_office: [
         { name: "Dashboard", href: "/gso/dashboard", icon: LayoutDashboard },
-        { name: "Pending Review", href: "/gso/pending", icon: Clock },
-        { name: "Verified Tickets", href: "/gso/verified", icon: CheckCircle },
-//{ name: "Forwarded Tickets", href: "/gso/forwarded", icon: ClipboardList },
-        { name: "Returned Tickets", href: "/gso/returned", icon: AlertCircle },
-        { name: "Forward to MO", href: "/gso/forward", icon: ClipboardList },
+        { name: "Create Trip", href: "/gso/create-trip", icon: PlusCircle },
+        { name: "All Trips", href: "/gso/all-trips", icon: FileText },
+        { name: "Pending MO", href: "/gso/pending-mo", icon: Clock },
+        { name: "Reconciliation", href: "/gso/reconciliation", icon: RefreshCw },
+        { name: "Returned", href: "/gso/returned", icon: AlertCircle },
+        // ✅ Fuel Receipts
+        { name: "Fuel Receipts", href: "/gso/fuel-receipts", icon: Receipt },
+        // ✅ Completed Trips
+        { name: "Completed Trips", href: "/gso/completed-trips", icon: CheckCircle },
+        // Admin section
+        { name: "Users", href: "/admin/users", icon: Users },
+        { name: "Vehicles", href: "/admin/vehicles", icon: Car },
+        { name: "System Settings", href: "/admin/settings", icon: Settings },
         { name: "Reports", href: "/gso/reports", icon: FileBarChart },
       ],
+      // ✅ Mayor's Office
       mayors_office: [
         { name: "Dashboard", href: "/mo/dashboard", icon: LayoutDashboard },
         { name: "Pending Fund Release", href: "/mo/pending", icon: Clock },
         { name: "Funds Released", href: "/mo/approved", icon: CheckCircle },
         { name: "Fund Issuance", href: "/mo/fund-issuance", icon: CreditCard },
-        //{ name: "Budget Assistance", href: "/mo/budget-assistance", icon: HandCoins },
-       // { name: "Reconciliation", href: "/mo/reconciliation", icon: ClipboardList },
-        //{ name: "Budget Monitoring", href: "/mo/budget", icon: BarChart3 },
+        { name: "Reconciliation", href: "/mo/reconciliation", icon: RefreshCw },
+          { name: "Receipt Verification", href: "/mo/receipt-verification", icon: Receipt }, 
+
+        { name: "Departments", href: "/mo/departments", icon: Building2 },
+        { name: "Budget Monitoring", href: "/mo/budget", icon: BarChart3 },
+        { name: "Budget Policies", href: "/mo/budget-policies", icon: DollarSign },
+        { name: "Budget Assistance", href: "/mo/budget-assistance", icon: HandCoins },
         { name: "Reports", href: "/mo/reports", icon: FileBarChart },
       ],
-      dept_office: [
-        { name: "Dashboard", href: "/department/dashboard", icon: LayoutDashboard },
-        { name: "My Requests", href: "/department/requests", icon: FileText },
-        { name: "Create Trip", href: "/department/create", icon: FileText },
-      ],
-      head_of_office: [
-        { name: "Dashboard", href: "/head/dashboard", icon: LayoutDashboard },
-        { name: "Pending Approval", href: "/head/pending", icon: Clock },
-      ],
+      // ✅ Driver (Merged with staff functionality)
       driver: [
+        { name: "Dashboard", href: "/driver/dashboard", icon: LayoutDashboard },
         { name: "My Trips", href: "/driver/trips", icon: Truck },
         { name: "Active Trip", href: "/driver/active", icon: Fuel },
         { name: "Trip History", href: "/driver/history", icon: Calendar },
@@ -207,15 +209,27 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
                 <span className="text-lg font-bold bg-gradient-to-r from-slate-800 to-slate-600 dark:from-white dark:to-slate-300 bg-clip-text text-transparent">
                   FCMS
                 </span>
-                <p className="text-[10px] text-slate-400 dark:text-slate-500 -mt-1">Laguindingan</p>
+                <p className="text-[10px] text-slate-400 dark:text-slate-500 -mt-1">
+                  Laguindingan
+                </p>
               </div>
             )}
           </div>
         </div>
 
         {/* User Info Section */}
-        <div className={cn("p-3 border-b border-slate-200 dark:border-slate-700", !isOpen && "flex justify-center")}>
-          <div className={cn("flex items-center", isOpen ? "space-x-3" : "flex-col")}>
+        <div
+          className={cn(
+            "p-3 border-b border-slate-200 dark:border-slate-700",
+            !isOpen && "flex justify-center",
+          )}
+        >
+          <div
+            className={cn(
+              "flex items-center",
+              isOpen ? "space-x-3" : "flex-col",
+            )}
+          >
             <div className="relative">
               <Avatar className="h-10 w-10 border-2 border-blue-500/30">
                 <AvatarFallback className="bg-gradient-to-r from-blue-500 to-blue-600 text-white font-bold">
